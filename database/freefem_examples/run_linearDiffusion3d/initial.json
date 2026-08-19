@@ -1,0 +1,315 @@
+{
+  "extracted": {
+    "problem_type": "topology_optimization",
+    "problem_name": "run_linearDiffusion3d",
+    "dimension": 3,
+    "domain_name": "D",
+    "mesh_variable": "Th",
+    "mesh_file": "meshLaplace3d.txt",
+    "boundaries": [
+      {
+        "name": "\\Gamma_3",
+        "kind": "Dirichlet",
+        "description": "zero Dirichlet boundary"
+      }
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "dirichlet_value": 0,
+        "dirichlet_labels": [
+          "\\Gamma_3"
+        ]
+      },
+      {
+        "name": "u_tilde",
+        "latex": "\\tilde u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "dirichlet_value": 0,
+        "dirichlet_labels": [
+          "\\Gamma_3"
+        ]
+      }
+    ],
+    "test_functions": [
+      {
+        "name": "delta_u",
+        "latex": "\\delta u",
+        "type": "scalar",
+        "fe_space": "P2"
+      }
+    ],
+    "constants": [
+      {
+        "name": "ell",
+        "latex": "\\ell",
+        "value": 100,
+        "description": "Lagrange multiplier",
+        "unit": "W K / m^3"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda",
+        "value": 1,
+        "description": "diffusion coefficient",
+        "unit": "W/(K m)"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": -10,
+        "description": "source",
+        "unit": "W/m^3"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "chi",
+        "latex": "\\chi(x)",
+        "formula": "1 if \\phi(x) < 0; 1/10 if \\phi(x) \\ge 0"
+      },
+      {
+        "name": "J",
+        "latex": "J(u)",
+        "formula": "\\int_D \\ell \\chi \\, dx + \\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla u) \\, dx"
+      },
+      {
+        "name": "partial_J",
+        "latex": "\\partial_{(u,\\delta u)} J(\\delta u,u)",
+        "formula": "\\int_D 2 \\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx"
+      },
+      {
+        "name": "Lagrangian",
+        "latex": "\\mathcal L([u],[\\delta u])",
+        "formula": "J(u) - \\int_D f \\delta u \\, dx + \\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx"
+      }
+    ],
+    "characteristic_function": {
+      "latex": "\\chi(x) = \\begin{cases} 1 & \\text{if } \\phi(x) < 0 \\\\ 1/10 & \\text{if } \\phi(x) \\ge 0 \\end{cases}",
+      "strong_value": 1,
+      "weak_value": 0.1
+    },
+    "objective": {
+      "name": "J",
+      "description": "Objective of linear diffusion problem",
+      "terms": [
+        "\\int_D \\ell \\chi \\, dx",
+        "\\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla u) \\, dx"
+      ]
+    },
+    "state_equation": {
+      "description": "Linear diffusion state equation for u",
+      "weak_form_lhs": "-\\int_D f \\delta u \\, dx + \\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx",
+      "weak_form_rhs": "0",
+      "is_nonlinear": false
+    },
+    "adjoint_equation": {
+      "description": "Adjoint equation for \\tilde u, with \\partial_{(u,\\delta u)} J(\\delta u,u) = \\int_D 2\\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx",
+      "weak_form_lhs": "\\partial_{(u,\\delta u)} J(\\delta u,u) + \\int_D \\lambda \\chi (\\nabla \\delta u \\cdot \\nabla \\tilde u) \\, dx",
+      "weak_form_rhs": "0"
+    },
+    "shape_derivative": {
+      "volume_expression": "DJ(\\Omega)(\\mathbf V) = \\partial_t J(u,\\mathbf V) + \\int_D \\left(\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))\\right) \\lambda \\chi \\, dx - \\int_D f \\operatorname{div} \\mathbf V \\, \\tilde u \\, dx, \\quad \\partial_t J(u,\\mathbf V) = \\int_D \\left(\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla u) - 2 (\\nabla u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V))\\right) \\lambda \\chi \\, dx + \\int_D \\ell \\chi \\operatorname{div} \\mathbf V \\, dx"
+    }
+  },
+  "designed": {
+    "problem_type": "topology_optimization",
+    "problem_type_source": "extracted",
+    "problem_name": "run_linearDiffusion3d",
+    "problem_name_source": "extracted",
+    "dimension": 3,
+    "dimension_source": "extracted",
+    "domain_name": "D",
+    "domain_name_source": "extracted",
+    "mesh_variable": "Th",
+    "mesh_variable_source": "extracted",
+    "mesh_file": "meshLaplace3d.txt",
+    "mesh_file_source": "extracted",
+    "objective_name": "J",
+    "objective_name_source": "extracted",
+    "objective_description": "Objective of linear diffusion problem",
+    "objective_description_source": "extracted",
+    "objective_terms": [
+      "\\int_D \\ell \\chi \\, dx",
+      "\\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla u) \\, dx"
+    ],
+    "objective_terms_source": "extracted",
+    "state_description": "Linear diffusion state equation for u",
+    "state_description_source": "extracted",
+    "state_weak_lhs": "-\\int_D f \\delta u \\, dx + \\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx",
+    "state_weak_lhs_source": "extracted",
+    "state_weak_rhs": "0",
+    "state_weak_rhs_source": "extracted",
+    "state_is_nonlinear": false,
+    "state_is_nonlinear_source": "extracted",
+    "newton_description": "Not required (linear state equation)",
+    "newton_description_source": "designed",
+    "newton_weak_form": "None (single linear solve)",
+    "newton_weak_form_source": "designed",
+    "newton_source": "designed",
+    "newton_rationale": "The state equation is linear in u, so a Newton iteration is unnecessary.",
+    "adjoint_description": "Adjoint equation for \\tilde u, with \\partial_{(u,\\delta u)} J(\\delta u,u) = \\int_D 2\\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx",
+    "adjoint_description_source": "extracted",
+    "adjoint_weak_lhs": "\\partial_{(u,\\delta u)} J(\\delta u,u) + \\int_D \\lambda \\chi (\\nabla \\delta u \\cdot \\nabla \\tilde u) \\, dx",
+    "adjoint_weak_lhs_source": "extracted",
+    "adjoint_weak_rhs": "0",
+    "adjoint_weak_rhs_source": "extracted",
+    "shape_derivative_volume": "DJ(\\Omega)(\\mathbf V) = \\partial_t J(u,\\mathbf V) + \\int_D \\left(\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))\\right) \\lambda \\chi \\, dx - \\int_D f \\operatorname{div} \\mathbf V \\, \\tilde u \\, dx, \\quad \\partial_t J(u,\\mathbf V) = \\int_D \\left(\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla u) - 2 (\\nabla u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V))\\right) \\lambda \\chi \\, dx + \\int_D \\ell \\chi \\operatorname{div} \\mathbf V \\, dx",
+    "shape_derivative_volume_source": "extracted",
+    "shape_derivative_boundary": "0 (volume formulation used; no separate boundary expression required)",
+    "shape_derivative_boundary_source": "designed",
+    "shape_derivative_boundary_rationale": "Topology optimization evolves interior interfaces; the extracted Hadamard expression is already volumetric and is used directly for the level-set transport equation.",
+    "shape_derivative_source": "mixed",
+    "boundaries": [
+      {
+        "name": "\\Gamma_3",
+        "label": "3",
+        "kind": "Dirichlet",
+        "description": "zero Dirichlet boundary",
+        "source": "extracted",
+        "rationale": "Mesh label 3 inferred from the subscript \\Gamma_3."
+      },
+      {
+        "name": "\\Gamma_N",
+        "label": "1",
+        "kind": "Neumann",
+        "description": "remaining boundary with homogeneous natural (insulated) condition",
+        "source": "designed",
+        "rationale": "The weak form contains no boundary integral, so the rest of \\partial D is assigned a natural Neumann condition."
+      }
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "unit": "kelvin",
+        "dirichlet_value": 0,
+        "dirichlet_labels": [
+          "3"
+        ],
+        "source": "extracted",
+        "rationale": "Scalar temperature discretised with P2; kelvin inferred from the thermal constants; Dirichlet label mapped to \\Gamma_3."
+      },
+      {
+        "name": "u_tilde",
+        "latex": "\\tilde u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "unit": "kelvin",
+        "dirichlet_value": 0,
+        "dirichlet_labels": [
+          "3"
+        ],
+        "source": "extracted",
+        "rationale": "Adjoint temperature variable; shares the state finite-element space and Dirichlet conditions."
+      }
+    ],
+    "test_functions": [
+      {
+        "name": "delta_u",
+        "latex": "\\delta u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "source": "extracted"
+      }
+    ],
+    "constants": [
+      {
+        "name": "ell",
+        "latex": "\\ell",
+        "value": 100,
+        "description": "Lagrange multiplier",
+        "unit": "W K / m^3",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda",
+        "value": 1,
+        "description": "diffusion coefficient",
+        "unit": "W/(K m)",
+        "source": "extracted"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": -10,
+        "description": "source",
+        "unit": "W/m^3",
+        "source": "extracted"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "chi",
+        "latex": "\\chi(x)",
+        "formula": "1 if \\phi(x) < 0; 1/10 if \\phi(x) \\ge 0",
+        "source": "extracted"
+      },
+      {
+        "name": "phi",
+        "latex": "\\phi(x)",
+        "formula": "\\sqrt{(x-0.5)^2+(y-0.5)^2+(z-0.5)^2}-0.25",
+        "source": "designed",
+        "rationale": "Initial signed-distance level-set function for a sphere of radius 0.25 centred in the unit cube; updated during optimisation."
+      },
+      {
+        "name": "J",
+        "latex": "J(u)",
+        "formula": "\\int_D \\ell \\chi \\, dx + \\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla u) \\, dx",
+        "source": "extracted"
+      },
+      {
+        "name": "partial_J",
+        "latex": "\\partial_{(u,\\delta u)} J(\\delta u,u)",
+        "formula": "\\int_D 2 \\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx",
+        "source": "extracted"
+      },
+      {
+        "name": "Lagrangian",
+        "latex": "\\mathcal L([u],[\\delta u])",
+        "formula": "J(u) - \\int_D f \\delta u \\, dx + \\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx",
+        "source": "extracted"
+      },
+      {
+        "name": "heat_flux",
+        "latex": "\\mathbf q",
+        "formula": "-\\lambda \\chi \\nabla u",
+        "source": "designed",
+        "rationale": "Standard derived heat-flux quantity used for post-processing and physical interpretation."
+      }
+    ],
+    "characteristic_function": {
+      "latex": "\\chi(x) = \\begin{cases} 1 & \\text{if } \\phi(x) < 0 \\\\ 1/10 & \\text{if } \\phi(x) \\ge 0 \\end{cases}",
+      "strong_value": 1,
+      "weak_value": 0.1,
+      "source": "extracted",
+      "rationale": "Contrast 1/10 penalises void conductivity and is consistent with the extracted chi formula."
+    },
+    "optimization_config": {
+      "mesh_file": "meshLaplace3d.txt",
+      "hmin": 0.01,
+      "hmax": 0.1,
+      "diffusion": 0.0001,
+      "v0": 0.01,
+      "iterations": 30,
+      "level_set_initial": "sqrt((x-0.5)^2+(y-0.5)^2+(z-0.5)^2)-0.25",
+      "boundary_labels": [
+        "1",
+        "3"
+      ],
+      "fixed_labels": [
+        "3"
+      ],
+      "extra_params": {},
+      "source": "designed",
+      "rationale": "Assumes a unit-cube design domain; hmin/hmax are about 1/100 and 1/10 of the domain size, level-set diffusion is 1e-4, CFL velocity is 1e-2, 30 iterations are used, and the initial design is a centred sphere. Boundary label 1 is the natural Neumann rest boundary and label 3 is the fixed Dirichlet boundary."
+    }
+  }
+}

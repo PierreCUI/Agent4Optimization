@@ -1,0 +1,18 @@
+varf thermoelastic30cAdjoint([adjT, adjux, adjuy],[deltaT, deltaux, deltauy]) = 
+    int1d(Th, 2.00000000000000)(beta*(deltaux*adjux + deltauy*adjuy)) 
+ + int1d(Th, 4.00000000000000)(beta*(deltaux*adjux + deltauy*adjuy)) 
+ - int1d(Th, 3.00000000000000)(gamma*deltauy) 
+ + int1d(Th, 2.00000000000000)(2.0*beta*deltaux*ux) 
+ + int1d(Th, 4.00000000000000)(2.0*beta*deltaux*ux) 
+ + int2d(Th)((k0*(phi<0) + 0.001*k0*(1-(phi<0)))*(dx(deltaT)*dx(adjT) + dy(deltaT)*dy(adjT))) 
+ + int2d(Th)(0.5*(E0*(phi<0) + 0.001*E0*(1-(phi<0)))*((2.0*nu - 1)*(dy(deltaux) + dx(deltauy))*(dy(adjux) + dx(adjuy)) - 2.0*(nu*(dx(deltaux) + dy(deltauy)) - (2.0*nu - 1)*dx(deltaux))*dx(adjux) - 2.0*(nu*(dx(deltaux) + dy(deltauy)) - (2.0*nu - 1)*dy(deltauy))*dy(adjuy))/((nu + 1.0)*(2.0*nu - 1))) 
+ + int2d(Th)((E0*(phi<0) + 0.001*E0*(1-(phi<0)))*(alphaT*(phi<0) + 0.001*alphaT*(1-(phi<0)))*(dx(adjux) + dy(adjuy))*deltaT/((nu + 1.0)*(2.0*nu - 1)))
+    + on(1,adjT = 0)
+    + on(3,adjT = 0);
+
+   matrix adjointMatrix = thermoelastic30cAdjoint(Ch, Ch);
+   set(adjointMatrix, solver=sparsesolver);
+   real[int] adjointrhs = thermoelastic30cAdjoint(0,Ch);
+   real[int] adjointsol = adjointMatrix^-1 * adjointrhs;
+   adjointsol = -adjointsol; 
+   [adjT[],adjux[]] = adjointsol; 

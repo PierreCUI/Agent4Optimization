@@ -1,0 +1,15 @@
+langchain_core
+langchain_openai
+langchain_google_genai
+numpy
+sympy
+scipy
+matplotlib
+meshio
+pandas
+h5py
+pdflatex
+filelock
+psutil
+setuptools<81
+git+https://gitlab.tugraz.at/autofreefem/autofreefem.git

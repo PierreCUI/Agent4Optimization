@@ -1,0 +1,113 @@
+\documentclass[preview]{standalone}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{bm}
+\let\oldcdot\cdot
+\usepackage{breqn}
+\let\cdot\oldcdot
+\begin{document}
+Let $\phi(x)$ be the level-set function and
+ \begin{align*}\raisebox{\depth}{$\chi$}(x) &= \begin{cases} 1 & \mbox{if}\quad \phi(x) < 0 \\ 1/100 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases}.\end{align*}
+The Lagrangian of the non-linear Elasticity Neo-Hookean problem is
+\begin{dmath*}
+\mathcal L(\left[ {\mathbf{ u }}\right],\left[ {\mathbf{ v }}\right]) = G({\mathbf{ u }}) -  \int_{\Gamma_N} f \left( \mathbf e_y \cdot {\mathbf{ v }} \right) \,ds_x +  \int_{D} \left( \mathbf S({\mathbf{ u }}) \mathrel{:} \left( \left(  \mathbf F({\mathbf{ u }})^\top  \cdot  \nabla {\mathbf{ v }}  \right) \right)\right) \,dx , 
+\end{dmath*}
+with 
+\begin{align*}
+J({\mathbf{ u }}) &=  \;\operatorname{det}(\mathbf F({\mathbf{ u }})) ,\\
+\mathbf S({\mathbf{ u }}) &= \frac{\raisebox{\depth}{$\chi$} \left(2 \mathbf{I} \mu + \left(\lambda \left(-1 + {J({\mathbf{ u }}))}^{2}\right) - 2 \mu\right)  (\mathbf C({\mathbf{ u }}))^{-1} \right)}{2},\\
+\mathbf C({\mathbf{ u }}) &= \left(  \mathbf F({\mathbf{ u }})^\top  \cdot \mathbf F({\mathbf{ u }}) \right),\\
+\mathbf E({\mathbf{ u }}) &= \frac{- \mathbf{I} + \mathbf C({\mathbf{ u }})}{2},\\
+\lambda &= \frac{E \nu}{\left(1 - 2 \nu\right) \left(\nu + 1\right)},\\
+\mu &= \frac{E}{2 \left(\nu + 1\right)},\\
+G({\mathbf{ u }}) &=  \int_{D} \ell \raisebox{\depth}{$\chi$} \,dx +  \int_{D} \left( \mathbf E({\mathbf{ u }}) \mathrel{:} \mathbf S({\mathbf{ u }}) \right) \,dx,\\
+\mathbf F({\mathbf{ u }}) &= \mathbf{I} +  \nabla {\mathbf{ u }} .
+ \end{align*}
+Let
+\begin{equation*}
+V_{{\mathbf{ u }}} = \{ {\mathbf{ u }} \in \mathbb P_{2}(D)| {\mathbf{ u }} = \mathtt{\text{0.}}  \quad \text{{on}} \quad\Gamma_{4} \},\end{equation*}
+\begin{equation*}
+V_{{\mathbf{ v }}} = \{ {\mathbf{ v }} \in \mathbb P_{2}(D)| {\mathbf{ v }} = 0  \quad \text{{on}} \quad\Gamma_{4} \}.\end{equation*}
+The state $\left[ {\mathbf{ u }}\right] \in  V_{{\mathbf{ u }}}$ is the solution of the non-linear problem
+\begin{dmath*}
+-  \int_{\Gamma_N} f \left( \mathbf e_y \cdot {\mathbf{ v }} \right) \,ds_x +  \int_{D} \left( \mathbf S({\mathbf{ u }}) \mathrel{:} \left( \left(  \mathbf F({\mathbf{ u }})^\top  \cdot  \nabla {\mathbf{ v }}  \right) \right)\right) \,dx = 0\qquad \forall\; {\mathbf{ v }} . 
+\end{dmath*}
+In order to compute a Newton step we define
+\begin{dmath*}
+\partial_{({\mathbf{ u }},\hat{\mathbf{ u }})} \mathbf S(\hat{\mathbf{ u }},{\mathbf{ u }}) = \frac{\raisebox{\depth}{$\chi$} \left(2 \lambda {J({\mathbf{ u }}))}^{2} \partial_{({\mathbf{ u }},\hat{\mathbf{ u }})} J(\hat{\mathbf{ u }},{\mathbf{ u }}) {J({\mathbf{ u }}))}^{-1}  (\mathbf C({\mathbf{ u }}))^{-1}  - \left(\lambda \left(-1 + {J({\mathbf{ u }}))}^{2}\right) - 2 \mu\right) \left( \left(  (\mathbf C({\mathbf{ u }}))^{-1}  \cdot \partial_{({\mathbf{ u }},\hat{\mathbf{ u }})} \mathbf C(\hat{\mathbf{ u }},{\mathbf{ u }}) \right) \cdot  (\mathbf C({\mathbf{ u }}))^{-1}  \right)\right)}{2},
+ \end{dmath*}
+\begin{dmath*}
+\partial_{({\mathbf{ u }},\hat{\mathbf{ u }})} \mathbf F(\hat{\mathbf{ u }}) =  \nabla \hat{\mathbf{ u }} ,
+ \end{dmath*}
+\begin{dmath*}
+\partial_{({\mathbf{ u }},\hat{\mathbf{ u }})} J(\hat{\mathbf{ u }},{\mathbf{ u }}) =  \;\operatorname{det}(\mathbf F({\mathbf{ u }}))   \,\operatorname{tr}\left(\left(  (\mathbf F({\mathbf{ u }}))^{-1}  \cdot \partial_{({\mathbf{ u }},\hat{\mathbf{ u }})} \mathbf F(\hat{\mathbf{ u }}) \right)\right) ,
+ \end{dmath*}
+\begin{dmath*}
+\partial_{({\mathbf{ u }},\hat{\mathbf{ u }})} \mathbf C(\hat{\mathbf{ u }},{\mathbf{ u }}) = \left(  \mathbf F({\mathbf{ u }})^\top  \cdot \partial_{({\mathbf{ u }},\hat{\mathbf{ u }})} \mathbf F(\hat{\mathbf{ u }}) \right) + \left(  \partial_{({\mathbf{ u }},\hat{\mathbf{ u }})} \mathbf F(\hat{\mathbf{ u }})^\top  \cdot \mathbf F({\mathbf{ u }}) \right).
+ \end{dmath*}
+The Newton update $\left[ \hat{\mathbf{ u }}\right]$ at the state $\left[ {\mathbf{ u }}\right]$ is the solution of
+\begin{dmath*}
+ \int_{D} \left( \mathbf S({\mathbf{ u }}) \mathrel{:} \left( \left(  \partial_{({\mathbf{ u }},\hat{\mathbf{ u }})} \mathbf F(\hat{\mathbf{ u }})^\top  \cdot  \nabla {\mathbf{ v }}  \right) \right)\right) + \left( \partial_{({\mathbf{ u }},\hat{\mathbf{ u }})} \mathbf S(\hat{\mathbf{ u }},{\mathbf{ u }}) \mathrel{:} \left( \left(  \mathbf F({\mathbf{ u }})^\top  \cdot  \nabla {\mathbf{ v }}  \right) \right)\right) \,dx = - (-  \int_{\Gamma_N} f \left( \mathbf e_y \cdot {\mathbf{ v }} \right) \,ds_x +  \int_{D} \left( \mathbf S({\mathbf{ u }}) \mathrel{:} \left( \left(  \mathbf F({\mathbf{ u }})^\top  \cdot  \nabla {\mathbf{ v }}  \right) \right)\right) \,dx)\qquad \forall\; {\mathbf{ v }} . 
+\end{dmath*}
+The adjoint state $\left[ \tilde{\mathbf{ u }}\right]$ to the direct state $\left[ {\mathbf{ u }}\right]$ is the solution of
+\begin{dmath*}
+\partial_{({\mathbf{ u }},{\mathbf{ v }})} G({\mathbf{ u }},{\mathbf{ v }}) +  \int_{D} \left( \mathbf S({\mathbf{ u }}) \mathrel{:} \left( \left(  \partial_{({\mathbf{ u }},{\mathbf{ v }})} \mathbf F({\mathbf{ v }})^\top  \cdot  \nabla \tilde{\mathbf{ u }}  \right) \right)\right) + \left( \partial_{({\mathbf{ u }},{\mathbf{ v }})} \mathbf S({\mathbf{ u }},{\mathbf{ v }}) \mathrel{:} \left( \left(  \mathbf F({\mathbf{ u }})^\top  \cdot  \nabla \tilde{\mathbf{ u }}  \right) \right)\right) \,dx = 0\qquad \forall\; {\mathbf{ v }} , 
+\end{dmath*}
+with 
+\begin{align*}
+\partial_{({\mathbf{ u }},{\mathbf{ v }})} J({\mathbf{ u }},{\mathbf{ v }}) &=  \;\operatorname{det}(\mathbf F({\mathbf{ u }}))   \,\operatorname{tr}\left(\left(  (\mathbf F({\mathbf{ u }}))^{-1}  \cdot \partial_{({\mathbf{ u }},{\mathbf{ v }})} \mathbf F({\mathbf{ v }}) \right)\right) ,\\
+\partial_{({\mathbf{ u }},{\mathbf{ v }})} \mathbf C({\mathbf{ u }},{\mathbf{ v }}) &= \left(  \mathbf F({\mathbf{ u }})^\top  \cdot \partial_{({\mathbf{ u }},{\mathbf{ v }})} \mathbf F({\mathbf{ v }}) \right) + \left(  \partial_{({\mathbf{ u }},{\mathbf{ v }})} \mathbf F({\mathbf{ v }})^\top  \cdot \mathbf F({\mathbf{ u }}) \right),\\
+\partial_{({\mathbf{ u }},{\mathbf{ v }})} \mathbf F({\mathbf{ v }}) &=  \nabla {\mathbf{ v }} ,\\
+\partial_{({\mathbf{ u }},{\mathbf{ v }})} G({\mathbf{ u }},{\mathbf{ v }}) &=  \int_{D} \left( \mathbf E({\mathbf{ u }}) \mathrel{:} \partial_{({\mathbf{ u }},{\mathbf{ v }})} \mathbf S({\mathbf{ u }},{\mathbf{ v }}) \right) + \left( \partial_{({\mathbf{ u }},{\mathbf{ v }})} \mathbf E({\mathbf{ u }},{\mathbf{ v }}) \mathrel{:} \mathbf S({\mathbf{ u }}) \right) \,dx,\\
+\partial_{({\mathbf{ u }},{\mathbf{ v }})} \mathbf S({\mathbf{ u }},{\mathbf{ v }}) &= \frac{\raisebox{\depth}{$\chi$} \left(2 \lambda {J({\mathbf{ u }}))}^{2} \partial_{({\mathbf{ u }},{\mathbf{ v }})} J({\mathbf{ u }},{\mathbf{ v }}) {J({\mathbf{ u }}))}^{-1}  (\mathbf C({\mathbf{ u }}))^{-1}  - \left(\lambda \left(-1 + {J({\mathbf{ u }}))}^{2}\right) - 2 \mu\right) \left( \left(  (\mathbf C({\mathbf{ u }}))^{-1}  \cdot \partial_{({\mathbf{ u }},{\mathbf{ v }})} \mathbf C({\mathbf{ u }},{\mathbf{ v }}) \right) \cdot  (\mathbf C({\mathbf{ u }}))^{-1}  \right)\right)}{2},\\
+\partial_{({\mathbf{ u }},{\mathbf{ v }})} \mathbf E({\mathbf{ u }},{\mathbf{ v }}) &= \frac{\partial_{({\mathbf{ u }},{\mathbf{ v }})} \mathbf C({\mathbf{ u }},{\mathbf{ v }})}{2}.
+ \end{align*}
+In order to compute the shape derivative, we consider a shape pertubation $\mathbf x = T_t(\mathbf X) = \mathbf X + t \mathbf  V(X)$ with a suitable velocity field $\mathbf V$. The perturbed Lagrangian $\mathcal G$ using the Lagrangian state $\left[ {\mathbf{ u }}\right]^{L}$ is given by
+\begin{dmath*}
+\mathcal G(t,\left[ {\mathbf{ u }}\right]^{L},\left[ {\mathbf{ v }}\right]^{L}) = \mathcal V(G) -  \int_{\Gamma_N} f  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \left( \mathbf e_y \cdot {\mathbf{ v }} \right) \,ds_x +  \int_{D}  \operatorname{det}\mathbf F( t )  \left( \mathcal V(\mathbf S) \mathrel{:} \left( \left(  \mathcal V(\mathbf F)^\top  \cdot \left(  \nabla {\mathbf{ v }}  \cdot  \mathbf F^{-1}(t) \right) \right) \right)\right) \,dx , 
+\end{dmath*}
+with
+\begin{dmath*}
+\mathcal V(\mathbf C) = \left(  \mathcal V(\mathbf F)^\top  \cdot \mathcal V(\mathbf F) \right),
+ \end{dmath*}
+\begin{dmath*}
+\mathcal V(\mathbf F) = \mathbf{I} + \left(  \nabla {\mathbf{ u }}  \cdot  \mathbf F^{-1}(t) \right),
+ \end{dmath*}
+\begin{dmath*}
+\mathcal V(J) =  \;\operatorname{det}(\mathcal V(\mathbf F)) ,
+ \end{dmath*}
+\begin{dmath*}
+\mathcal V(\mathbf S) = \frac{\raisebox{\depth}{$\chi$} \left(2 \mathbf{I} \mu + \left(\lambda \left(-1 + {\mathcal V(J)}^{2}\right) - 2 \mu\right)  (\mathcal V(\mathbf C))^{-1} \right)}{2},
+ \end{dmath*}
+\begin{dmath*}
+\mathcal V(G) =  \int_{D} \ell \raisebox{\depth}{$\chi$}  \operatorname{det}\mathbf F( t )  \,dx +  \int_{D}  \operatorname{det}\mathbf F( t )  \left( \mathcal V(\mathbf E) \mathrel{:} \mathcal V(\mathbf S) \right) \,dx,
+ \end{dmath*}
+\begin{dmath*}
+\mathcal V(\mathbf E) = \frac{- \mathbf{I} + \mathcal V(\mathbf C)}{2}.
+ \end{dmath*}
+For the direct state $\left[ {\mathbf{ u }}\right]$ and the adjoint state $\left[ \tilde{\mathbf{ u }}\right]$, the volume expression of the shape derivative is given by
+\begin{dmath*}
+DJ(\Omega)(\mathbf V) = - ( \int_{\Gamma_N} f \operatorname{div} {\mathbf V} \left( \mathbf e_y \cdot \tilde{\mathbf{ u }} \right) \,ds_x -  \int_{\Gamma_N} f \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \left( \mathbf e_y \cdot \tilde{\mathbf{ u }} \right) \,ds_x) + \partial_{t} G({\mathbf V},{\mathbf{ u }}) +  \int_{D} \operatorname{div} {\mathbf V} \left( \mathbf S({\mathbf{ u }}) \mathrel{:} \left( \left(  \mathbf F({\mathbf{ u }})^\top  \cdot  \nabla \tilde{\mathbf{ u }}  \right) \right)\right) + \left( \mathbf S({\mathbf{ u }}) \mathrel{:} \left( - \left(  \mathbf F({\mathbf{ u }})^\top  \cdot \left(  \nabla \tilde{\mathbf{ u }}  \cdot  \nabla {\mathbf V}  \right) \right) + \left(  \partial_{t} \mathbf F({\mathbf V},{\mathbf{ u }})^\top  \cdot  \nabla \tilde{\mathbf{ u }}  \right) \right)\right) + \left( \partial_{t} \mathbf S({\mathbf V},{\mathbf{ u }}) \mathrel{:} \left( \left(  \mathbf F({\mathbf{ u }})^\top  \cdot  \nabla \tilde{\mathbf{ u }}  \right) \right)\right) \,dx , 
+\end{dmath*}
+with
+\begin{dmath*}
+\partial_{t} \mathbf F({\mathbf V},{\mathbf{ u }}) = - \left(  \nabla {\mathbf{ u }}  \cdot  \nabla {\mathbf V}  \right),
+ \end{dmath*}
+\begin{dmath*}
+\partial_{t} J({\mathbf V},{\mathbf{ u }}) =  \;\operatorname{det}(\mathbf F({\mathbf{ u }}))   \,\operatorname{tr}\left(\left(  (\mathbf F({\mathbf{ u }}))^{-1}  \cdot \partial_{t} \mathbf F({\mathbf V},{\mathbf{ u }}) \right)\right) ,
+ \end{dmath*}
+\begin{dmath*}
+\partial_{t} \mathbf S({\mathbf V},{\mathbf{ u }}) = \frac{\raisebox{\depth}{$\chi$} \left(2 \lambda {J({\mathbf{ u }}))}^{2} \partial_{t} J({\mathbf V},{\mathbf{ u }}) {J({\mathbf{ u }}))}^{-1}  (\mathbf C({\mathbf{ u }}))^{-1}  - \left(\lambda \left(-1 + {J({\mathbf{ u }}))}^{2}\right) - 2 \mu\right) \left( \left(  (\mathbf C({\mathbf{ u }}))^{-1}  \cdot \partial_{t} \mathbf C({\mathbf V},{\mathbf{ u }}) \right) \cdot  (\mathbf C({\mathbf{ u }}))^{-1}  \right)\right)}{2},
+ \end{dmath*}
+\begin{dmath*}
+\partial_{t} G({\mathbf V},{\mathbf{ u }}) =  \int_{D} \ell \raisebox{\depth}{$\chi$} \operatorname{div} {\mathbf V} \,dx +  \int_{D} \operatorname{div} {\mathbf V} \left( \mathbf E({\mathbf{ u }}) \mathrel{:} \mathbf S({\mathbf{ u }}) \right) + \left( \mathbf E({\mathbf{ u }}) \mathrel{:} \partial_{t} \mathbf S({\mathbf V},{\mathbf{ u }}) \right) + \left( \partial_{t} \mathbf E({\mathbf V},{\mathbf{ u }}) \mathrel{:} \mathbf S({\mathbf{ u }}) \right) \,dx,
+ \end{dmath*}
+\begin{dmath*}
+\partial_{t} \mathbf C({\mathbf V},{\mathbf{ u }}) = \left(  \mathbf F({\mathbf{ u }})^\top  \cdot \partial_{t} \mathbf F({\mathbf V},{\mathbf{ u }}) \right) + \left(  \partial_{t} \mathbf F({\mathbf V},{\mathbf{ u }})^\top  \cdot \mathbf F({\mathbf{ u }}) \right),
+ \end{dmath*}
+\begin{dmath*}
+\partial_{t} \mathbf E({\mathbf V},{\mathbf{ u }}) = \frac{\partial_{t} \mathbf C({\mathbf V},{\mathbf{ u }})}{2}.
+ \end{dmath*}
+\end{document}

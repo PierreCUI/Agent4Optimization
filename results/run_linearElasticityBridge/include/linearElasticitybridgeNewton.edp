@@ -1,0 +1,7 @@
+varf linearElasticitybridgeNewton([incux, incuy],[vx, vy]) = 
+    int2d(Th)((1.00000000000000*(phi<0) + 0.00100000000000000*(1-(phi<0)))*(mu*(dy(incux) + dx(incuy))*dy(vx) + mu*(dy(incux) + dx(incuy))*dx(vy) + (lambda*(dx(incux) + dy(incuy)) + 2.0*mu*dx(incux))*dx(vx) + (lambda*(dx(incux) + dy(incuy)) + 2.0*mu*dy(incuy))*dy(vy)))
+    + on(2,incux = 0)
+    + on(2,incuy = 0)
+    + on(4,incux = 0)
+    + on(4,incuy = 0)
+ ;

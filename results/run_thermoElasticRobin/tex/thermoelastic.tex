@@ -1,0 +1,101 @@
+\documentclass[preview]{standalone}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{bm}
+\let\oldcdot\cdot
+\usepackage{breqn}
+\let\cdot\oldcdot
+\begin{document}
+Let $\phi(x)$ be the level-set function and
+ \begin{align*}E(x) &= \begin{cases} E_0 & \mbox{if}\quad \phi(x) < 0 \\ E_0/1000 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases},\\
+\raisebox{\depth}{$\chi$}(x) &= \begin{cases} 1 & \mbox{if}\quad \phi(x) < 0 \\ 0 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases},\\
+\alpha_{T}(x) &= \begin{cases} \alpha_T & \mbox{if}\quad \phi(x) < 0 \\ \alpha_T/1000 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases},\\
+k(x) &= \begin{cases} k_0 & \mbox{if}\quad \phi(x) < 0 \\ k_0/1000 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases}.\end{align*}
+The Lagrangian of the thermo elastic problem is
+\begin{dmath*}
+\mathcal L(\left[ T, \  {\mathbf{ u }}\right],\left[ \delta T, \  {\delta\mathbf{  u }}\right]) = -  \int_{\partial D} \beta_{T} g_{T}(x) \delta T \,ds_x +  \int_{\partial D} \beta_{T} T \delta T \,ds_x +  \int_{D} k \left(  \nabla T  \cdot  \nabla \delta T  \right) \,dx + J({\mathbf{ u }}) +  \int_{\partial D} \beta \left( {\mathbf{ u }} \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{\partial D} \beta \left( {\mathbf{ u }} \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{\partial D} q \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{D} \rho g \raisebox{\depth}{$\chi$} \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,dx +  \int_{D} \left( \pmb\sigma(T,{\mathbf{ u }}) \mathrel{:}  \pmb\varepsilon({\delta\mathbf{  u }})^\top  \right) \,dx , 
+\end{dmath*}
+with 
+\begin{align*}
+\lambda &= - \frac{\nu E}{\left(\nu + 1\right) \left(2 \nu - 1\right)},\\
+\pmb\varepsilon({\mathbf{ u }}) &= \frac{ \nabla {\mathbf{ u }}  +   \nabla {\mathbf{ u }} ^\top }{2},\\
+\mu &= \frac{E}{2 \left(\nu + 1\right)},\\
+J({\mathbf{ u }}) &=  \int_{D} \ell \raisebox{\depth}{$\chi$} \,dx +  \int_{\partial D} \beta \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \,ds_x +  \int_{\partial D} \beta \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \,ds_x -  \int_{\partial D} \gamma \left( \mathbf e_y \cdot {\mathbf{ u }} \right) \,ds_x,\\
+\pmb\sigma(T,{\mathbf{ u }}) &= \mathbf{I} \lambda  \,\operatorname{tr}\left(\pmb\varepsilon_{e}(T,{\mathbf{ u }})\right)  + 2 \mu \pmb\varepsilon_{e}(T,{\mathbf{ u }}),\\
+\pmb\varepsilon_{e}(T,{\mathbf{ u }}) &= - \mathbf{I} \alpha_{T} T + \pmb\varepsilon({\mathbf{ u }}),\\
+g_{T}(x) &= 30 y.
+ \end{align*}
+Let
+\begin{equation*}
+V_{T} = \mathbb P_{2},\end{equation*}
+\begin{equation*}
+V_{{\mathbf{ u }}} = \mathbb P_{2},\end{equation*}
+\begin{equation*}
+V_{\delta T} = \mathbb P_{2},\end{equation*}
+\begin{equation*}
+V_{{\delta\mathbf{  u }}} = \mathbb P_{2}.\end{equation*}
+The state $\left[ T, \  {\mathbf{ u }}\right] \in  V_{T}\times V_{{\mathbf{ u }}}$ is the solution of the linear problem
+\begin{dmath*}
+-  \int_{\partial D} \beta_{T} g_{T}(x) \delta T \,ds_x +  \int_{\partial D} \beta_{T} T \delta T \,ds_x +  \int_{D} k \left(  \nabla T  \cdot  \nabla \delta T  \right) \,dx = 0\qquad \forall\; {\delta T\in V_{\delta T}} , 
+\end{dmath*}
+\begin{dmath*}
+ \int_{\partial D} \beta \left( {\mathbf{ u }} \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{\partial D} \beta \left( {\mathbf{ u }} \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{\partial D} q \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{D} \rho g \raisebox{\depth}{$\chi$} \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,dx +  \int_{D} \left( \pmb\sigma(T,{\mathbf{ u }}) \mathrel{:}  \pmb\varepsilon({\delta\mathbf{  u }})^\top  \right) \,dx = 0\qquad \forall\; {{\delta\mathbf{  u }}\in V_{{\delta\mathbf{  u }}}} . 
+\end{dmath*}
+The adjoint state $\left[ \tilde T, \  \tilde{\mathbf{ u }}\right] \in  V_{\delta T}\times V_{{\delta\mathbf{  u }}}$ to the direct state $\left[ T, \  {\mathbf{ u }}\right]$ is the solution of
+\begin{dmath*}
+ \int_{\partial D} \beta_{T} \delta T \tilde T \,ds_x +  \int_{D} k \left(  \nabla \delta T  \cdot  \nabla \tilde T  \right) \,dx +  \int_{D} \left( \partial_{(T,\delta T)} \pmb\sigma(\delta T) \mathrel{:}  \pmb\varepsilon(\tilde{\mathbf{ u }})^\top  \right) \,dx = 0\qquad \forall\; {\delta T\in V_{T}} , 
+\end{dmath*}
+\begin{dmath*}
+\partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} J({\delta\mathbf{  u }},{\mathbf{ u }}) +  \int_{\partial D} \beta \left( {\delta\mathbf{  u }} \cdot \tilde{\mathbf{ u }} \right) \,ds_x +  \int_{\partial D} \beta \left( {\delta\mathbf{  u }} \cdot \tilde{\mathbf{ u }} \right) \,ds_x +  \int_{D} \left( \partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} \pmb\sigma({\delta\mathbf{  u }}) \mathrel{:}  \pmb\varepsilon(\tilde{\mathbf{ u }})^\top  \right) \,dx = 0\qquad \forall\; {{\delta\mathbf{  u }}\in V_{{\mathbf{ u }}}} , 
+\end{dmath*}
+with 
+\begin{align*}
+\partial_{(T,\delta T)} \pmb\varepsilon_e(\delta T) &= - \mathbf{I} \alpha_{T} \delta T,\\
+\partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} \pmb\varepsilon_e({\delta\mathbf{  u }}) &= \pmb\varepsilon({\delta\mathbf{  u }}),\\
+\partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} J({\delta\mathbf{  u }},{\mathbf{ u }}) &= -  \int_{\partial D} \gamma \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{\partial D} 2 \beta \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \left( \mathbf e_x \cdot {\delta\mathbf{  u }} \right) \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{-1} \,ds_x +  \int_{\partial D} 2 \beta \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \left( \mathbf e_x \cdot {\delta\mathbf{  u }} \right) \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{-1} \,ds_x,\\
+\partial_{(T,\delta T)} \pmb\sigma(\delta T) &= \mathbf{I} \lambda  \,\operatorname{tr}\left(\partial_{(T,\delta T)} \pmb\varepsilon_e(\delta T)\right)  + 2 \mu \partial_{(T,\delta T)} \pmb\varepsilon_e(\delta T),\\
+\partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} \pmb\sigma({\delta\mathbf{  u }}) &= \mathbf{I} \lambda  \,\operatorname{tr}\left(\partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} \pmb\varepsilon_e({\delta\mathbf{  u }})\right)  + 2 \mu \partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} \pmb\varepsilon_e({\delta\mathbf{  u }}).
+ \end{align*}
+In order to compute the shape derivative, we consider a shape pertubation $\mathbf x = T_t(\mathbf X) = \mathbf X + t \mathbf  V(X)$ with a suitable velocity field $\mathbf V$. The perturbed Lagrangian $\mathcal G$ using the Lagrangian state $\left[ T, \  {\mathbf{ u }}\right]^{L}$ is given by
+\begin{dmath*}
+\mathcal G(t,\left[ T, \  {\mathbf{ u }}\right]^{L},\left[ \delta T, \  {\delta\mathbf{  u }}\right]^{L}) = -  \int_{\partial D} \beta_{T} g_{T}(T_t(x))  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \delta T \,ds_x +  \int_{\partial D} \beta_{T}  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} T \delta T \,ds_x +  \int_{D} k  \operatorname{det}\mathbf F( t )  \left( \left(  \nabla T  \cdot  \mathbf F^{-1}(t) \right) \cdot \left(  \nabla \delta T  \cdot  \mathbf F^{-1}(t) \right) \right) \,dx + \mathcal V(J) +  \int_{\partial D} \beta  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \left( {\mathbf{ u }} \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{\partial D} \beta  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \left( {\mathbf{ u }} \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{\partial D} q  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{D}  \operatorname{det}\mathbf F( t )  \left( \mathcal V(\pmb\sigma) \mathrel{:}  \mathcal V(\pmb\varepsilon)^\top  \right) \,dx +  \int_{D} \rho g \raisebox{\depth}{$\chi$}  \operatorname{det}\mathbf F( t )  \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,dx , 
+\end{dmath*}
+with
+\begin{dmath*}
+\mathcal V(\pmb\varepsilon_{e}) = - \mathbf{I} \alpha_{T} T + \mathcal V(\pmb\varepsilon),
+ \end{dmath*}
+\begin{dmath*}
+\mathcal V(\pmb\varepsilon) = \frac{\left(  \nabla {\mathbf{ u }}  \cdot  \mathbf F^{-1}(t) \right) +  \left( \left(  \nabla {\mathbf{ u }}  \cdot  \mathbf F^{-1}(t) \right) \right)^\top }{2},
+ \end{dmath*}
+\begin{dmath*}
+\mathcal V(\pmb\sigma) = \mathbf{I} \lambda  \,\operatorname{tr}\left(\mathcal V(\pmb\varepsilon_{e})\right)  + 2 \mu \mathcal V(\pmb\varepsilon_{e}),
+ \end{dmath*}
+\begin{dmath*}
+\mathcal V(\pmb\varepsilon) = \frac{\left(  \nabla {\delta\mathbf{  u }}  \cdot  \mathbf F^{-1}(t) \right) +  \left( \left(  \nabla {\delta\mathbf{  u }}  \cdot  \mathbf F^{-1}(t) \right) \right)^\top }{2},
+ \end{dmath*}
+\begin{dmath*}
+\mathcal V(J) =  \int_{D} \ell \raisebox{\depth}{$\chi$}  \operatorname{det}\mathbf F( t )  \,dx +  \int_{\partial D} \beta  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \,ds_x +  \int_{\partial D} \beta  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \,ds_x -  \int_{\partial D} \gamma  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \left( \mathbf e_y \cdot {\mathbf{ u }} \right) \,ds_x.
+ \end{dmath*}
+with 
+\begin{dmath*}
+g_{T} = 30 y.\end{dmath*}
+For the direct state $\left[ T, \  {\mathbf{ u }}\right]$ and the adjoint state $\left[ \tilde T, \  \tilde{\mathbf{ u }}\right]$, the volume expression of the shape derivative is given by
+\begin{dmath*}
+DJ(\Omega)(\mathbf V) = -  \int_{\partial D} \beta_{T} \left(  \nabla g_{T}(x)  \cdot {\mathbf V} \right) \tilde T \,ds_x -  \int_{\partial D} \beta_{T} g_{T}(x) \operatorname{div} {\mathbf V} \tilde T \,ds_x +  \int_{\partial D} \beta_{T} g_{T}(x) \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \tilde T \,ds_x +  \int_{\partial D} \beta_{T} \operatorname{div} {\mathbf V} T \tilde T \,ds_x -  \int_{\partial D} \beta_{T} \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) T \tilde T \,ds_x +  \int_{D} \left(\operatorname{div} {\mathbf V} \left(  \nabla T  \cdot  \nabla \tilde T  \right) - \left(  \nabla T  \cdot \left(  \nabla \tilde T  \cdot  \nabla {\mathbf V}  \right) \right) - \left(  \nabla \tilde T  \cdot \left(  \nabla T  \cdot  \nabla {\mathbf V}  \right) \right)\right) k \,dx + \partial_{t} J({\mathbf V},{\mathbf{ u }}) +  \int_{\partial D} \beta \operatorname{div} {\mathbf V} \left( {\mathbf{ u }} \cdot \tilde{\mathbf{ u }} \right) \,ds_x +  \int_{\partial D} \beta \operatorname{div} {\mathbf V} \left( {\mathbf{ u }} \cdot \tilde{\mathbf{ u }} \right) \,ds_x -  \int_{\partial D} \beta \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \left( {\mathbf{ u }} \cdot \tilde{\mathbf{ u }} \right) \,ds_x -  \int_{\partial D} \beta \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \left( {\mathbf{ u }} \cdot \tilde{\mathbf{ u }} \right) \,ds_x +  \int_{\partial D} q \operatorname{div} {\mathbf V} \left( \mathbf e_y \cdot \tilde{\mathbf{ u }} \right) \,ds_x -  \int_{\partial D} q \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \left( \mathbf e_y \cdot \tilde{\mathbf{ u }} \right) \,ds_x +  \int_{D} \rho g \raisebox{\depth}{$\chi$} \operatorname{div} {\mathbf V} \left( \mathbf e_y \cdot \tilde{\mathbf{ u }} \right) \,dx +  \int_{D} \operatorname{div} {\mathbf V} \left( \pmb\sigma(T,{\mathbf{ u }}) \mathrel{:}  \pmb\varepsilon(\tilde{\mathbf{ u }})^\top  \right) + \left( \partial_{t} \pmb\sigma({\mathbf V},{\mathbf{ u }}) \mathrel{:}  \pmb\varepsilon(\tilde{\mathbf{ u }})^\top  \right) + \left( \pmb\sigma(T,{\mathbf{ u }}) \mathrel{:}  \partial_{t} \pmb\varepsilon(\tilde{\mathbf{ u }},{\mathbf V})^\top  \right) \,dx , 
+\end{dmath*}
+with
+\begin{dmath*}
+\partial_{t} \pmb\varepsilon({\mathbf V},{\mathbf{ u }}) = - \frac{\left(  \nabla {\mathbf{ u }}  \cdot  \nabla {\mathbf V}  \right) +  \left( \left(  \nabla {\mathbf{ u }}  \cdot  \nabla {\mathbf V}  \right) \right)^\top }{2},
+ \end{dmath*}
+\begin{dmath*}
+\partial_{t} \pmb\varepsilon_e({\mathbf V},{\mathbf{ u }}) = \partial_{t} \pmb\varepsilon({\mathbf V},{\mathbf{ u }}),
+ \end{dmath*}
+\begin{dmath*}
+\partial_{t} J({\mathbf V},{\mathbf{ u }}) =  \int_{D} \ell \raisebox{\depth}{$\chi$} \operatorname{div} {\mathbf V} \,dx - \left( \int_{\partial D} \gamma \operatorname{div} {\mathbf V} \left( \mathbf e_y \cdot {\mathbf{ u }} \right) \,ds_x -  \int_{\partial D} \gamma \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \left( \mathbf e_y \cdot {\mathbf{ u }} \right) \,ds_x\right) +  \int_{\partial D} \beta \operatorname{div} {\mathbf V} \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \,ds_x +  \int_{\partial D} \beta \operatorname{div} {\mathbf V} \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \,ds_x -  \int_{\partial D} \beta \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \,ds_x -  \int_{\partial D} \beta \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \,ds_x,
+ \end{dmath*}
+\begin{dmath*}
+\partial_{t} \pmb\sigma({\mathbf V},{\mathbf{ u }}) = \mathbf{I} \lambda  \,\operatorname{tr}\left(\partial_{t} \pmb\varepsilon_e({\mathbf V},{\mathbf{ u }})\right)  + 2 \mu \partial_{t} \pmb\varepsilon_e({\mathbf V},{\mathbf{ u }}).
+ \end{dmath*}
+\end{document}

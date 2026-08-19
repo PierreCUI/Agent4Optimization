@@ -1,0 +1,372 @@
+{
+  "extracted": {
+    "problem_type": "topology_optimization",
+    "problem_name": "run_nonlinearDiffusion3d",
+    "dimension": 3,
+    "domain_name": "D",
+    "mesh_variable": "Th",
+    "mesh_file": "meshLaplace3d.txt",
+    "boundaries": [
+      {
+        "name": "\\Gamma_3",
+        "kind": "Dirichlet",
+        "description": "boundary with homogeneous Dirichlet condition for u"
+      }
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "dirichlet_value": 0,
+        "dirichlet_labels": [
+          "\\Gamma_3"
+        ]
+      }
+    ],
+    "test_functions": [
+      {
+        "name": "delta_u",
+        "latex": "\\delta u",
+        "type": "scalar",
+        "fe_space": "P2"
+      }
+    ],
+    "constants": [
+      {
+        "name": "ell",
+        "latex": "\\ell",
+        "value": 100,
+        "description": "Lagrange multiplier",
+        "unit": "W K / m^3"
+      },
+      {
+        "name": "lambda_0",
+        "latex": "\\lambda_0",
+        "value": 1,
+        "description": "conductivity",
+        "unit": "W/(K m)"
+      },
+      {
+        "name": "alpha",
+        "latex": "\\alpha",
+        "value": 0.01,
+        "description": "factor",
+        "unit": "1/K^2"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": -10,
+        "description": "source",
+        "unit": "W/m^3"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "Lagrangian",
+        "latex": "\\mathcal{L}([u],[\\delta u])",
+        "formula": "J(u) - \\int_D f \\delta u \\,dx + \\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla \\delta u) \\,dx"
+      },
+      {
+        "name": "lambda_u",
+        "latex": "\\lambda(u)",
+        "formula": "(\\alpha u^2 + 1) \\lambda_0"
+      },
+      {
+        "name": "J_u",
+        "latex": "J(u)",
+        "formula": "\\int_D \\ell \\chi \\,dx + \\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla u) \\,dx"
+      },
+      {
+        "name": "dlambda_du",
+        "latex": "\\partial_{(u,\\hat u)} \\lambda(\\hat u,u)",
+        "formula": "2 \\alpha \\lambda_0 \\hat u u"
+      },
+      {
+        "name": "dlambda_delta_u",
+        "latex": "\\partial_{(u,\\delta u)} \\lambda(\\delta u,u)",
+        "formula": "2 \\alpha \\lambda_0 \\delta u u"
+      },
+      {
+        "name": "dJ_du",
+        "latex": "\\partial_{(u,\\delta u)} J(\\delta u,u)",
+        "formula": "\\int_D \\left(2 \\lambda(u) (\\nabla u \\cdot \\nabla \\delta u) + \\partial_{(u,\\delta u)} \\lambda(\\delta u,u) (\\nabla u \\cdot \\nabla u)\\right) \\chi \\,dx"
+      }
+    ],
+    "characteristic_function": {
+      "latex": "\\chi(x)",
+      "strong_value": 1,
+      "weak_value": 0.1
+    },
+    "objective": {
+      "name": "J",
+      "description": "Objective functional of the nonlinear diffusion problem",
+      "terms": [
+        "\\int_D \\ell \\chi \\,dx",
+        "\\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla u) \\,dx"
+      ]
+    },
+    "state_equation": {
+      "description": "Weak form of the nonlinear diffusion state equation",
+      "weak_form_lhs": "\\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla \\delta u) \\,dx",
+      "weak_form_rhs": "\\int_D f \\delta u \\,dx",
+      "is_nonlinear": true
+    },
+    "newton_linearisation": {
+      "description": "Linearised Newton update for the nonlinear diffusion state equation",
+      "weak_form": "\\int_D \\chi \\lambda(u) (\\nabla \\delta u \\cdot \\nabla \\hat u) + \\chi \\partial_{(u,\\hat u)} \\lambda(\\hat u,u) (\\nabla u \\cdot \\nabla \\delta u) \\,dx = \\int_D f \\delta u \\,dx - \\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla \\delta u) \\,dx"
+    },
+    "adjoint_equation": {
+      "description": "Adjoint equation for the adjoint state \\tilde u",
+      "weak_form_lhs": "\\int_D \\chi \\lambda(u) (\\nabla \\delta u \\cdot \\nabla \\tilde u) + \\chi \\partial_{(u,\\delta u)} \\lambda(\\delta u,u) (\\nabla u \\cdot \\nabla \\tilde u) \\,dx",
+      "weak_form_rhs": "-\\partial_{(u,\\delta u)} J(\\delta u,u)"
+    },
+    "shape_derivative": {
+      "volume_expression": "DJ(\\Omega)(\\mathbf V) = \\partial_t J(u,\\mathbf V) + \\int_D \\left(\\operatorname{div}\\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))\\right) \\chi \\lambda(u) \\,dx - \\int_D f \\operatorname{div}\\mathbf V \\tilde u \\,dx, \\quad \\partial_t J(u,\\mathbf V) = \\int_D \\left(\\operatorname{div}\\mathbf V (\\nabla u \\cdot \\nabla u) - 2 (\\nabla u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V))\\right) \\chi \\lambda(u) \\,dx + \\int_D \\ell \\chi \\operatorname{div}\\mathbf V \\,dx"
+    }
+  },
+  "designed": {
+    "problem_type": "topology_optimization",
+    "problem_type_source": "extracted",
+    "problem_name": "run_nonlinearDiffusion3d",
+    "problem_name_source": "extracted",
+    "dimension": 3,
+    "dimension_source": "extracted",
+    "domain_name": "D",
+    "domain_name_source": "extracted",
+    "mesh_variable": "Th",
+    "mesh_variable_source": "extracted",
+    "mesh_file": "meshLaplace3d.txt",
+    "mesh_file_source": "extracted",
+    "objective_name": "J",
+    "objective_name_source": "extracted",
+    "objective_description": "Objective functional of the nonlinear diffusion problem",
+    "objective_description_source": "extracted",
+    "objective_terms": [
+      "\\int_D \\ell \\chi \\,dx",
+      "\\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla u) \\,dx"
+    ],
+    "objective_terms_source": [
+      "extracted",
+      "extracted"
+    ],
+    "state_description": "Weak form of the nonlinear diffusion state equation",
+    "state_description_source": "extracted",
+    "state_weak_lhs": "\\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla \\delta u) \\,dx",
+    "state_weak_lhs_source": "extracted",
+    "state_weak_rhs": "\\int_D f \\delta u \\,dx",
+    "state_weak_rhs_source": "extracted",
+    "state_is_nonlinear": true,
+    "state_is_nonlinear_source": "extracted",
+    "newton_description": "Linearised Newton update for the nonlinear diffusion state equation",
+    "newton_description_source": "extracted",
+    "newton_weak_form": "\\int_D \\chi \\lambda(u) (\\nabla \\delta u \\cdot \\nabla \\hat u) + \\chi \\partial_{(u,\\hat u)} \\lambda(\\hat u,u) (\\nabla u \\cdot \\nabla \\delta u) \\,dx = \\int_D f \\delta u \\,dx - \\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla \\delta u) \\,dx",
+    "newton_weak_form_source": "extracted",
+    "newton_source": "extracted",
+    "adjoint_description": "Adjoint equation for the adjoint state \\tilde u",
+    "adjoint_description_source": "extracted",
+    "adjoint_weak_lhs": "\\int_D \\chi \\lambda(u) (\\nabla \\delta u \\cdot \\nabla \\tilde u) + \\chi \\partial_{(u,\\delta u)} \\lambda(\\delta u,u) (\\nabla u \\cdot \\nabla \\tilde u) \\,dx",
+    "adjoint_weak_lhs_source": "extracted",
+    "adjoint_weak_rhs": "-\\partial_{(u,\\delta u)} J(\\delta u,u)",
+    "adjoint_weak_rhs_source": "extracted",
+    "shape_derivative_volume": "DJ(\\Omega)(\\mathbf V) = \\partial_t J(u,\\mathbf V) + \\int_D \\left(\\operatorname{div}\\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))\\right) \\chi \\lambda(u) \\,dx - \\int_D f \\operatorname{div}\\mathbf V \\tilde u \\,dx, \\quad \\partial_t J(u,\\mathbf V) = \\int_D \\left(\\operatorname{div}\\mathbf V (\\nabla u \\cdot \\nabla u) - 2 (\\nabla u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V))\\right) \\chi \\lambda(u) \\,dx + \\int_D \\ell \\chi \\operatorname{div}\\mathbf V \\,dx",
+    "shape_derivative_volume_source": "extracted",
+    "shape_derivative_boundary": "0",
+    "shape_derivative_boundary_source": "designed",
+    "shape_derivative_boundary_rationale": "The velocity field V is taken with compact support in the fixed design domain D, so all boundary integrals vanish and the volume form is the complete shape derivative.",
+    "shape_derivative_source": "extracted",
+    "boundaries": [
+      {
+        "name": "\\Gamma_3",
+        "label": "3",
+        "kind": "Dirichlet",
+        "description": "boundary with homogeneous Dirichlet condition for u",
+        "source": "designed",
+        "rationale": "Boundary identity is extracted; the concrete mesh label 3 is assigned for meshLaplace3d.txt."
+      },
+      {
+        "name": "\\Gamma_1",
+        "label": "1",
+        "kind": "Neumann",
+        "description": "plane x=0, zero natural flux",
+        "source": "designed",
+        "rationale": "Completes the cubic design domain [0,1]^3; label 1 is placed on x=0."
+      },
+      {
+        "name": "\\Gamma_2",
+        "label": "2",
+        "kind": "Neumann",
+        "description": "plane x=1, zero natural flux",
+        "source": "designed",
+        "rationale": "Completes the cubic design domain; label 2 is placed on x=1."
+      },
+      {
+        "name": "\\Gamma_4",
+        "label": "4",
+        "kind": "Neumann",
+        "description": "plane y=1, zero natural flux",
+        "source": "designed",
+        "rationale": "Completes the cubic design domain; label 4 is placed on y=1."
+      },
+      {
+        "name": "\\Gamma_5",
+        "label": "5",
+        "kind": "Neumann",
+        "description": "plane z=0, zero natural flux",
+        "source": "designed",
+        "rationale": "Completes the cubic design domain; label 5 is placed on z=0."
+      },
+      {
+        "name": "\\Gamma_6",
+        "label": "6",
+        "kind": "Neumann",
+        "description": "plane z=1, zero natural flux",
+        "source": "designed",
+        "rationale": "Completes the cubic design domain; label 6 is placed on z=1."
+      }
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "unit": "kelvin",
+        "dirichlet_value": 0,
+        "dirichlet_labels": [
+          "3"
+        ],
+        "source": "extracted",
+        "rationale": "Primal temperature field extracted; unit kelvin is inferred from lambda_0 and f, and concrete Dirichlet label 3 is assigned to Gamma_3."
+      },
+      {
+        "name": "u_tilde",
+        "latex": "\\tilde u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "unit": "dimensionless",
+        "dirichlet_value": 0,
+        "dirichlet_labels": [
+          "3"
+        ],
+        "source": "designed",
+        "rationale": "Adjoint state introduced to evaluate the shape derivative; it inherits the homogeneous Dirichlet condition on Gamma_3."
+      }
+    ],
+    "test_functions": [
+      {
+        "name": "delta_u",
+        "latex": "\\delta u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "unit": "kelvin",
+        "source": "extracted",
+        "rationale": "Test function extracted; unit is set to kelvin to match the primal field u."
+      }
+    ],
+    "constants": [
+      {
+        "name": "ell",
+        "latex": "\\ell",
+        "value": 100,
+        "description": "Lagrange multiplier",
+        "unit": "W K / m^3",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda_0",
+        "latex": "\\lambda_0",
+        "value": 1,
+        "description": "conductivity",
+        "unit": "W/(K m)",
+        "source": "extracted"
+      },
+      {
+        "name": "alpha",
+        "latex": "\\alpha",
+        "value": 0.01,
+        "description": "factor",
+        "unit": "1/K^2",
+        "source": "extracted"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": -10,
+        "description": "source",
+        "unit": "W/m^3",
+        "source": "extracted"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "Lagrangian",
+        "latex": "\\mathcal{L}([u],[\\delta u])",
+        "formula": "J(u) - \\int_D f \\delta u \\,dx + \\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla \\delta u) \\,dx",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda_u",
+        "latex": "\\lambda(u)",
+        "formula": "(\\alpha u^2 + 1) \\lambda_0",
+        "source": "extracted"
+      },
+      {
+        "name": "J_u",
+        "latex": "J(u)",
+        "formula": "\\int_D \\ell \\chi \\,dx + \\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla u) \\,dx",
+        "source": "extracted"
+      },
+      {
+        "name": "dlambda_du",
+        "latex": "\\partial_{(u,\\hat u)} \\lambda(\\hat u,u)",
+        "formula": "2 \\alpha \\lambda_0 \\hat u u",
+        "source": "extracted"
+      },
+      {
+        "name": "dlambda_delta_u",
+        "latex": "\\partial_{(u,\\delta u)} \\lambda(\\delta u,u)",
+        "formula": "2 \\alpha \\lambda_0 \\delta u u",
+        "source": "extracted"
+      },
+      {
+        "name": "dJ_du",
+        "latex": "\\partial_{(u,\\delta u)} J(\\delta u,u)",
+        "formula": "\\int_D \\left(2 \\lambda(u) (\\nabla u \\cdot \\nabla \\delta u) + \\partial_{(u,\\delta u)} \\lambda(\\delta u,u) (\\nabla u \\cdot \\nabla u)\\right) \\chi \\,dx",
+        "source": "extracted"
+      }
+    ],
+    "characteristic_function": {
+      "latex": "\\chi(x)",
+      "strong_value": 1,
+      "weak_value": 0.1,
+      "source": "extracted",
+      "rationale": "Strong chi=1 in material and weak chi=0.1 in void as extracted."
+    },
+    "optimization_config": {
+      "mesh_file": "meshLaplace3d.txt",
+      "hmin": 0.01,
+      "hmax": 0.1,
+      "diffusion": 0.0001,
+      "v0": 0.01,
+      "iterations": 30,
+      "level_set_initial": "sqrt((x-0.5)^2+(y-0.5)^2+(z-0.5)^2)-0.25",
+      "boundary_labels": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "fixed_labels": [
+        "3"
+      ],
+      "extra_params": {},
+      "source": "designed",
+      "rationale": "Level-set topology optimization parameters for a unit cube design domain [0,1]^3: mesh sizes one percent to ten percent of the side length, small diffusion regularization, initial speed 1e-2, 30 iterations, and initial solid sphere of radius 0.25 centered at (0.5,0,0.5) so that it touches the Dirichlet face Gamma_3. Boundary labels correspond to the designed cube faces; label 3 is fixed because it carries the Dirichlet condition."
+    }
+  }
+}

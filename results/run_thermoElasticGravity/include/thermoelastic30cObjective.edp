@@ -1,0 +1,4 @@
+objective = int1d(Th, 2.00000000000000)(beta*ux^2.0) 
+ + int1d(Th, 4.00000000000000)(beta*ux^2.0) 
+ - int1d(Th, 3.00000000000000)(gamma*uy) 
+ + int2d(Th)((1.00000000000000*(phi<0) + 0*(1-(phi<0)))*ell);

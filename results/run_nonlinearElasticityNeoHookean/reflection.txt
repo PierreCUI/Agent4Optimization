@@ -1,0 +1,12 @@
+======================================================================
+REFLECTION LOG — run_nonlinearElasticityNeoHookean
+Started: 2026-08-10 00:45:02
+======================================================================
+
+--- Iteration 1 [01:00:05] ---
+Coarse:  autofreefem_error
+Fine:    api_signature_error
+Action:  local_fix
+Fix:     Removed the unsupported maxiter keyword argument from setup_optimization(), which was causing the api_signature_error.
+Outcome: FreeFEM failed — Python rc=0, 2 .edp, FreeFEM rcs=['-2', '0']
+

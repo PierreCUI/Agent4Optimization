@@ -1,0 +1,29 @@
+{
+  "autofreefem": {
+    "python": {
+      "return_code": "0",
+      "stdout": "",
+      "stderr": ""
+    },
+    "files_before": [],
+    "files_after": [],
+    "edp_files": [
+      "optimize_nonlineardiffusion.edp",
+      "verify_nonlineardiffusion.edp"
+    ]
+  },
+  "freefem": [
+    {
+      "edp_file": "optimize_nonlineardiffusion.edp",
+      "return_code": "-2",
+      "stdout": "",
+      "stderr": "STEP TIMEOUT: no new iteration file for 300s (last iteration: 101). Likely MMG hang or infinite remesh loop."
+    },
+    {
+      "edp_file": "verify_nonlineardiffusion.edp",
+      "return_code": "8",
+      "stdout": "",
+      "stderr": ""
+    }
+  ]
+}

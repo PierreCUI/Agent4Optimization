@@ -1,0 +1,353 @@
+{
+  "extracted": {
+    "problem_type": "topology_optimization",
+    "problem_name": "run_nonlinearDiffusion",
+    "dimension": 2,
+    "domain_name": "D",
+    "mesh_variable": "Th",
+    "mesh_file": "meshLaplace.txt",
+    "mesh_labels_used": [
+      "1",
+      "3"
+    ],
+    "boundaries": [
+      {
+        "name": "\\Gamma_3",
+        "kind": "Dirichlet",
+        "description": "boundary where the state and test functions are set to zero"
+      }
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "dirichlet_value": 0,
+        "dirichlet_labels": [
+          "\\Gamma_3"
+        ]
+      }
+    ],
+    "test_functions": [
+      {
+        "name": "delta_u",
+        "latex": "\\delta u",
+        "type": "scalar",
+        "fe_space": "P2"
+      }
+    ],
+    "constants": [
+      {
+        "name": "ell",
+        "latex": "\\ell",
+        "value": 100,
+        "description": "Lagrange multiplier",
+        "unit": "W K / m^3"
+      },
+      {
+        "name": "lambda_0",
+        "latex": "\\lambda_0",
+        "value": 1,
+        "description": "conductivity",
+        "unit": "W / (K m)"
+      },
+      {
+        "name": "alpha",
+        "latex": "\\alpha",
+        "value": 0.01,
+        "description": "factor",
+        "unit": "1 / K^2"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": -10,
+        "description": "source",
+        "unit": "W / m^3"
+      }
+    ],
+    "characteristic_function": {
+      "latex": "\\chi(x)",
+      "strong_value": 1,
+      "weak_value": 0.1
+    },
+    "objective": {
+      "name": "J",
+      "description": "objective functional of the non-linear diffusion problem",
+      "terms": [
+        "\\int_D \\ell \\chi dx",
+        "\\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla u) dx"
+      ]
+    },
+    "state_equation": {
+      "description": "non-linear state equation satisfied by u",
+      "weak_form_lhs": "\\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla \\delta u) dx",
+      "weak_form_rhs": "\\int_D f \\delta u dx",
+      "is_nonlinear": true
+    },
+    "newton_linearisation": {
+      "description": "Newton update equation for the increment \\hat u at state u",
+      "weak_form": "\\int_D \\chi \\lambda(u) (\\nabla \\delta u \\cdot \\nabla \\hat u) + \\chi \\partial_{(u,\\hat u)} \\lambda(\\hat u,u) (\\nabla u \\cdot \\nabla \\delta u) dx = \\int_D f \\delta u dx - \\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla \\delta u) dx"
+    },
+    "adjoint_equation": {
+      "description": "adjoint equation for the adjoint state \\tilde u",
+      "weak_form_lhs": "\\partial_{(u,\\delta u)} J(\\delta u,u) + \\int_D \\chi \\lambda(u) (\\nabla \\delta u \\cdot \\nabla \\tilde u) + \\chi \\partial_{(u,\\delta u)} \\lambda(\\delta u,u) (\\nabla u \\cdot \\nabla \\tilde u) dx",
+      "weak_form_rhs": "0"
+    },
+    "shape_derivative": {
+      "volume_expression": "DJ(\\Omega)(\\mathbf V) = \\partial_t J(u,\\mathbf V) + \\int_D (\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))) \\chi \\lambda(u) dx - \\int_D f \\operatorname{div} \\mathbf V \\tilde u dx"
+    },
+    "expressions": [
+      {
+        "name": "chi",
+        "latex": "\\chi(x)",
+        "formula": "\\chi(x)=1 if \\phi(x)<0, 1/10 if \\phi(x)\\ge 0"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda(u)",
+        "formula": "\\lambda(u)=(\\alpha u^2+1)\\lambda_0"
+      },
+      {
+        "name": "J",
+        "latex": "J(u)",
+        "formula": "J(u)=\\int_D \\ell \\chi dx + \\int_D \\chi \\lambda(u)(\\nabla u\\cdot\\nabla u) dx"
+      },
+      {
+        "name": "partial_lambda",
+        "latex": "\\partial_{(u,\\hat u)}\\lambda(\\hat u,u)",
+        "formula": "2\\alpha\\lambda_0 \\hat u u"
+      },
+      {
+        "name": "adjoint_partial_lambda",
+        "latex": "\\partial_{(u,\\delta u)}\\lambda(\\delta u,u)",
+        "formula": "2\\alpha\\lambda_0 \\delta u u"
+      },
+      {
+        "name": "partial_J",
+        "latex": "\\partial_{(u,\\delta u)}J(\\delta u,u)",
+        "formula": "\\int_D (2\\lambda(u)(\\nabla u\\cdot\\nabla\\delta u)+\\partial_{(u,\\delta u)}\\lambda(\\delta u,u)(\\nabla u\\cdot\\nabla u))\\chi dx"
+      },
+      {
+        "name": "partial_t_J",
+        "latex": "\\partial_t J(u,\\mathbf V)",
+        "formula": "\\int_D (\\operatorname{div}\\mathbf V(\\nabla u\\cdot\\nabla u)-2(\\nabla u\\cdot(\\nabla u\\cdot\\nabla\\mathbf V)))\\chi\\lambda(u) dx + \\int_D \\ell\\chi\\operatorname{div}\\mathbf V dx"
+      }
+    ]
+  },
+  "designed": {
+    "problem_type": "topology_optimization",
+    "problem_type_source": "extracted",
+    "problem_name": "run_nonlinearDiffusion",
+    "problem_name_source": "extracted",
+    "dimension": 2,
+    "dimension_source": "extracted",
+    "domain_name": "D",
+    "domain_name_source": "extracted",
+    "mesh_variable": "Th",
+    "mesh_variable_source": "extracted",
+    "mesh_file": "meshLaplace.txt",
+    "mesh_file_source": "extracted",
+    "objective_name": "J",
+    "objective_name_source": "extracted",
+    "objective_description": "objective functional of the non-linear diffusion problem",
+    "objective_description_source": "extracted",
+    "objective_terms": [
+      "\\int_D \\ell \\chi dx",
+      "\\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla u) dx"
+    ],
+    "objective_terms_source": [
+      "extracted",
+      "extracted"
+    ],
+    "state_description": "non-linear state equation satisfied by u",
+    "state_description_source": "extracted",
+    "state_weak_lhs": "\\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla \\delta u) dx",
+    "state_weak_lhs_source": "extracted",
+    "state_weak_rhs": "\\int_D f \\delta u dx",
+    "state_weak_rhs_source": "extracted",
+    "state_is_nonlinear": true,
+    "state_is_nonlinear_source": "extracted",
+    "newton_description": "Newton update equation for the increment \\hat u at state u",
+    "newton_description_source": "extracted",
+    "newton_weak_form": "\\int_D \\chi \\lambda(u) (\\nabla \\delta u \\cdot \\nabla \\hat u) + \\chi \\partial_{(u,\\hat u)} \\lambda(\\hat u,u) (\\nabla u \\cdot \\nabla \\delta u) dx = \\int_D f \\delta u dx - \\int_D \\chi \\lambda(u) (\\nabla u \\cdot \\nabla \\delta u) dx",
+    "newton_weak_form_source": "extracted",
+    "newton_source": "extracted",
+    "adjoint_description": "adjoint equation for the adjoint state \\tilde u",
+    "adjoint_description_source": "extracted",
+    "adjoint_weak_lhs": "\\partial_{(u,\\delta u)} J(\\delta u,u) + \\int_D \\chi \\lambda(u) (\\nabla \\delta u \\cdot \\nabla \\tilde u) + \\chi \\partial_{(u,\\delta u)} \\lambda(\\delta u,u) (\\nabla u \\cdot \\nabla \\tilde u) dx",
+    "adjoint_weak_lhs_source": "extracted",
+    "adjoint_weak_rhs": "0",
+    "adjoint_weak_rhs_source": "extracted",
+    "adjoint_source": "extracted",
+    "shape_derivative_volume": "DJ(\\Omega)(\\mathbf V) = \\partial_t J(u,\\mathbf V) + \\int_D (\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))) \\chi \\lambda(u) dx - \\int_D f \\operatorname{div} \\mathbf V \\tilde u dx",
+    "shape_derivative_volume_source": "extracted",
+    "shape_derivative_boundary": "0",
+    "shape_derivative_boundary_source": "designed",
+    "shape_derivative_boundary_rationale": "No separate boundary term was extracted; the problem is formulated on the fixed design domain D with topology described by chi(x), so the volume expression contains all domain contributions.",
+    "shape_derivative_source": "extracted",
+    "boundaries": [
+      {
+        "name": "\\Gamma_1",
+        "label": "1",
+        "kind": "Neumann",
+        "description": "remaining boundary with homogeneous natural condition",
+        "source": "designed",
+        "rationale": "labels 1 and 3 are the only mesh labels in mesh_labels_used; label 1 is the unnamed boundary and is treated as natural homogeneous Neumann"
+      },
+      {
+        "name": "\\Gamma_3",
+        "label": "3",
+        "kind": "Dirichlet",
+        "description": "boundary where the state and test functions are set to zero",
+        "source": "extracted",
+        "label_source": "designed",
+        "label_rationale": "mapped from \\Gamma_3 to mesh label 3 found in mesh_labels_used"
+      }
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "unit": "kelvin",
+        "dirichlet_value": 0,
+        "dirichlet_labels": [
+          "3"
+        ],
+        "source": "extracted",
+        "unit_source": "designed",
+        "unit_rationale": "u is the temperature field in the nonlinear diffusion problem",
+        "dirichlet_labels_source": "designed",
+        "dirichlet_labels_rationale": "mapped to boundary label 3 corresponding to \\Gamma_3"
+      }
+    ],
+    "test_functions": [
+      {
+        "name": "delta_u",
+        "latex": "\\delta u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "unit": "kelvin",
+        "source": "extracted",
+        "unit_source": "designed",
+        "unit_rationale": "test function is a variation of u and has the same units as u"
+      }
+    ],
+    "constants": [
+      {
+        "name": "ell",
+        "latex": "\\ell",
+        "value": 100,
+        "description": "Lagrange multiplier",
+        "unit": "W K / m^3",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda_0",
+        "latex": "\\lambda_0",
+        "value": 1,
+        "description": "conductivity",
+        "unit": "W / (K m)",
+        "source": "extracted"
+      },
+      {
+        "name": "alpha",
+        "latex": "\\alpha",
+        "value": 0.01,
+        "description": "factor",
+        "unit": "1 / K^2",
+        "source": "extracted"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": -10,
+        "description": "source",
+        "unit": "W / m^3",
+        "source": "extracted"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "chi",
+        "latex": "\\chi(x)",
+        "formula": "\\chi(x)=1 if \\phi(x)<0, 1/10 if \\phi(x)\\ge 0",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda(u)",
+        "formula": "\\lambda(u)=(\\alpha u^2+1)\\lambda_0",
+        "source": "extracted"
+      },
+      {
+        "name": "J",
+        "latex": "J(u)",
+        "formula": "J(u)=\\int_D \\ell \\chi dx + \\int_D \\chi \\lambda(u)(\\nabla u\\cdot\\nabla u) dx",
+        "source": "extracted"
+      },
+      {
+        "name": "partial_lambda",
+        "latex": "\\partial_{(u,\\hat u)}\\lambda(\\hat u,u)",
+        "formula": "2\\alpha\\lambda_0 \\hat u u",
+        "source": "extracted"
+      },
+      {
+        "name": "adjoint_partial_lambda",
+        "latex": "\\partial_{(u,\\delta u)}\\lambda(\\delta u,u)",
+        "formula": "2\\alpha\\lambda_0 \\delta u u",
+        "source": "extracted"
+      },
+      {
+        "name": "partial_J",
+        "latex": "\\partial_{(u,\\delta u)}J(\\delta u,u)",
+        "formula": "\\int_D (2\\lambda(u)(\\nabla u\\cdot\\nabla\\delta u)+\\partial_{(u,\\delta u)}\\lambda(\\delta u,u)(\\nabla u\\cdot\\nabla u))\\chi dx",
+        "source": "extracted"
+      },
+      {
+        "name": "partial_t_J",
+        "latex": "\\partial_t J(u,\\mathbf V)",
+        "formula": "\\int_D (\\operatorname{div}\\mathbf V(\\nabla u\\cdot\\nabla u)-2(\\nabla u\\cdot(\\nabla u\\cdot\\nabla\\mathbf V)))\\chi\\lambda(u) dx + \\int_D \\ell\\chi\\operatorname{div}\\mathbf V dx",
+        "source": "extracted"
+      }
+    ],
+    "characteristic_function": {
+      "latex": "\\chi(x)",
+      "strong_value": 1,
+      "weak_value": 0.1,
+      "source": "extracted"
+    },
+    "optimization_config": {
+      "mesh_file": "meshLaplace.txt",
+      "hmin": 0.0001,
+      "hmax": 0.1,
+      "diffusion": 0.0001,
+      "v0": 0.001,
+      "iterations": 40,
+      "level_set_initial": "sqrt((x-0.5)^2+(y-0.5)^2)-0.25",
+      "boundary_labels": [
+        "1",
+        "3"
+      ],
+      "fixed_labels": [
+        "3"
+      ],
+      "extra_params": {},
+      "source": "designed",
+      "rationale": "defaults for level-set topology optimization on a unit square; hmin/hmax scale with the domain, diffusion and v0 are standard stabilization values, 40 iterations is a balanced default, the initial level set is a centred circle of radius 0.25, and boundary label 3 is fixed because it is the Dirichlet boundary",
+      "mesh_file_source": "extracted",
+      "hmin_source": "designed",
+      "hmax_source": "designed",
+      "diffusion_source": "designed",
+      "v0_source": "designed",
+      "iterations_source": "designed",
+      "level_set_initial_source": "designed",
+      "boundary_labels_source": "designed",
+      "fixed_labels_source": "designed",
+      "extra_params_source": "designed"
+    }
+  }
+}

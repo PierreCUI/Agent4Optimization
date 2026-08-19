@@ -1,0 +1,71 @@
+\documentclass[preview]{standalone}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{bm}
+\let\oldcdot\cdot
+\usepackage{breqn}
+\let\cdot\oldcdot
+\begin{document}
+Let $\phi(x)$ be the level-set function and
+ \begin{align*}\raisebox{\depth}{$\chi$}(x) &= \begin{cases} 1 & \mbox{if}\quad \phi(x) < 0 \\ 0 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases},\\
+E(x) &= \begin{cases} E_0 & \mbox{if}\quad \phi(x) < 0 \\ E_0/1000 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases}.\end{align*}
+The Lagrangian of the thermo-elastic problem is
+\begin{dmath*}
+\mathcal L(\left[ {\mathbf{ u }}\right],\left[ {\delta\mathbf{  u }}\right]) = J({\mathbf{ u }}) +  \int_{\Gamma_D} \beta \left( {\mathbf{ u }} \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{\Gamma_N} q \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{D} \rho g \raisebox{\depth}{$\chi$} \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,dx +  \int_{D} \left( \left( \mathbf{I} \lambda  \,\operatorname{tr}\left(\bm\varepsilon({\mathbf{ u }})\right)  + 2 \mu \bm\varepsilon({\mathbf{ u }}) \right) \mathrel{:}  \pmb\varepsilon({\delta\mathbf{  u }})^\top  \right) \,dx , 
+\end{dmath*}
+with 
+\begin{align*}
+\pmb\varepsilon({\delta\mathbf{  u }}) &= \frac{ \nabla {\delta\mathbf{  u }}  +   \nabla {\delta\mathbf{  u }} ^\top }{2},\\
+\lambda &= - \frac{\nu E}{\left(\nu + 1\right) \left(2 \nu - 1\right)},\\
+\bm\varepsilon({\mathbf{ u }}) &= \frac{ \nabla {\mathbf{ u }}  +   \nabla {\mathbf{ u }} ^\top }{2},\\
+J({\mathbf{ u }}) &=  \int_{D} \ell \raisebox{\depth}{$\chi$} \,dx +  \int_{\Gamma_D} \beta \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \,ds_x -  \int_{\Gamma_N} \gamma \left( \mathbf e_y \cdot {\mathbf{ u }} \right) \,ds_x,\\
+\mu &= \frac{E}{2 \left(\nu + 1\right)}.
+ \end{align*}
+Let
+\begin{equation*}
+V_{{\mathbf{ u }}} = \mathbb P_{2},\end{equation*}
+\begin{equation*}
+V_{{\delta\mathbf{  u }}} = \mathbb P_{2}.\end{equation*}
+The state $\left[ {\mathbf{ u }}\right] \in  V_{{\mathbf{ u }}}$ is the solution of the linear problem
+\begin{dmath*}
+ \int_{\Gamma_D} \beta \left( {\mathbf{ u }} \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{\Gamma_N} q \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{D} \rho g \raisebox{\depth}{$\chi$} \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,dx +  \int_{D} \left( \left( \mathbf{I} \lambda  \,\operatorname{tr}\left(\bm\varepsilon({\mathbf{ u }})\right)  + 2 \mu \bm\varepsilon({\mathbf{ u }}) \right) \mathrel{:}  \pmb\varepsilon({\delta\mathbf{  u }})^\top  \right) \,dx = 0\qquad \forall\; {{\delta\mathbf{  u }}\in V_{{\delta\mathbf{  u }}}} . 
+\end{dmath*}
+The adjoint state $\left[ \tilde{\mathbf{ u }}\right] \in  V_{{\delta\mathbf{  u }}}$ to the direct state $\left[ {\mathbf{ u }}\right]$ is the solution of
+\begin{dmath*}
+\partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} J({\delta\mathbf{  u }},{\mathbf{ u }}) +  \int_{\Gamma_D} \beta \left( {\delta\mathbf{  u }} \cdot \tilde{\mathbf{ u }} \right) \,ds_x +  \int_{D} \left( \left( \mathbf{I} \lambda  \,\operatorname{tr}\left(\partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} \bm\varepsilon({\delta\mathbf{  u }})\right)  + 2 \mu \partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} \bm\varepsilon({\delta\mathbf{  u }}) \right) \mathrel{:}  \pmb\varepsilon(\tilde{\mathbf{ u }})^\top  \right) \,dx = 0\qquad \forall\; {{\delta\mathbf{  u }}\in V_{{\mathbf{ u }}}} , 
+\end{dmath*}
+with 
+\begin{align*}
+\partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} J({\delta\mathbf{  u }},{\mathbf{ u }}) &= -  \int_{\Gamma_N} \gamma \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{\Gamma_D} 2 \beta \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \left( \mathbf e_x \cdot {\delta\mathbf{  u }} \right) \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{-1} \,ds_x.
+ \end{align*}
+In order to compute the shape derivative, we consider a shape pertubation $\mathbf x = T_t(\mathbf X) = \mathbf X + t \mathbf  V(X)$ with a suitable velocity field $\mathbf V$. The perturbed Lagrangian $\mathcal G$ using the Lagrangian state $\left[ {\mathbf{ u }}\right]^{L}$ is given by
+\begin{dmath*}
+\mathcal G(t,\left[ {\mathbf{ u }}\right]^{L},\left[ {\delta\mathbf{  u }}\right]^{L}) = \mathcal V(J) +  \int_{\Gamma_D} \beta  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \left( {\mathbf{ u }} \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{\Gamma_N} q  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{D}  \operatorname{det}\mathbf F( t )  \left( \left( \mathbf{I} \lambda  \,\operatorname{tr}\left(\mathcal V(\bm\varepsilon)\right)  + 2 \mu \mathcal V(\bm\varepsilon) \right) \mathrel{:}  \mathcal V(\pmb\varepsilon)^\top  \right) \,dx +  \int_{D} \rho g \raisebox{\depth}{$\chi$}  \operatorname{det}\mathbf F( t )  \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,dx , 
+\end{dmath*}
+with
+\begin{dmath*}
+\mathcal V(\pmb\varepsilon) = \frac{\left(  \nabla {\delta\mathbf{  u }}  \cdot  \mathbf F^{-1}(t) \right) +  \left( \left(  \nabla {\delta\mathbf{  u }}  \cdot  \mathbf F^{-1}(t) \right) \right)^\top }{2},
+ \end{dmath*}
+\begin{dmath*}
+\mathcal V(\bm\varepsilon) = \frac{\left(  \nabla {\mathbf{ u }}  \cdot  \mathbf F^{-1}(t) \right) +  \left( \left(  \nabla {\mathbf{ u }}  \cdot  \mathbf F^{-1}(t) \right) \right)^\top }{2},
+ \end{dmath*}
+\begin{dmath*}
+\mathcal V(J) =  \int_{D} \ell \raisebox{\depth}{$\chi$}  \operatorname{det}\mathbf F( t )  \,dx +  \int_{\Gamma_D} \beta  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \,ds_x -  \int_{\Gamma_N} \gamma  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \left( \mathbf e_y \cdot {\mathbf{ u }} \right) \,ds_x.
+ \end{dmath*}
+For the direct state $\left[ {\mathbf{ u }}\right]$ and the adjoint state $\left[ \tilde{\mathbf{ u }}\right]$, the volume expression of the shape derivative is given by
+\begin{dmath*}
+DJ(\Omega)(\mathbf V) = \partial_{t} J({\mathbf V},{\mathbf{ u }}) +  \int_{\Gamma_D} \beta \operatorname{div} {\mathbf V} \left( {\mathbf{ u }} \cdot \tilde{\mathbf{ u }} \right) \,ds_x -  \int_{\Gamma_D} \beta \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \left( {\mathbf{ u }} \cdot \tilde{\mathbf{ u }} \right) \,ds_x +  \int_{\Gamma_N} q \operatorname{div} {\mathbf V} \left( \mathbf e_y \cdot \tilde{\mathbf{ u }} \right) \,ds_x -  \int_{\Gamma_N} q \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \left( \mathbf e_y \cdot \tilde{\mathbf{ u }} \right) \,ds_x +  \int_{D} \rho g \raisebox{\depth}{$\chi$} \operatorname{div} {\mathbf V} \left( \mathbf e_y \cdot \tilde{\mathbf{ u }} \right) \,dx +  \int_{D} \operatorname{div} {\mathbf V} \left( \left( \mathbf{I} \lambda  \,\operatorname{tr}\left(\bm\varepsilon({\mathbf{ u }})\right)  + 2 \mu \bm\varepsilon({\mathbf{ u }}) \right) \mathrel{:}  \pmb\varepsilon(\tilde{\mathbf{ u }})^\top  \right) + \left( \left( \mathbf{I} \lambda  \,\operatorname{tr}\left(\bm\varepsilon({\mathbf{ u }})\right)  + 2 \mu \bm\varepsilon({\mathbf{ u }}) \right) \mathrel{:}  \partial_{t} \pmb\varepsilon(\tilde{\mathbf{ u }},{\mathbf V})^\top  \right) + \left( \left( \mathbf{I} \lambda  \,\operatorname{tr}\left(\partial_{t} \bm\varepsilon({\mathbf V},{\mathbf{ u }})\right)  + 2 \mu \partial_{t} \bm\varepsilon({\mathbf V},{\mathbf{ u }}) \right) \mathrel{:}  \pmb\varepsilon(\tilde{\mathbf{ u }})^\top  \right) \,dx , 
+\end{dmath*}
+with
+\begin{dmath*}
+\partial_{t} J({\mathbf V},{\mathbf{ u }}) =  \int_{D} \ell \raisebox{\depth}{$\chi$} \operatorname{div} {\mathbf V} \,dx - \left( \int_{\Gamma_N} \gamma \operatorname{div} {\mathbf V} \left( \mathbf e_y \cdot {\mathbf{ u }} \right) \,ds_x -  \int_{\Gamma_N} \gamma \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \left( \mathbf e_y \cdot {\mathbf{ u }} \right) \,ds_x\right) +  \int_{\Gamma_D} \beta \operatorname{div} {\mathbf V} \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \,ds_x -  \int_{\Gamma_D} \beta \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \left( \mathbf e_x \cdot {\mathbf{ u }} \right)^{2} \,ds_x,
+ \end{dmath*}
+\begin{dmath*}
+\partial_{t} \bm\varepsilon({\mathbf V},{\mathbf{ u }}) = - \frac{\left(  \nabla {\mathbf{ u }}  \cdot  \nabla {\mathbf V}  \right) +  \left( \left(  \nabla {\mathbf{ u }}  \cdot  \nabla {\mathbf V}  \right) \right)^\top }{2},
+ \end{dmath*}
+\begin{dmath*}
+\partial_{t} \pmb\varepsilon(\tilde{\mathbf{ u }},{\mathbf V}) = - \frac{\left(  \nabla \tilde{\mathbf{ u }}  \cdot  \nabla {\mathbf V}  \right) +  \left( \left(  \nabla \tilde{\mathbf{ u }}  \cdot  \nabla {\mathbf V}  \right) \right)^\top }{2}.
+ \end{dmath*}
+\end{document}

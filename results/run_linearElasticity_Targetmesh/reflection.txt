@@ -1,0 +1,29 @@
+======================================================================
+REFLECTION LOG — run_linearElasticity_Targetmesh
+Started: 2026-08-10 16:07:39
+======================================================================
+
+--- Iteration 1 [16:12:47] ---
+Coarse:  freefem_error
+Fine:    ff_syntax
+Action:  local_fix
+Fix:     Removed the redundant first mesh block and duplicate `int n = 60;`/`mesh Th` redeclarations in mesh.txt, which caused the FreeFEM compile error `The identifier n exists` and prevented the optimization and verification scripts from running.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['-2', '8']
+
+--- Iteration 2 [16:18:24] ---
+Coarse:  wrong_result
+Fine:    physics_violation
+Action:  local_fix
+Fix:     Reduced the level-set advection speed v0 by 50x, increased diffusion 100x, and increased hmin 2x to prevent the MMG remeshing hang / late-stage mesh degeneration that caused the optimization timeout, while leaving the physics formulation unchanged.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['-3', '8']
+
+--- Iteration 3 [16:28:19] ---
+Coarse:  wrong_result
+Fine:    pathological_objective
+Action:  local_fix
+Fix:     Increased v0 from 2e-5 to 1e-3 while keeping the stabilising diffusion/hmin, so the level-set actually moves and the optimisation no longer stagnates after 20 epochs with a pathological flat objective.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['-2', '8']
+
+======================================================================
+FINAL STATUS: pass (3 iteration(s))
+======================================================================

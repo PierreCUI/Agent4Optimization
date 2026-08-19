@@ -1,0 +1,139 @@
+verbosity = 0;
+load "iovtk"
+include "include/inout.idp"
+real ell = 100;
+real lambda0 = 1;
+real alpha = 0.0100000000000000;
+real f = -10;
+// ###########################################
+// ###########################################
+// ###########################################
+real timeStart = clock();
+
+real x0 = 0;
+real x1 = 2;
+real y0 = -0.4;
+real y1 = 0.4;
+border C01(t=0, 1.){x=t; y=0; label=1;}
+border C02(t=0, 1.){x=1.; y=t; label=1;}
+border C03(t=0, 1.){x=1.-t; y=1.; label=1;}
+border C04(t=0, 0.4){x=0.; y=1-t; label=1;}
+border C05(t=0, 0.2){x=0.; y=0.6-t; label=3;}
+border C06(t=0, 0.4){x=0.; y=0.4-t; label=1;}
+int n = 50;
+mesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));func phi0 = -0.1-sin(pi*8*(x+0.6))*cos(pi*8*y);
+{savemesh(Th, "tmp/Mesh1.mesh");
+fespace Vh1(Th, P1);
+Vh1 phi;
+phi = phi0;
+printsol("tmp/phi.sol", phi[]);
+int Res = system("mmg2d_O3 tmp/Mesh1.mesh -ls -sol tmp/phi.sol -hmin 0.25 -hmax 0.5 -hausd 0.001 -hgrad 1.3 -out tmp/newmesh.mesh -rmc -v -1");
+ }
+Th = readmesh("tmp/newmesh.mesh");
+fespace VhPhi(Th, P1);
+VhPhi phiTh;
+phiTh = phi0;
+func Vx = x * y + cos(4 * y);
+func Vy = sin(4 * x);
+func Vz = 0;
+real objective = 0;
+real objective0 = 0;
+real shapeDerivative = 0;
+{
+fespace Vh1(Th,P1);
+Vh1 phi, X0, X;
+phi = phi0;
+X0 = (phi<0); //characteristic function of the shape
+// FE spaces
+fespace Vhu(Th, P2);
+fespace Vhdeltau(Th, P2);
+// FE fields for u
+Vhu u = 0.;
+Vhu incu;
+// adjoint variables for u
+Vhu adju;
+// definition of the test functions
+Vhdeltau deltau;
+include "include/nonlineardiffusionNewton.edp"
+include "include/nonlineardiffusionResidual.edp"
+for (int i=0; i < 40; i++){
+cout << "	iteration = " << i << endl;
+   real timeBeforeAssamblyNewton = clock();
+   matrix A = nonlineardiffusionNewton(Vhu, Vhdeltau);
+   cout << "	Time for assambly = " << clock() - timeBeforeAssamblyNewton << endl; timeBeforeAssamblyNewton = clock();
+   set(A,solver=sparsesolver);
+   {ofstream file("u.txt");   file << u[]; }
+   real[int] rhs = nonlineardiffusionResidual(0,Vhdeltau);
+   real[int] sol = A^-1 * rhs;
+   cout << "	Time for solve = " << clock() - timeBeforeAssamblyNewton << endl;
+   // update state
+   [incu[]] = sol; 
+   real alphaLineSearch = 1.0;
+   u[] -= alphaLineSearch*incu[];
+   cout << "maximal increment: " << sol.linfty << "   maximal residuum: " << rhs.linfty << endl;
+   if ((rhs.linfty < 1e-6)*(sol.linfty < 1e-5)){ 
+      cout << "CONVERGED after " << i << " steps!" << endl;
+   break;
+   };
+};
+include "include/nonlineardiffusionObjective.edp"
+objective0 = objective;
+// compute the adjoint and the shape derivative
+include "include/nonlineardiffusionAdjoint.edp"
+include "include/nonlineardiffusionShape.edp"
+fespace VhV(Th, [P1, P1]);
+VhV[shapeX, shapeY] = [0, 0];
+shapeX[] = nonlineardiffusionShape(0, VhV);
+VhV[VdiscreteX, VdiscreteY] = [Vx, Vy];
+shapeDerivative = VdiscreteX[]' * shapeX[];
+}
+mesh Thold = Th;
+ofstream fout("convergenceShapenonlineardiffusion.txt");
+fout << "t, numShape, taylorShape" << endl;
+for (int ii=0;ii<30;ii++){
+ real t = 0.1*2.^(-real(ii));
+ Th = movemesh(Thold,[x+t*Vx,y+t*Vy]);
+fespace Vh1(Th,P1);
+Vh1 phi, X0, X;
+phi[] = phiTh[];
+X0 = (phi<0); //characteristic function of the shape
+// FE spaces
+fespace Vhu(Th, P2);
+fespace Vhdeltau(Th, P2);
+// FE fields for u
+Vhu u = 0.;
+Vhu incu;
+// definition of the test functions
+Vhdeltau deltau;
+include "include/nonlineardiffusionNewton.edp"
+include "include/nonlineardiffusionResidual.edp"
+for (int i=0; i < 40; i++){
+cout << "	iteration = " << i << endl;
+   real timeBeforeAssamblyNewton = clock();
+   matrix A = nonlineardiffusionNewton(Vhu, Vhdeltau);
+   cout << "	Time for assambly = " << clock() - timeBeforeAssamblyNewton << endl; timeBeforeAssamblyNewton = clock();
+   set(A,solver=sparsesolver);
+   {ofstream file("u.txt");   file << u[]; }
+   real[int] rhs = nonlineardiffusionResidual(0,Vhdeltau);
+   real[int] sol = A^-1 * rhs;
+   cout << "	Time for solve = " << clock() - timeBeforeAssamblyNewton << endl;
+   // update state
+   [incu[]] = sol; 
+   real alphaLineSearch = 1.0;
+   u[] -= alphaLineSearch*incu[];
+   cout << "maximal increment: " << sol.linfty << "   maximal residuum: " << rhs.linfty << endl;
+   if ((rhs.linfty < 1e-6)*(sol.linfty < 1e-5)){ 
+      cout << "CONVERGED after " << i << " steps!" << endl;
+   break;
+   };
+};
+include "include/nonlineardiffusionObjective.edp"
+real objective1 = objective;
+real shapeDerivativeNumeric = (objective1 - objective0) / t;
+fout << t << ", " << abs(shapeDerivativeNumeric-shapeDerivative) / abs(shapeDerivative) <<  ", " << abs(objective1 - objective0 - t * shapeDerivative) << ", "  << endl;
+cout.precision(6);
+cout.scientific;
+cout << "t = " << t << ",  val. FD = " << shapeDerivativeNumeric << ", val. Formula = " << shapeDerivative 
+     << ", error FD = " << abs(shapeDerivativeNumeric-shapeDerivative) / abs(shapeDerivative) 
+     <<  ", error expansion = " << abs(objective1 - objective0 - t * shapeDerivative) << endl;
+}

@@ -1,0 +1,16 @@
+======================================================================
+REFLECTION LOG — run_linearElasticity
+Started: 2026-08-09 15:21:58
+======================================================================
+
+--- Iteration 1 [16:30:00] ---
+Coarse:  pass
+Fine:    pass
+Action:  (reference parameters — all iterations completed)
+Fix:     Reference parameters: hmin=0.01, hmax=0.02, diffusion=0.0001, v0=0.002,
+         phi=sinusoidal, boundaryLabels=['1','4'], fixedLabels=['2']
+Outcome: MinTh.vtu generated, 99/100 epochs, objective 0.698 -> 0.520 (-25.6%)
+
+======================================================================
+FINAL STATUS: pass (1 iteration(s))
+======================================================================

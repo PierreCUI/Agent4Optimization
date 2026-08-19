@@ -1,0 +1,14 @@
+varf linearElasticitybridgeAdjoint([adjux, adjuy],[vx, vy]) = 
+    int2d(Th)((1.00000000000000*(phi<0) + 0.00100000000000000*(1-(phi<0)))*(mu*(dy(vx) + dx(vy))*dy(adjux) + mu*(dy(vx) + dx(vy))*dx(adjuy) + (lambda*(dx(vx) + dy(vy)) + 2.0*mu*dx(vx))*dx(adjux) + (lambda*(dx(vx) + dy(vy)) + 2.0*mu*dy(vy))*dy(adjuy))) 
+ + int2d(Th)(2.0*(1.00000000000000*(phi<0) + 0.00100000000000000*(1-(phi<0)))*(lambda*dx(ux)*dx(vx) + lambda*dx(ux)*dy(vy) + lambda*dy(uy)*dx(vx) + lambda*dy(uy)*dy(vy) + 2.0*mu*dx(ux)*dx(vx) + mu*dy(ux)*dy(vx) + mu*dy(ux)*dx(vy) + mu*dx(uy)*dy(vx) + mu*dx(uy)*dx(vy) + 2.0*mu*dy(uy)*dy(vy)))
+    + on(2,adjux = 0)
+    + on(2,adjuy = 0)
+    + on(4,adjux = 0)
+    + on(4,adjuy = 0);
+
+   matrix adjointMatrix = linearElasticitybridgeAdjoint(Vhu, Vhu);
+   set(adjointMatrix, solver=sparsesolver);
+   real[int] adjointrhs = linearElasticitybridgeAdjoint(0,Vhu);
+   real[int] adjointsol = adjointMatrix^-1 * adjointrhs;
+   adjointsol = -adjointsol; 
+   [adjux[]] = adjointsol; 

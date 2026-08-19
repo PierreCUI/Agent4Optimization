@@ -1,0 +1,23 @@
+{
+  "extracted": {
+    "category": "code",
+    "mesh_code": "int n = 30;\n\nmesh Th = square(4*n,n, [4*x,y]);\n\nsavemesh(Th,\"Mesh1.mesh\");",
+    "geometry_description": "",
+    "labels_found": [],
+    "has_syntax_errors": false,
+    "syntax_error_details": ""
+  },
+  "designed": {
+    "mesh_code": "int n = 30;\n\nmesh Th = square(4*n,n, [4*x,y]);\n\nsavemesh(Th,\"Mesh1.mesh\");",
+    "mesh_code_source": "extracted",
+    "mesh_code_rationale": "",
+    "labels_used": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "dimension": 2,
+    "domain_description": "2D rectangular bridge design domain [0,4] x [0,1], created with FreeFEM's square mesh builder and default boundary labels 1 (bottom), 2 (right), 3 (top), 4 (left)."
+  }
+}

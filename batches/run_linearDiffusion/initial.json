@@ -1,0 +1,309 @@
+{
+  "extracted": {
+    "problem_type": "topology_optimization",
+    "problem_name": "run_linearDiffusion",
+    "dimension": 2,
+    "domain_name": "D",
+    "mesh_variable": "Th",
+    "mesh_file": "meshLaplace.txt",
+    "mesh_labels_used": [
+      "1",
+      "3"
+    ],
+    "boundaries": [
+      {
+        "name": "\\Gamma_3",
+        "kind": "Dirichlet",
+        "description": "boundary where the state is fixed to zero",
+        "mesh_label": "3"
+      }
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "\\Gamma_3"
+        ]
+      }
+    ],
+    "test_functions": [
+      {
+        "name": "delta_u",
+        "latex": "\\delta u",
+        "type": "scalar",
+        "fe_space": "P2"
+      }
+    ],
+    "constants": [
+      {
+        "name": "ell",
+        "latex": "\\ell",
+        "value": 100,
+        "description": "Lagrange multiplier",
+        "unit": "W K m^{-3}"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda",
+        "value": 1,
+        "description": "diffusion coefficient",
+        "unit": "W K^{-1} m^{-1}"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": -10,
+        "description": "source",
+        "unit": "W m^{-3}"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "chi",
+        "latex": "\\chi(x)",
+        "formula": "\\chi(x) = \\begin{cases} 1 & \\text{if } \\phi(x) < 0 \\\\ 1/10 & \\text{if } \\phi(x) \\ge 0 \\end{cases}"
+      },
+      {
+        "name": "J",
+        "latex": "J(u)",
+        "formula": "J(u) = \\int_D \\ell \\chi \\, dx + \\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla u) \\, dx"
+      },
+      {
+        "name": "dJ_partial",
+        "latex": "\\partial_{(u,\\delta u)} J(\\delta u,u)",
+        "formula": "\\partial_{(u,\\delta u)} J(\\delta u,u) = \\int_D 2 \\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx"
+      },
+      {
+        "name": "dJ_volume",
+        "latex": "DJ(\\Omega)(\\mathbf V)",
+        "formula": "DJ(\\Omega)(\\mathbf V) = \\partial_t J(u,\\mathbf V) + \\int_D \\left(\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))\\right) \\lambda \\chi \\, dx - \\int_D f \\operatorname{div} \\mathbf V \\tilde u \\, dx"
+      },
+      {
+        "name": "partial_t_J",
+        "latex": "\\partial_t J(u,\\mathbf V)",
+        "formula": "\\partial_t J(u,\\mathbf V) = \\int_D \\left(\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla u) - 2 (\\nabla u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V))\\right) \\lambda \\chi \\, dx + \\int_D \\ell \\chi \\operatorname{div} \\mathbf V \\, dx"
+      }
+    ],
+    "characteristic_function": {
+      "latex": "\\chi(x) = \\begin{cases} 1 & \\text{if } \\phi(x) < 0 \\\\ 1/10 & \\text{if } \\phi(x) \\ge 0 \\end{cases}",
+      "strong_value": 1,
+      "weak_value": 0.1
+    },
+    "objective": {
+      "name": "J",
+      "description": "Objective functional of the linear diffusion problem",
+      "terms": [
+        "\\int_D \\ell \\chi \\, dx",
+        "\\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla u) \\, dx"
+      ]
+    },
+    "state_equation": {
+      "description": "Weak form of the linear diffusion state equation",
+      "weak_form_lhs": "\\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx - \\int_D f \\delta u \\, dx",
+      "weak_form_rhs": "0",
+      "is_nonlinear": false
+    },
+    "adjoint_equation": {
+      "description": "Weak form of the adjoint equation",
+      "weak_form_lhs": "\\int_D 2 \\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx + \\int_D \\lambda \\chi (\\nabla \\delta u \\cdot \\nabla \\tilde u) \\, dx",
+      "weak_form_rhs": "0"
+    },
+    "shape_derivative": {
+      "volume_expression": "DJ(\\Omega)(\\mathbf V) = \\partial_t J(u,\\mathbf V) + \\int_D \\left(\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))\\right) \\lambda \\chi \\, dx - \\int_D f \\operatorname{div} \\mathbf V \\tilde u \\, dx"
+    }
+  },
+  "designed": {
+    "problem_type": "topology_optimization",
+    "problem_type_source": "extracted",
+    "problem_name": "run_linearDiffusion",
+    "problem_name_source": "extracted",
+    "dimension": 2,
+    "dimension_source": "extracted",
+    "domain_name": "D",
+    "domain_name_source": "extracted",
+    "mesh_variable": "Th",
+    "mesh_variable_source": "extracted",
+    "mesh_file": "meshLaplace.txt",
+    "mesh_file_source": "extracted",
+    "objective_name": "J",
+    "objective_name_source": "extracted",
+    "objective_description": "Objective functional of the linear diffusion problem",
+    "objective_description_source": "extracted",
+    "objective_terms": [
+      "\\int_D \\ell \\chi \\, dx",
+      "\\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla u) \\, dx"
+    ],
+    "objective_terms_source": [
+      "extracted",
+      "extracted"
+    ],
+    "state_description": "Weak form of the linear diffusion state equation",
+    "state_description_source": "extracted",
+    "state_weak_lhs": "\\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx - \\int_D f \\delta u \\, dx",
+    "state_weak_lhs_source": "extracted",
+    "state_weak_rhs": "0",
+    "state_weak_rhs_source": "extracted",
+    "state_is_nonlinear": false,
+    "state_is_nonlinear_source": "extracted",
+    "adjoint_description": "Weak form of the adjoint equation",
+    "adjoint_description_source": "extracted",
+    "adjoint_weak_lhs": "\\int_D 2 \\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx + \\int_D \\lambda \\chi (\\nabla \\delta u \\cdot \\nabla \\tilde u) \\, dx",
+    "adjoint_weak_lhs_source": "extracted",
+    "adjoint_weak_rhs": "0",
+    "adjoint_weak_rhs_source": "extracted",
+    "shape_derivative_volume": "DJ(\\Omega)(\\mathbf V) = \\partial_t J(u,\\mathbf V) + \\int_D \\left(\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))\\right) \\lambda \\chi \\, dx - \\int_D f \\operatorname{div} \\mathbf V \\tilde u \\, dx",
+    "shape_derivative_volume_source": "extracted",
+    "shape_derivative_boundary": "0",
+    "shape_derivative_boundary_source": "designed",
+    "shape_derivative_boundary_rationale": "No boundary term appears in the extracted volume derivative; \\Gamma_3 is fixed and \\Gamma_1 has homogeneous Neumann data, so the boundary contribution vanishes.",
+    "boundaries": [
+      {
+        "name": "\\Gamma_1",
+        "label": "1",
+        "kind": "Neumann",
+        "description": "Remaining boundary; homogeneous Neumann (natural) condition",
+        "source": "designed",
+        "rationale": "mesh_labels_used contains label 1; extracted spec only named \\Gamma_3, so \\Gamma_1 is the complementary boundary with natural zero-flux condition."
+      },
+      {
+        "name": "\\Gamma_3",
+        "label": "3",
+        "kind": "Dirichlet",
+        "description": "Boundary where the state is fixed to zero",
+        "source": "extracted"
+      }
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "unit": "kelvin",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "3"
+        ],
+        "source": "extracted",
+        "rationale": "Dirichlet label \\Gamma_3 reconciled to mesh label 3."
+      },
+      {
+        "name": "u_tilde",
+        "latex": "\\tilde u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "unit": "kelvin",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "3"
+        ],
+        "source": "designed",
+        "rationale": "Adjoint state appearing in the extracted adjoint equation; same P2 scalar space and homogeneous Dirichlet condition on \\Gamma_3."
+      }
+    ],
+    "test_functions": [
+      {
+        "name": "delta_u",
+        "latex": "\\delta u",
+        "type": "scalar",
+        "fe_space": "P2",
+        "source": "extracted"
+      }
+    ],
+    "constants": [
+      {
+        "name": "ell",
+        "latex": "\\ell",
+        "value": 100,
+        "description": "Lagrange multiplier",
+        "unit": "W K m^{-3}",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda",
+        "value": 1,
+        "description": "diffusion coefficient",
+        "unit": "W K^{-1} m^{-1}",
+        "source": "extracted"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": -10,
+        "description": "source",
+        "unit": "W m^{-3}",
+        "source": "extracted"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "chi",
+        "latex": "\\chi(x)",
+        "formula": "\\chi(x) = \\begin{cases} 1 & \\text{if } \\phi(x) < 0 \\\\ 1/10 & \\text{if } \\phi(x) \\ge 0 \\end{cases}",
+        "source": "extracted"
+      },
+      {
+        "name": "J",
+        "latex": "J(u)",
+        "formula": "J(u) = \\int_D \\ell \\chi \\, dx + \\int_D \\lambda \\chi (\\nabla u \\cdot \\nabla u) \\, dx",
+        "source": "extracted"
+      },
+      {
+        "name": "dJ_partial",
+        "latex": "\\partial_{(u,\\delta u)} J(\\delta u,u)",
+        "formula": "\\partial_{(u,\\delta u)} J(\\delta u,u) = \\int_D 2 \\lambda \\chi (\\nabla u \\cdot \\nabla \\delta u) \\, dx",
+        "source": "extracted"
+      },
+      {
+        "name": "dJ_volume",
+        "latex": "DJ(\\Omega)(\\mathbf V)",
+        "formula": "DJ(\\Omega)(\\mathbf V) = \\partial_t J(u,\\mathbf V) + \\int_D \\left(\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))\\right) \\lambda \\chi \\, dx - \\int_D f \\operatorname{div} \\mathbf V \\tilde u \\, dx",
+        "source": "extracted"
+      },
+      {
+        "name": "partial_t_J",
+        "latex": "\\partial_t J(u,\\mathbf V)",
+        "formula": "\\partial_t J(u,\\mathbf V) = \\int_D \\left(\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla u) - 2 (\\nabla u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V))\\right) \\lambda \\chi \\, dx + \\int_D \\ell \\chi \\operatorname{div} \\mathbf V \\, dx",
+        "source": "extracted"
+      },
+      {
+        "name": "dJ_boundary",
+        "latex": "DJ_{\\partial D}(\\Omega)(\\mathbf V)",
+        "formula": "0",
+        "source": "designed",
+        "rationale": "Boundary contribution vanishes because \\Gamma_3 is fixed and \\Gamma_1 has homogeneous Neumann data."
+      }
+    ],
+    "characteristic_function": {
+      "latex": "\\chi(x) = \\begin{cases} 1 & \\text{if } \\phi(x) < 0 \\\\ 1/10 & \\text{if } \\phi(x) \\ge 0 \\end{cases}",
+      "strong_value": 1,
+      "weak_value": 0.1,
+      "source": "extracted"
+    },
+    "optimization_config": {
+      "mesh_file": "meshLaplace.txt",
+      "hmin": 0.01,
+      "hmax": 0.1,
+      "diffusion": 0.0001,
+      "v0": 0.01,
+      "iterations": 30,
+      "level_set_initial": "sqrt((x-0.5)^2+(y-0.5)^2)-0.3",
+      "boundary_labels": [
+        "1",
+        "3"
+      ],
+      "fixed_labels": [
+        "1",
+        "3"
+      ],
+      "extra_params": {},
+      "source": "designed",
+      "rationale": "Mesh file reused from extracted spec; hmin/hmax chosen for a unit-size domain; diffusion and v0 provide stable level-set regularization and evolution; all outer boundary labels 1 and 3 are fixed."
+    }
+  }
+}

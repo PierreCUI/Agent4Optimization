@@ -1,0 +1,4 @@
+varf lineardiffusionNewton([incu],[deltau]) = 
+    int2d(Th)((1.00000000000000*(phi<0) + 0.100000000000000*(1-(phi<0)))*lambda*(dx(deltau)*dx(incu) + dy(deltau)*dy(incu)))
+    + on(3,incu = 0)
+ ;

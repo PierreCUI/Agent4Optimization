@@ -1,0 +1,6 @@
+run_nonlinearElasticitySaintVernant
+run_nonlinearElasticityNeoHookean
+run_linearElasticity_Target
+run_linearElasticity_TargetKragtraeger
+run_linearElasticity
+run_linearElasticityBridge

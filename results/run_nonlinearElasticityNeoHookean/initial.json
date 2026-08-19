@@ -1,0 +1,390 @@
+{
+  "extracted": {
+    "problem_type": "topology_optimization",
+    "problem_name": "nonlinearElasticityNeoHookean",
+    "dimension": 2,
+    "domain_name": "D",
+    "mesh_variable": "Th",
+    "mesh_file": "mesh.txt",
+    "mesh_labels_used": [
+      "1",
+      "2",
+      "4"
+    ],
+    "boundaries": [
+      {
+        "name": "\\Gamma_N",
+        "kind": "Neumann",
+        "description": "loaded boundary with surface load f applied in the vertical direction"
+      },
+      {
+        "name": "\\Gamma_4",
+        "kind": "Dirichlet",
+        "description": "boundary with homogeneous Dirichlet condition u = 0"
+      }
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "\\mathbf{u}",
+        "type": "vector",
+        "fe_space": "P2",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "\\Gamma_4"
+        ]
+      }
+    ],
+    "test_functions": [
+      {
+        "name": "v",
+        "latex": "\\mathbf{v}",
+        "type": "vector",
+        "fe_space": "P2"
+      }
+    ],
+    "characteristic_function": {
+      "latex": "\\chi(x)",
+      "strong_value": "1",
+      "weak_value": "1/100"
+    },
+    "constants": [
+      {
+        "name": "ell",
+        "latex": "\\ell",
+        "value": 0.25,
+        "description": "Lagrange multiplier"
+      },
+      {
+        "name": "nu",
+        "latex": "\\nu",
+        "value": 0.3,
+        "description": "Poisson's ratio",
+        "unit": "-"
+      },
+      {
+        "name": "E",
+        "latex": "E",
+        "value": 200,
+        "description": "Young's modulus",
+        "unit": "N/m^2"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": -10,
+        "description": "surface load",
+        "unit": "N/m"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "L",
+        "latex": "\\mathcal{L}",
+        "formula": "G(\\mathbf{u}) - \\int_{\\Gamma_N} f \\left( \\mathbf{e}_y \\cdot \\mathbf{v} \\right) ds_x + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) dx"
+      },
+      {
+        "name": "F",
+        "latex": "\\mathbf{F}(\\mathbf{u})",
+        "formula": "\\mathbf{I} + \\nabla \\mathbf{u}"
+      },
+      {
+        "name": "E",
+        "latex": "\\mathbf{E}(\\mathbf{u})",
+        "formula": "\\frac{-\\mathbf{I} + \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\mathbf{F}(\\mathbf{u}) \\right)}{2}"
+      },
+      {
+        "name": "C",
+        "latex": "\\mathbf{C}(\\mathbf{u})",
+        "formula": "\\mathbf{F}(\\mathbf{u})^\\top \\cdot \\mathbf{F}(\\mathbf{u})"
+      },
+      {
+        "name": "G",
+        "latex": "G(\\mathbf{u})",
+        "formula": "\\int_D \\ell \\chi dx + \\int_D \\left( \\mathbf{E}(\\mathbf{u}) : \\mathbf{S}(\\mathbf{u}) \\right) dx"
+      },
+      {
+        "name": "S",
+        "latex": "\\mathbf{S}(\\mathbf{u})",
+        "formula": "\\frac{\\chi \\left(2 \\mathbf{I} \\mu + \\left(\\lambda \\left(-1 + J(\\mathbf{u})^2\\right) - 2 \\mu\\right) \\mathbf{C}(\\mathbf{u})^{-1} \\right)}{2}"
+      },
+      {
+        "name": "J",
+        "latex": "J(\\mathbf{u})",
+        "formula": "\\operatorname{det}(\\mathbf{F}(\\mathbf{u}))"
+      },
+      {
+        "name": "mu",
+        "latex": "\\mu",
+        "formula": "\\frac{E}{2(\\nu + 1)}"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda",
+        "formula": "\\frac{E\\nu}{(1 - 2\\nu)(\\nu + 1)}"
+      }
+    ],
+    "objective": {
+      "name": "G",
+      "description": "objective functional of the non-linear Neo-Hookean problem",
+      "terms": [
+        "\\int_D \\ell \\chi dx",
+        "\\int_D \\left( \\mathbf{E}(\\mathbf{u}) : \\mathbf{S}(\\mathbf{u}) \\right) dx"
+      ]
+    },
+    "state_equation": {
+      "description": "non-linear state equation for the displacement field u",
+      "weak_form_lhs": "- \\int_{\\Gamma_N} f \\left( \\mathbf{e}_y \\cdot \\mathbf{v} \\right) ds_x + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) dx",
+      "weak_form_rhs": "0",
+      "is_nonlinear": true
+    },
+    "newton_linearisation": {
+      "description": "Newton update equation for the non-linear state problem",
+      "weak_form": "\\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{F}(\\hat{\\mathbf{u}})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) + \\left( \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{S}(\\hat{\\mathbf{u}},\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) dx = - \\left( - \\int_{\\Gamma_N} f \\left( \\mathbf{e}_y \\cdot \\mathbf{v} \\right) ds_x + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) dx \\right) \\qquad \\forall \\mathbf{v}"
+    },
+    "adjoint_equation": {
+      "description": "adjoint equation for the adjoint state \\tilde{\\mathbf{u}}",
+      "weak_form_lhs": "\\partial_{(\\mathbf{u},\\mathbf{v})} G(\\mathbf{u},\\mathbf{v}) + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\partial_{(\\mathbf{u},\\mathbf{v})} \\mathbf{F}(\\mathbf{v})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) + \\left( \\partial_{(\\mathbf{u},\\mathbf{v})} \\mathbf{S}(\\mathbf{u},\\mathbf{v}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) dx = 0 \\qquad \\forall \\mathbf{v}",
+      "weak_form_rhs": "0"
+    },
+    "shape_derivative": {
+      "volume_expression": "\\partial_t G(\\mathbf{V},\\mathbf{u}) + \\int_D \\operatorname{div}\\mathbf{V} \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) + \\left( \\mathbf{S}(\\mathbf{u}) : \\left( - \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\left( \\nabla \\tilde{\\mathbf{u}} \\cdot \\nabla \\mathbf{V} \\right) \\right) + \\left( \\partial_t \\mathbf{F}(\\mathbf{V},\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) \\right) + \\left( \\partial_t \\mathbf{S}(\\mathbf{V},\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) dx",
+      "boundary_expression": "- \\left( \\int_{\\Gamma_N} f \\operatorname{div}\\mathbf{V} \\left( \\mathbf{e}_y \\cdot \\tilde{\\mathbf{u}} \\right) ds_x - \\int_{\\Gamma_N} f \\left( \\mathbf{n} \\cdot \\left( \\mathbf{n} \\cdot \\nabla \\mathbf{V} \\right) \\right) \\left( \\mathbf{e}_y \\cdot \\tilde{\\mathbf{u}} \\right) ds_x \\right)"
+    }
+  },
+  "designed": {
+    "problem_type": "topology_optimization",
+    "problem_type_source": "extracted",
+    "problem_name": "run_nonlinearElasticityNeoHookean",
+    "problem_name_source": "extracted",
+    "dimension": 2,
+    "dimension_source": "extracted",
+    "domain_name": "D",
+    "domain_name_source": "extracted",
+    "mesh_variable": "Th",
+    "mesh_variable_source": "extracted",
+    "mesh_file": "mesh.txt",
+    "mesh_file_source": "extracted",
+    "objective_name": "G",
+    "objective_name_source": "extracted",
+    "objective_description": "objective functional of the non-linear Neo-Hookean problem",
+    "objective_description_source": "extracted",
+    "objective_terms": [
+      "\\int_D \\ell \\chi dx",
+      "\\int_D \\left( \\mathbf{E}(\\mathbf{u}) : \\mathbf{S}(\\mathbf{u}) \\right) dx"
+    ],
+    "objective_terms_source": [
+      "extracted",
+      "extracted"
+    ],
+    "state_description": "non-linear state equation for the displacement field u",
+    "state_description_source": "extracted",
+    "state_weak_lhs": "- \\int_{\\Gamma_N} f \\left( \\mathbf{e}_y \\cdot \\mathbf{v} \\right) ds_x + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) dx",
+    "state_weak_lhs_source": "extracted",
+    "state_weak_rhs": "0",
+    "state_weak_rhs_source": "extracted",
+    "state_is_nonlinear": true,
+    "state_is_nonlinear_source": "extracted",
+    "newton_description": "Newton update equation for the non-linear state problem",
+    "newton_weak_form": "\\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{F}(\\hat{\\mathbf{u}})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) + \\left( \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{S}(\\hat{\\mathbf{u}},\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) dx = - \\left( - \\int_{\\Gamma_N} f \\left( \\mathbf{e}_y \\cdot \\mathbf{v} \\right) ds_x + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) dx \\right) \\qquad \\forall \\mathbf{v}",
+    "newton_source": "extracted",
+    "adjoint_description": "adjoint equation for the adjoint state \\tilde{\\mathbf{u}}",
+    "adjoint_description_source": "extracted",
+    "adjoint_weak_lhs": "\\partial_{(\\mathbf{u},\\mathbf{v})} G(\\mathbf{u},\\mathbf{v}) + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\partial_{(\\mathbf{u},\\mathbf{v})} \\mathbf{F}(\\mathbf{v})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) + \\left( \\partial_{(\\mathbf{u},\\mathbf{v})} \\mathbf{S}(\\mathbf{u},\\mathbf{v}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) dx = 0 \\qquad \\forall \\mathbf{v}",
+    "adjoint_weak_lhs_source": "extracted",
+    "adjoint_weak_rhs": "0",
+    "adjoint_weak_rhs_source": "extracted",
+    "shape_derivative_volume": "\\partial_t G(\\mathbf{V},\\mathbf{u}) + \\int_D \\operatorname{div}\\mathbf{V} \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) + \\left( \\mathbf{S}(\\mathbf{u}) : \\left( - \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\left( \\nabla \\tilde{\\mathbf{u}} \\cdot \\nabla \\mathbf{V} \\right) \\right) + \\left( \\partial_t \\mathbf{F}(\\mathbf{V},\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) \\right) + \\left( \\partial_t \\mathbf{S}(\\mathbf{V},\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) dx",
+    "shape_derivative_boundary": "- \\left( \\int_{\\Gamma_N} f \\operatorname{div}\\mathbf{V} \\left( \\mathbf{e}_y \\cdot \\tilde{\\mathbf{u}} \\right) ds_x - \\int_{\\Gamma_N} f \\left( \\mathbf{n} \\cdot \\left( \\mathbf{n} \\cdot \\nabla \\mathbf{V} \\right) \\right) \\left( \\mathbf{e}_y \\cdot \\tilde{\\mathbf{u}} \\right) ds_x \\right)",
+    "shape_derivative_source": "extracted",
+    "boundaries": [
+      {
+        "name": "\\Gamma_0",
+        "label": "1",
+        "kind": "Neumann",
+        "description": "free boundary with homogeneous natural (zero traction) condition",
+        "source": "designed",
+        "rationale": "mesh label 1 is not used by the specified loaded or clamped boundaries; interpreted as the free top/bottom boundary"
+      },
+      {
+        "name": "\\Gamma_N",
+        "label": "2",
+        "kind": "Neumann",
+        "description": "loaded boundary with surface load f applied in the vertical direction",
+        "source": "designed",
+        "rationale": "name extracted from the specification; label assigned to the right-edge mesh label 2 by cantilever convention"
+      },
+      {
+        "name": "\\Gamma_4",
+        "label": "4",
+        "kind": "Dirichlet",
+        "description": "boundary with homogeneous Dirichlet condition u = 0",
+        "source": "extracted",
+        "rationale": "boundary name \\Gamma_4 matched to mesh label 4"
+      }
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "\\mathbf{u}",
+        "type": "vector",
+        "fe_space": "P2",
+        "unit": "meter",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "4"
+        ],
+        "source": "extracted",
+        "rationale": "dirichlet_labels reconciled from \\Gamma_4 to the concrete mesh label 4"
+      },
+      {
+        "name": "uadj",
+        "latex": "\\tilde{\\mathbf{u}}",
+        "type": "vector",
+        "fe_space": "P2",
+        "unit": "meter",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "4"
+        ],
+        "source": "designed",
+        "rationale": "adjoint displacement introduced by the adjoint equation; it vanishes on the fixed Dirichlet boundary"
+      }
+    ],
+    "test_functions": [
+      {
+        "name": "v",
+        "latex": "\\mathbf{v}",
+        "type": "vector",
+        "fe_space": "P2",
+        "source": "extracted"
+      }
+    ],
+    "constants": [
+      {
+        "name": "ell",
+        "latex": "\\ell",
+        "value": 0.25,
+        "description": "Lagrange multiplier for volume penalisation in the objective",
+        "unit": "N/m^2",
+        "source": "extracted",
+        "rationale": "value extracted; unit inferred from the objective volume term"
+      },
+      {
+        "name": "nu",
+        "latex": "\\nu",
+        "value": 0.3,
+        "description": "Poisson's ratio",
+        "unit": "-",
+        "source": "extracted"
+      },
+      {
+        "name": "E",
+        "latex": "E",
+        "value": 200,
+        "description": "Young's modulus",
+        "unit": "N/m^2",
+        "source": "extracted"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": -10,
+        "description": "surface load applied in the vertical direction",
+        "unit": "N/m",
+        "source": "extracted"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "L",
+        "latex": "\\mathcal{L}",
+        "formula": "G(\\mathbf{u}) - \\int_{\\Gamma_N} f \\left( \\mathbf{e}_y \\cdot \\mathbf{v} \\right) ds_x + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) dx",
+        "source": "extracted"
+      },
+      {
+        "name": "F",
+        "latex": "\\mathbf{F}(\\mathbf{u})",
+        "formula": "\\mathbf{I} + \\nabla \\mathbf{u}",
+        "source": "extracted"
+      },
+      {
+        "name": "E",
+        "latex": "\\mathbf{E}(\\mathbf{u})",
+        "formula": "\\frac{-\\mathbf{I} + \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\mathbf{F}(\\mathbf{u}) \\right)}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "C",
+        "latex": "\\mathbf{C}(\\mathbf{u})",
+        "formula": "\\mathbf{F}(\\mathbf{u})^\\top \\cdot \\mathbf{F}(\\mathbf{u})",
+        "source": "extracted"
+      },
+      {
+        "name": "G",
+        "latex": "G(\\mathbf{u})",
+        "formula": "\\int_D \\ell \\chi dx + \\int_D \\left( \\mathbf{E}(\\mathbf{u}) : \\mathbf{S}(\\mathbf{u}) \\right) dx",
+        "source": "extracted"
+      },
+      {
+        "name": "S",
+        "latex": "\\mathbf{S}(\\mathbf{u})",
+        "formula": "\\frac{\\chi \\left(2 \\mathbf{I} \\mu + \\left(\\lambda \\left(-1 + J(\\mathbf{u})^2\\right) - 2 \\mu\\right) \\mathbf{C}(\\mathbf{u})^{-1} \\right)}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "J",
+        "latex": "J(\\mathbf{u})",
+        "formula": "\\operatorname{det}(\\mathbf{F}(\\mathbf{u}))",
+        "source": "extracted"
+      },
+      {
+        "name": "mu",
+        "latex": "\\mu",
+        "formula": "\\frac{E}{2(\\nu + 1)}",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda",
+        "formula": "\\frac{E\\nu}{(1 - 2\\nu)(\\nu + 1)}",
+        "source": "extracted"
+      },
+      {
+        "name": "P",
+        "latex": "\\mathbf{P}(\\mathbf{u})",
+        "formula": "\\mathbf{F}(\\mathbf{u}) \\cdot \\mathbf{S}(\\mathbf{u})",
+        "source": "designed",
+        "rationale": "first Piola-Kirchhoff stress used to express the state weak form as stress : gradient test"
+      }
+    ],
+    "characteristic_function": {
+      "latex": "\\chi(x)",
+      "strong_value": "1",
+      "weak_value": "1/100",
+      "source": "extracted",
+      "rationale": "weak value regularizes the topology optimization using the standard solid-mechanics default"
+    },
+    "optimization_config": {
+      "mesh_file": "mesh.txt",
+      "hmin": 0.01,
+      "hmax": 0.1,
+      "diffusion": 0.0001,
+      "v0": 0.001,
+      "iterations": 30,
+      "level_set_initial": "sqrt((x-0.5)^2+(y-0.5)^2)-0.3",
+      "boundary_labels": [
+        "1",
+        "2",
+        "4"
+      ],
+      "fixed_labels": [
+        "2",
+        "4"
+      ],
+      "extra_params": {},
+      "source": "designed",
+      "rationale": "default level-set optimization parameters for a unit-sized cantilever; hmin/hmax are 1/100 and 1/10 of the domain size, diffusion regularizes the interface, and fixed_labels preserve support and loaded boundaries"
+    }
+  }
+}

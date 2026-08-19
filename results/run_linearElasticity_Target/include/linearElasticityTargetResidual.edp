@@ -1,0 +1,7 @@
+varf linearElasticityTargetResidual([incux, incuy],[deltaux, deltauy]) = 
+    int1d(Th, 999.000000000000)(c*(deltaux*ux + deltauy*uy)) 
+ - int2d(Th)((1.00000000000000*(phi<0) + 0*(1-(phi<0)))*f*deltauy) 
+ + int2d(Th)(0.5*(1.00000000000000*(phi<0) + 0.0100000000000000*(1-(phi<0)))*E*((2.0*nu - 1)*(dy(deltaux) + dx(deltauy))*(dy(ux) + dx(uy)) - 2.0*(nu*(dx(ux) + dy(uy)) - (2.0*nu - 1)*dx(ux))*dx(deltaux) - 2.0*(nu*(dx(ux) + dy(uy)) - (2.0*nu - 1)*dy(uy))*dy(deltauy))/((nu + 1.0)*(2.0*nu - 1)))
+    + on(4,incux = 0)
+    + on(4,incuy = 0)
+ ;

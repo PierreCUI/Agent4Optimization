@@ -1,0 +1,29 @@
+======================================================================
+REFLECTION LOG — run_linearElasticity_Target
+Started: 2026-08-10 12:14:04
+======================================================================
+
+--- Iteration 1 [12:54:49] ---
+Coarse:  freefem_error
+Fine:    ff_syntax
+Action:  local_fix
+Fix:     Removed the duplicate first mesh-construction block from mesh.txt, which redeclared `int n` and overwrote `Th`, causing the FreeFEM compile error.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['-2', '0']
+
+--- Iteration 2 [13:01:56] ---
+Coarse:  wrong_result
+Fine:    physics_violation
+Action:  local_fix
+Fix:     Reduced v0 from 1e-3 to 2e-5, increased diffusion from 1e-4 to 1e-2, and increased hmin/hmax to 0.005/0.02 to prevent the MMG remesh hang at iteration 43.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['-3', '0']
+
+--- Iteration 3 [13:30:52] ---
+Coarse:  wrong_result
+Fine:    physics_violation
+Action:  local_fix
+Fix:     Changed phi_T from a Parameter to an Expression so the adjoint/shape derivative includes its dependence on the displacement u, fixing the physics-violating derivative mismatch, and increased v0 from 2e-5 to 2e-4 to overcome the early-stagnation stop.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['-2', '0']
+
+======================================================================
+FINAL STATUS: pass (3 iteration(s))
+======================================================================

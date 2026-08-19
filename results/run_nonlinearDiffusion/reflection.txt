@@ -1,0 +1,15 @@
+======================================================================
+REFLECTION LOG — run_nonlinearDiffusion
+Started: 2026-08-09 14:05:00
+======================================================================
+
+--- Iteration 1 [14:50:00] ---
+Coarse:  pass
+Fine:    pass
+Action:  (hard-pass — all iterations completed)
+Fix:     Reference parameters (v0=1e-6, hmin=0.00125, hmax=0.0125, diffusion=2.5e-5)
+Outcome: MinTh.vtu generated, 99/100 epochs, objective 169.0 -> 116.1, osc band 0.094
+
+======================================================================
+FINAL STATUS: pass (1 iteration(s))
+======================================================================

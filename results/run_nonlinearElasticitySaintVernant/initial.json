@@ -1,0 +1,484 @@
+{
+  "extracted": {
+    "problem_type": "topology_optimization",
+    "problem_name": "nonlinearElasticitySaintVernant",
+    "dimension": 2,
+    "domain_name": "D",
+    "mesh_variable": "Th",
+    "mesh_file": "mesh.txt",
+    "mesh_labels_used": [
+      "1",
+      "2",
+      "4"
+    ],
+    "boundaries": [
+      {
+        "name": "\\Gamma_4",
+        "kind": "Dirichlet",
+        "description": "fixed boundary"
+      },
+      {
+        "name": "\\Gamma_N",
+        "kind": "Neumann",
+        "description": "loaded boundary"
+      }
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "\\mathbf{u}",
+        "type": "vector",
+        "fe_space": "P2",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "\\Gamma_4"
+        ]
+      }
+    ],
+    "test_functions": [
+      {
+        "name": "v",
+        "latex": "\\mathbf{v}",
+        "type": "vector",
+        "fe_space": "P2"
+      }
+    ],
+    "constants": [
+      {
+        "name": "ell",
+        "latex": "\\ell",
+        "value": 0.25,
+        "description": "Lagrange multiplier"
+      },
+      {
+        "name": "nu",
+        "latex": "\\nu",
+        "value": 0.3,
+        "description": "Poisson's ratio",
+        "unit": "-"
+      },
+      {
+        "name": "E",
+        "latex": "E",
+        "value": 200,
+        "description": "Young's modulus",
+        "unit": "N/m^2"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": -10,
+        "description": "surface load",
+        "unit": "N/m"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "F",
+        "latex": "\\mathbf{F}(\\mathbf{u})",
+        "formula": "\\mathbf{I} + \\nabla \\mathbf{u}"
+      },
+      {
+        "name": "E",
+        "latex": "\\mathbf{E}(\\mathbf{u})",
+        "formula": "\\frac{-\\mathbf{I} + \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\mathbf{F}(\\mathbf{u}) \\right)}{2}"
+      },
+      {
+        "name": "S",
+        "latex": "\\mathbf{S}(\\mathbf{u})",
+        "formula": "\\chi \\left( \\mathbf{I} \\lambda \\operatorname{tr}\\left(\\mathbf{E}(\\mathbf{u})\\right) + 2 \\mu \\mathbf{E}(\\mathbf{u}) \\right)"
+      },
+      {
+        "name": "J",
+        "latex": "J(\\mathbf{u})",
+        "formula": "\\int_D \\ell \\chi \\, dx + \\int_D \\left( \\mathbf{E}(\\mathbf{u}) : \\mathbf{S}(\\mathbf{u}) \\right) \\, dx"
+      },
+      {
+        "name": "mu",
+        "latex": "\\mu",
+        "formula": "\\frac{E}{2 \\left(\\nu + 1\\right)}"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda",
+        "formula": "\\frac{E \\nu}{\\left(1 - 2\\nu\\right) \\left(\\nu + 1\\right)}"
+      },
+      {
+        "name": "lambda_shape_derivative",
+        "latex": "\\lambda",
+        "formula": "-\\frac{E \\nu}{\\left(\\nu + 1\\right) \\left(2\\nu - 1\\right)}"
+      },
+      {
+        "name": "partial_F",
+        "latex": "\\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{F}(\\hat{\\mathbf{u}})",
+        "formula": "\\nabla \\hat{\\mathbf{u}}"
+      },
+      {
+        "name": "partial_E",
+        "latex": "\\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{E}(\\hat{\\mathbf{u}},\\mathbf{u})",
+        "formula": "\\frac{\\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{F}(\\hat{\\mathbf{u}}) \\right) + \\left( \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{F}(\\hat{\\mathbf{u}})^\\top \\cdot \\mathbf{F}(\\mathbf{u}) \\right)}{2}"
+      },
+      {
+        "name": "partial_S",
+        "latex": "\\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{S}(\\hat{\\mathbf{u}},\\mathbf{u})",
+        "formula": "\\chi \\left( \\mathbf{I} \\lambda \\operatorname{tr}\\left(\\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{E}(\\hat{\\mathbf{u}},\\mathbf{u})\\right) + 2 \\mu \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{E}(\\hat{\\mathbf{u}},\\mathbf{u}) \\right)"
+      },
+      {
+        "name": "partial_t_F",
+        "latex": "\\partial_t \\mathbf{F}(\\mathbf{V},\\mathbf{u})",
+        "formula": "-\\left( \\nabla \\mathbf{u} \\cdot \\nabla \\mathbf{V} \\right)"
+      },
+      {
+        "name": "partial_t_E",
+        "latex": "\\partial_t \\mathbf{E}(\\mathbf{V},\\mathbf{u})",
+        "formula": "\\frac{\\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\partial_t \\mathbf{F}(\\mathbf{V},\\mathbf{u}) \\right) + \\left( \\partial_t \\mathbf{F}(\\mathbf{V},\\mathbf{u})^\\top \\cdot \\mathbf{F}(\\mathbf{u}) \\right)}{2}"
+      },
+      {
+        "name": "partial_t_S",
+        "latex": "\\partial_t \\mathbf{S}(\\mathbf{V},\\mathbf{u})",
+        "formula": "\\chi \\left( \\mathbf{I} \\lambda \\operatorname{tr}\\left(\\partial_t \\mathbf{E}(\\mathbf{V},\\mathbf{u})\\right) + 2 \\mu \\partial_t \\mathbf{E}(\\mathbf{V},\\mathbf{u}) \\right)"
+      },
+      {
+        "name": "partial_t_J",
+        "latex": "\\partial_t J(\\mathbf{V},\\mathbf{u})",
+        "formula": "\\int_D \\ell \\chi \\operatorname{div} \\mathbf{V} \\, dx + \\int_D \\operatorname{div} \\mathbf{V} \\left( \\mathbf{E}(\\mathbf{u}) : \\mathbf{S}(\\mathbf{u}) \\right) + \\left( \\mathbf{E}(\\mathbf{u}) : \\partial_t \\mathbf{S}(\\mathbf{V},\\mathbf{u}) \\right) + \\left( \\partial_t \\mathbf{E}(\\mathbf{V},\\mathbf{u}) : \\mathbf{S}(\\mathbf{u}) \\right) \\, dx"
+      },
+      {
+        "name": "V_F",
+        "latex": "\\mathcal{V}(\\mathbf{F})",
+        "formula": "\\mathbf{I} + \\left( \\nabla \\mathbf{u} \\cdot \\mathbf{F}^{-1}(t) \\right)"
+      },
+      {
+        "name": "V_E",
+        "latex": "\\mathcal{V}(\\mathbf{E})",
+        "formula": "\\frac{-\\mathbf{I} + \\left( \\mathcal{V}(\\mathbf{F})^\\top \\cdot \\mathcal{V}(\\mathbf{F}) \\right)}{2}"
+      },
+      {
+        "name": "V_S",
+        "latex": "\\mathcal{V}(\\mathbf{S})",
+        "formula": "\\chi \\left( \\mathbf{I} \\lambda \\operatorname{tr}\\left(\\mathcal{V}(\\mathbf{E})\\right) + 2 \\mu \\mathcal{V}(\\mathbf{E}) \\right)"
+      },
+      {
+        "name": "V_J",
+        "latex": "\\mathcal{V}(J)",
+        "formula": "\\int_D \\ell \\chi \\operatorname{det}\\mathbf{F}(t) \\, dx + \\int_D \\operatorname{det}\\mathbf{F}(t) \\left( \\mathcal{V}(\\mathbf{E}) : \\mathcal{V}(\\mathbf{S}) \\right) \\, dx"
+      }
+    ],
+    "characteristic_function": {
+      "latex": "\\chi(x)",
+      "strong_value": 1,
+      "weak_value": 0.01
+    },
+    "objective": {
+      "name": "J",
+      "description": "objective functional",
+      "terms": [
+        "\\int_D \\ell \\chi \\, dx",
+        "\\int_D \\left( \\mathbf{E}(\\mathbf{u}) : \\mathbf{S}(\\mathbf{u}) \\right) \\, dx"
+      ]
+    },
+    "state_equation": {
+      "description": "nonlinear state equation for the displacement",
+      "weak_form_lhs": "- \\int_{\\Gamma_N} f \\left( \\mathbf{e}_y \\cdot \\mathbf{v} \\right) \\, ds_x + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) \\, dx",
+      "weak_form_rhs": "0",
+      "is_nonlinear": true
+    },
+    "newton_linearisation": {
+      "description": "Newton update for the nonlinear state equation",
+      "weak_form": "\\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{F}(\\hat{\\mathbf{u}})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) + \\left( \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{S}(\\hat{\\mathbf{u}},\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) \\, dx = - \\left( - \\int_{\\Gamma_N} f \\left( \\mathbf{e}_y \\cdot \\mathbf{v} \\right) \\, ds_x + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) \\, dx \\right)"
+    },
+    "adjoint_equation": {
+      "description": "adjoint equation for the adjoint state",
+      "weak_form_lhs": "\\partial_{(\\mathbf{u},\\mathbf{v})} J(\\mathbf{u},\\mathbf{v}) + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\partial_{(\\mathbf{u},\\mathbf{v})} \\mathbf{F}(\\mathbf{v})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) + \\left( \\partial_{(\\mathbf{u},\\mathbf{v})} \\mathbf{S}(\\mathbf{u},\\mathbf{v}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) \\, dx",
+      "weak_form_rhs": "0"
+    },
+    "shape_derivative": {
+      "boundary_expression": "- \\left( \\int_{\\Gamma_N} f \\operatorname{div} \\mathbf{V} \\left( \\mathbf{e}_y \\cdot \\tilde{\\mathbf{u}} \\right) \\, ds_x - \\int_{\\Gamma_N} f \\left( \\mathbf{n} \\cdot \\left( \\mathbf{n} \\cdot \\nabla \\mathbf{V} \\right) \\right) \\left( \\mathbf{e}_y \\cdot \\tilde{\\mathbf{u}} \\right) \\, ds_x \\right)",
+      "volume_expression": "\\partial_t J(\\mathbf{V},\\mathbf{u}) + \\int_D \\operatorname{div} \\mathbf{V} \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) + \\left( \\mathbf{S}(\\mathbf{u}) : \\left( -\\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\left( \\nabla \\tilde{\\mathbf{u}} \\cdot \\nabla \\mathbf{V} \\right) \\right) + \\left( \\partial_t \\mathbf{F}(\\mathbf{V},\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) \\right) + \\left( \\partial_t \\mathbf{S}(\\mathbf{V},\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) \\, dx"
+    }
+  },
+  "designed": {
+    "problem_type": "topology_optimization",
+    "problem_type_source": "extracted",
+    "problem_name": "run_nonlinearElasticitySaintVernant",
+    "problem_name_source": "designed",
+    "problem_name_rationale": "Execution name supplied in the problem statement; the extracted internal name is nonlinearElasticitySaintVernant.",
+    "dimension": 2,
+    "dimension_source": "extracted",
+    "domain_name": "D",
+    "domain_name_source": "extracted",
+    "mesh_variable": "Th",
+    "mesh_variable_source": "extracted",
+    "mesh_file": "mesh.txt",
+    "mesh_file_source": "extracted",
+    "objective_name": "J",
+    "objective_name_source": "extracted",
+    "objective_description": "objective functional",
+    "objective_description_source": "extracted",
+    "objective_terms": [
+      "\\int_D \\ell \\chi \\, dx",
+      "\\int_D \\left( \\mathbf{E}(\\mathbf{u}) : \\mathbf{S}(\\mathbf{u}) \\right) \\, dx"
+    ],
+    "objective_terms_source": "extracted",
+    "state_description": "nonlinear state equation for the displacement",
+    "state_description_source": "extracted",
+    "state_weak_lhs": "- \\int_{\\Gamma_N} f \\left( \\mathbf{e}_y \\cdot \\mathbf{v} \\right) \\, ds_x + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) \\, dx",
+    "state_weak_lhs_source": "extracted",
+    "state_weak_rhs": "0",
+    "state_weak_rhs_source": "extracted",
+    "state_is_nonlinear": true,
+    "state_is_nonlinear_source": "extracted",
+    "newton_description": "Newton update for the nonlinear state equation",
+    "newton_description_source": "extracted",
+    "newton_weak_form": "\\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{F}(\\hat{\\mathbf{u}})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) + \\left( \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{S}(\\hat{\\mathbf{u}},\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) \\, dx = - \\left( - \\int_{\\Gamma_N} f \\left( \\mathbf{e}_y \\cdot \\mathbf{v} \\right) \\, ds_x + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\mathbf{v} \\right) \\right) \\, dx \\right)",
+    "newton_weak_form_source": "extracted",
+    "newton_source": "extracted",
+    "adjoint_description": "adjoint equation for the adjoint state",
+    "adjoint_description_source": "extracted",
+    "adjoint_weak_lhs": "\\partial_{(\\mathbf{u},\\mathbf{v})} J(\\mathbf{u},\\mathbf{v}) + \\int_D \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\partial_{(\\mathbf{u},\\mathbf{v})} \\mathbf{F}(\\mathbf{v})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) + \\left( \\partial_{(\\mathbf{u},\\mathbf{v})} \\mathbf{S}(\\mathbf{u},\\mathbf{v}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) \\, dx",
+    "adjoint_weak_lhs_source": "extracted",
+    "adjoint_weak_rhs": "0",
+    "adjoint_weak_rhs_source": "extracted",
+    "shape_derivative_volume": "\\partial_t J(\\mathbf{V},\\mathbf{u}) + \\int_D \\operatorname{div} \\mathbf{V} \\left( \\mathbf{S}(\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) + \\left( \\mathbf{S}(\\mathbf{u}) : \\left( -\\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\left( \\nabla \\tilde{\\mathbf{u}} \\cdot \\nabla \\mathbf{V} \\right) \\right) + \\left( \\partial_t \\mathbf{F}(\\mathbf{V},\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) \\right) + \\left( \\partial_t \\mathbf{S}(\\mathbf{V},\\mathbf{u}) : \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\nabla \\tilde{\\mathbf{u}} \\right) \\right) \\, dx",
+    "shape_derivative_volume_source": "extracted",
+    "shape_derivative_boundary": "- \\left( \\int_{\\Gamma_N} f \\operatorname{div} \\mathbf{V} \\left( \\mathbf{e}_y \\cdot \\tilde{\\mathbf{u}} \\right) \\, ds_x - \\int_{\\Gamma_N} f \\left( \\mathbf{n} \\cdot \\left( \\mathbf{n} \\cdot \\nabla \\mathbf{V} \\right) \\right) \\left( \\mathbf{e}_y \\cdot \\tilde{\\mathbf{u}} \\right) \\, ds_x \\right)",
+    "shape_derivative_boundary_source": "extracted",
+    "shape_derivative_source": "extracted",
+    "boundaries": [
+      {
+        "name": "\\Gamma_4",
+        "label": "4",
+        "kind": "Dirichlet",
+        "description": "fixed boundary",
+        "source": "designed",
+        "rationale": "Extracted \\Gamma_4 reconciled with mesh label 4, the clamped left edge of the cantilever."
+      },
+      {
+        "name": "\\Gamma_N",
+        "label": "2",
+        "kind": "Neumann",
+        "description": "loaded boundary",
+        "source": "designed",
+        "rationale": "Extracted \\Gamma_N reconciled with mesh label 2, the right edge carrying the transverse surface load."
+      },
+      {
+        "name": "\\Gamma_1",
+        "label": "1",
+        "kind": "Neumann",
+        "description": "free boundary (zero traction)",
+        "source": "designed",
+        "rationale": "Remaining mesh label 1 corresponds to the free upper/lower boundaries with homogeneous natural conditions."
+      }
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "\\mathbf{u}",
+        "type": "vector",
+        "fe_space": "P2",
+        "unit": "meter",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "4"
+        ],
+        "source": "extracted",
+        "rationale": "State displacement; unit defaulted to metre and Dirichlet label mapped from \\Gamma_4 to mesh label 4."
+      },
+      {
+        "name": "u_tilde",
+        "latex": "\\tilde{\\mathbf{u}}",
+        "type": "vector",
+        "fe_space": "P2",
+        "unit": "meter",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "4"
+        ],
+        "source": "designed",
+        "rationale": "Adjoint displacement field required by the adjoint equation; homogeneous Dirichlet condition on the fixed boundary label 4."
+      }
+    ],
+    "test_functions": [
+      {
+        "name": "v",
+        "latex": "\\mathbf{v}",
+        "type": "vector",
+        "fe_space": "P2",
+        "source": "extracted",
+        "rationale": "Test function for the nonlinear state equation and the variation direction in the adjoint weak form."
+      }
+    ],
+    "constants": [
+      {
+        "name": "ell",
+        "latex": "\\ell",
+        "value": 0.25,
+        "description": "Lagrange multiplier",
+        "unit": "N/m^2",
+        "source": "designed",
+        "rationale": "Value extracted; missing unit designed as N/m^2 so that the volume-penalty term has the same energy character as the compliance term."
+      },
+      {
+        "name": "nu",
+        "latex": "\\nu",
+        "value": 0.3,
+        "description": "Poisson's ratio",
+        "unit": "-",
+        "source": "extracted"
+      },
+      {
+        "name": "E",
+        "latex": "E",
+        "value": 200,
+        "description": "Young's modulus",
+        "unit": "N/m^2",
+        "source": "extracted"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": -10,
+        "description": "surface load",
+        "unit": "N/m",
+        "source": "extracted"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "F",
+        "latex": "\\mathbf{F}(\\mathbf{u})",
+        "formula": "\\mathbf{I} + \\nabla \\mathbf{u}",
+        "source": "extracted"
+      },
+      {
+        "name": "E",
+        "latex": "\\mathbf{E}(\\mathbf{u})",
+        "formula": "\\frac{-\\mathbf{I} + \\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\mathbf{F}(\\mathbf{u}) \\right)}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "S",
+        "latex": "\\mathbf{S}(\\mathbf{u})",
+        "formula": "\\chi \\left( \\mathbf{I} \\lambda \\operatorname{tr}\\left(\\mathbf{E}(\\mathbf{u})\\right) + 2 \\mu \\mathbf{E}(\\mathbf{u}) \\right)",
+        "source": "extracted"
+      },
+      {
+        "name": "J",
+        "latex": "J(\\mathbf{u})",
+        "formula": "\\int_D \\ell \\chi \\, dx + \\int_D \\left( \\mathbf{E}(\\mathbf{u}) : \\mathbf{S}(\\mathbf{u}) \\right) \\, dx",
+        "source": "extracted"
+      },
+      {
+        "name": "mu",
+        "latex": "\\mu",
+        "formula": "\\frac{E}{2 \\left(\\nu + 1\\right)}",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda",
+        "formula": "\\frac{E \\nu}{\\left(1 - 2\\nu\\right) \\left(\\nu + 1\\right)}",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda_shape_derivative",
+        "latex": "\\lambda",
+        "formula": "-\\frac{E \\nu}{\\left(\\nu + 1\\right) \\left(2\\nu - 1\\right)}",
+        "source": "extracted"
+      },
+      {
+        "name": "partial_F",
+        "latex": "\\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{F}(\\hat{\\mathbf{u}})",
+        "formula": "\\nabla \\hat{\\mathbf{u}}",
+        "source": "extracted"
+      },
+      {
+        "name": "partial_E",
+        "latex": "\\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{E}(\\hat{\\mathbf{u}},\\mathbf{u})",
+        "formula": "\\frac{\\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{F}(\\hat{\\mathbf{u}}) \\right) + \\left( \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{F}(\\hat{\\mathbf{u}})^\\top \\cdot \\mathbf{F}(\\mathbf{u}) \\right)}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "partial_S",
+        "latex": "\\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{S}(\\hat{\\mathbf{u}},\\mathbf{u})",
+        "formula": "\\chi \\left( \\mathbf{I} \\lambda \\operatorname{tr}\\left(\\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{E}(\\hat{\\mathbf{u}},\\mathbf{u})\\right) + 2 \\mu \\partial_{(\\mathbf{u},\\hat{\\mathbf{u}})} \\mathbf{E}(\\hat{\\mathbf{u}},\\mathbf{u}) \\right)",
+        "source": "extracted"
+      },
+      {
+        "name": "partial_t_F",
+        "latex": "\\partial_t \\mathbf{F}(\\mathbf{V},\\mathbf{u})",
+        "formula": "-\\left( \\nabla \\mathbf{u} \\cdot \\nabla \\mathbf{V} \\right)",
+        "source": "extracted"
+      },
+      {
+        "name": "partial_t_E",
+        "latex": "\\partial_t \\mathbf{E}(\\mathbf{V},\\mathbf{u})",
+        "formula": "\\frac{\\left( \\mathbf{F}(\\mathbf{u})^\\top \\cdot \\partial_t \\mathbf{F}(\\mathbf{V},\\mathbf{u}) \\right) + \\left( \\partial_t \\mathbf{F}(\\mathbf{V},\\mathbf{u})^\\top \\cdot \\mathbf{F}(\\mathbf{u}) \\right)}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "partial_t_S",
+        "latex": "\\partial_t \\mathbf{S}(\\mathbf{V},\\mathbf{u})",
+        "formula": "\\chi \\left( \\mathbf{I} \\lambda \\operatorname{tr}\\left(\\partial_t \\mathbf{E}(\\mathbf{V},\\mathbf{u})\\right) + 2 \\mu \\partial_t \\mathbf{E}(\\mathbf{V},\\mathbf{u}) \\right)",
+        "source": "extracted"
+      },
+      {
+        "name": "partial_t_J",
+        "latex": "\\partial_t J(\\mathbf{V},\\mathbf{u})",
+        "formula": "\\int_D \\ell \\chi \\operatorname{div} \\mathbf{V} \\, dx + \\int_D \\operatorname{div} \\mathbf{V} \\left( \\mathbf{E}(\\mathbf{u}) : \\mathbf{S}(\\mathbf{u}) \\right) + \\left( \\mathbf{E}(\\mathbf{u}) : \\partial_t \\mathbf{S}(\\mathbf{V},\\mathbf{u}) \\right) + \\left( \\partial_t \\mathbf{E}(\\mathbf{V},\\mathbf{u}) : \\mathbf{S}(\\mathbf{u}) \\right) \\, dx",
+        "source": "extracted"
+      },
+      {
+        "name": "V_F",
+        "latex": "\\mathcal{V}(\\mathbf{F})",
+        "formula": "\\mathbf{I} + \\left( \\nabla \\mathbf{u} \\cdot \\mathbf{F}^{-1}(t) \\right)",
+        "source": "extracted"
+      },
+      {
+        "name": "V_E",
+        "latex": "\\mathcal{V}(\\mathbf{E})",
+        "formula": "\\frac{-\\mathbf{I} + \\left( \\mathcal{V}(\\mathbf{F})^\\top \\cdot \\mathcal{V}(\\mathbf{F}) \\right)}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "V_S",
+        "latex": "\\mathcal{V}(\\mathbf{S})",
+        "formula": "\\chi \\left( \\mathbf{I} \\lambda \\operatorname{tr}\\left(\\mathcal{V}(\\mathbf{E})\\right) + 2 \\mu \\mathcal{V}(\\mathbf{E}) \\right)",
+        "source": "extracted"
+      },
+      {
+        "name": "V_J",
+        "latex": "\\mathcal{V}(J)",
+        "formula": "\\int_D \\ell \\chi \\operatorname{det}\\mathbf{F}(t) \\, dx + \\int_D \\operatorname{det}\\mathbf{F}(t) \\left( \\mathcal{V}(\\mathbf{E}) : \\mathcal{V}(\\mathbf{S}) \\right) \\, dx",
+        "source": "extracted"
+      }
+    ],
+    "characteristic_function": {
+      "latex": "\\chi(x)",
+      "strong_value": 1,
+      "weak_value": 0.01,
+      "source": "extracted",
+      "rationale": "Weak value 1/100 is the ersatz-material stiffness used in the void phase for the nonlinear elasticity problem."
+    },
+    "optimization_config": {
+      "mesh_file": "mesh.txt",
+      "hmin": 0.01,
+      "hmax": 0.1,
+      "diffusion": 0.0001,
+      "v0": 0.001,
+      "iterations": 40,
+      "level_set_initial": "sqrt((x-4.0)^2 + (y-2.0)^2) - 1.5",
+      "boundary_labels": [
+        "1",
+        "2",
+        "4"
+      ],
+      "fixed_labels": [
+        "4"
+      ],
+      "extra_params": {},
+      "source": "designed",
+      "rationale": "Designed for an 8x4 cantilever: clamped left edge label 4, loaded right edge label 2, free boundaries label 1. hmin/hmax resolve the domain, diffusion and v0 are standard level-set regularisation values, and the initial level set is a signed-distance function with a central circular hole, positive outside the hole (material) and negative inside the hole (void)."
+    }
+  }
+}

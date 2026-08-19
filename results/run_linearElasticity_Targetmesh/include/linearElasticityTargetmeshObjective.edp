@@ -1,0 +1,1 @@
+objective = int2d(Th)((1.00000000000000*(phi<0) + 0*(1-(phi<0)))*(((x + ux - 1.0)^2.0 + (y + uy - 0.5)^2.0)^0.5 - 0.4)*(dx(ux)*dy(uy) + dx(ux) - dy(ux)*dx(uy) + dy(uy) + 1.0));

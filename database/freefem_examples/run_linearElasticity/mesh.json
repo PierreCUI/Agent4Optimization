@@ -1,0 +1,26 @@
+{
+  "extracted": {
+    "category": "code",
+    "mesh_code": "border C01(t=0, 2.){x=t; y=0; label=1;}\n\nborder C02(t=0, 0.45){x=2.; y=t; label=1;}\n\nborder C03(t=0, 0.1){x=2.; y=0.45+t; label=2;}\n\nborder C04(t=0, 0.45){x=2.; y=0.55+t; label=1;}\n\nborder C05(t=0, 2){x=2.-t; y=1.; label=1;}\n\nborder C06(t=0, 1){x=0.; y=1-t; label=4;}\n\nint n = 60;\n\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
+    "geometry_description": "",
+    "labels_found": [
+      "1",
+      "2",
+      "4"
+    ],
+    "has_syntax_errors": false,
+    "syntax_error_details": ""
+  },
+  "designed": {
+    "mesh_code": "border C01(t=0, 2.){x=t; y=0; label=1;}\n\nborder C02(t=0, 0.45){x=2.; y=t; label=1;}\n\nborder C03(t=0, 0.1){x=2.; y=0.45+t; label=2;}\n\nborder C04(t=0, 0.45){x=2.; y=0.55+t; label=1;}\n\nborder C05(t=0, 2){x=2.-t; y=1.; label=1;}\n\nborder C06(t=0, 1){x=0.; y=1-t; label=4;}\n\nint n = 60;\n\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
+    "mesh_code_source": "extracted",
+    "mesh_code_rationale": "",
+    "labels_used": [
+      "1",
+      "2",
+      "4"
+    ],
+    "dimension": 2,
+    "domain_description": "A 2D rectangular cantilever domain with a small loaded segment on the right edge, a clamped left edge, and homogeneous Neumann boundaries elsewhere."
+  }
+}

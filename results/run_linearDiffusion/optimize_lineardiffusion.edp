@@ -1,0 +1,177 @@
+verbosity = 0;
+load "iovtk"
+include "include/inout.idp"
+load "msh3"
+int maximalNumberOfIterations=100;	//maximal number of iterations
+real v0 = 1e-06;
+real diffusion = 5e-05;
+real objective = 0;
+real hmin = 0.00125;
+real hmax = 0.0125;
+real[int] objectivehistory(maximalNumberOfIterations);
+// definition of constants
+real ell = 100.0;
+real lambda = 1.0;
+real f = -10.0;
+// definition of the hold all domain Th (file mesh.txt)
+real x0 = 0;
+real x1 = 2;
+real y0 = -0.4;
+real y1 = 0.4;
+border C01(t=0, 1.){x=t; y=0; label=1;}
+border C02(t=0, 1.){x=1.; y=t; label=1;}
+border C03(t=0, 1.){x=1.-t; y=1.; label=1;}
+border C04(t=0, 0.4){x=0.; y=1-t; label=1;}
+border C05(t=0, 0.2){x=0.; y=0.6-t; label=3;}
+border C06(t=0, 0.4){x=0.; y=0.4-t; label=1;}
+int n = 50;
+mesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));
+// ////////////////////////////
+// adapt the mesh to the level-set function phi
+{
+fespace Vh1(Th, P1);
+Vh1 phi;
+func phi0 = -0.1-sin(pi*8*(x+0.6))*cos(pi*8*y);
+phi = phi0;
+printsol("tmp/phi.sol",phi[]);
+savemesh(Th,"tmp/initialMesh.mesh");
+int Res = system("mmg2d_O3 tmp/initialMesh.mesh -ls -sol tmp/phi.sol -hmin " + hmin + " -hmax " + hmax + " -hausd 0.001 -hgrad 1.3 -out tmp/newmesh.mesh -rmc -v -1");
+Res = system("mshdist tmp/newmesh.mesh -dom -fmm -v 0");
+}
+Th = readmesh("tmp/newmesh.mesh");
+fespace Vh1(Th,P1);
+Vh1 phi;
+loadsol("tmp/newmesh.sol", phi[]);
+// FE spaces
+fespace Vhu(Th, P2);
+fespace Vhdeltau(Th, P2);
+// FE fields for u
+Vhu u = 0.;
+Vhu incu;
+// adjoint variables for u
+Vhu adju;
+// definition of the test functions
+Vhdeltau deltau;
+include "include/lineardiffusionNewton.edp"
+include "include/lineardiffusionResidual.edp"
+include "include/lineardiffusionShape.edp"
+   matrix A = lineardiffusionNewton(Vhu, Vhdeltau);
+   set(A,solver=sparsesolver);
+   real[int] rhs = lineardiffusionResidual(0,Vhdeltau);
+   real[int] sol = A^-1 * rhs;
+   // update state
+   [incu[]] = sol; 
+   u[] -= incu[];
+include "include/lineardiffusionObjective.edp"
+// Output the initialisation
+{  int iter=0;
+string DataNameTh = "u";
+int[int] OrderTh = [1];
+savevtk("results/resultlineardiffusionTh" + iter + ".vtu", Th, u,   dataname=DataNameTh, order=OrderTh);
+}
+// Create file for convergence history
+{ ofstream fout("objectivelineardiffusion.txt");
+ fout << "iteration, objective" << endl; 
+}
+real shapeVelocity = v0;
+real minObjective = objective;
+objectivehistory[0] = objective;
+// //////////////////////////
+//start the optimization loop
+// //////////////////////////
+for (int iter=1;iter< maximalNumberOfIterations;iter=iter+1)
+{
+v0 = 1.05*v0;
+cout << "//////////////////////////////////////////////" << endl;
+cout << "iteration = " << iter << endl;
+cout << "previous objective = " << objective << endl;
+cout << "v0 = " << v0 << endl;
+{ ofstream fout("objectivelineardiffusion.txt",append);
+ fout << iter-1 << ", " << objective << endl;}
+real oldObjective = objective; 
+// compute the adjoint and the shape derivative
+include "include/lineardiffusionAdjoint.edp"
+fespace VhV(Th, [P1,P1]);
+VhV[shapeX,shapeY];
+shapeX[] = lineardiffusionShape(0, VhV);
+// gradient identification
+ int[int] llabs = [10];
+ meshL ThLshape = extract(Th, label=llabs);
+ fespace Vh10(ThLshape, [P1,P1]);
+ Vh10[shX,shY];
+ matrix IV34 = interpolate(Vh10, VhV, inside=1);
+ shX[] = IV34 * shapeX[];
+ shapeX[] = IV34'*shX[];
+ varf varfelast([incux, incuy],[deltaux, deltauy]) = int2d(Th)((incux*deltaux+incuy*deltauy)) 
+ 
+ + int2d(Th)(diffusion*(dx(deltaux) + dy(deltauy))*(dx(incux) + dy(incuy)) + 2*diffusion*(2*(dy(incux) + dx(incuy))/2*(dy(deltaux) + dx(deltauy))/2 + dx(deltaux)*dx(incux) + dy(deltauy)*dy(incuy))) 
+
+ + int1d(Th,1)(1.e20*(incux*N.x+incuy*N.y)*(deltaux*N.x+deltauy*N.y)) + on(3,incux=0,incuy=0);
+   matrix As = varfelast(VhV, VhV);
+   set(As, solver=sparsesolver);
+   real[int] solE = As^-1 * shapeX[];
+   shapeX[] = -solE;
+ string DataNameF = " u adju phi shape";
+int[int] OrderTNS = [1, 1, 1, 1, 1, 1, 1];
+savevtk("results/result-lineardiffusion-" + iter +".vtu", Th, u, adju, phi, [shapeX, shapeY,0], dataname=DataNameF, order=OrderTNS);
+// write the mesh, phi, and the shape gradient to disk
+savemesh(Th, "tmp/mesh2D.mesh");
+printsol("tmp/phi.sol",phi[]);
+printvec2("tmp/vel.sol", shapeX[]);
+mesh Thold = Th;
+fespace VhVold(Thold, [P1, P1]);
+VhVold[shapeX2, shapeY2];
+shapeVelocity = v0;
+for (int iterLineSearch=0;iterLineSearch < 5;iterLineSearch=iterLineSearch+1){
+shapeX2[] = shapeVelocity*shapeX[];
+cout << "using step size: " << shapeVelocity << endl;
+printvec2("tmp/vel.sol", shapeX2[]);
+int Res = system("advect tmp/mesh2D.mesh -s tmp/vel.sol -c tmp/phi.sol -dt " + 1 + " -o tmp/newphi.sol -nocfl -v");
+cout << "ADVECT run " << Res << endl;
+Res = system("mmg2d_O3 tmp/mesh2D.mesh -ls -sol tmp/newphi.sol -hmin " + hmin + " -hmax " + hmax + " -hausd 0.001 -hgrad 1.3 -out tmp/newmesh.mesh -rmc -v -1");
+cout << "MMG run " << Res << endl;
+Res = system("mshdist tmp/newmesh.mesh -dom -fmm -v 0");
+Th = readmesh("tmp/newmesh.mesh");
+phi = phi;
+loadsol("tmp/newmesh.sol", phi[]);
+u = u;
+u = 0.;
+incu=incu;
+deltau=deltau;
+adju=adju;
+cout << "resolve state on new mesh" << endl;
+   matrix A = lineardiffusionNewton(Vhu, Vhdeltau);
+   set(A,solver=sparsesolver);
+   real[int] rhs = lineardiffusionResidual(0,Vhdeltau);
+   real[int] sol = A^-1 * rhs;
+   // update state
+   [incu[]] = sol; 
+   u[] -= incu[];
+include "include/lineardiffusionObjective.edp"
+if (minObjective > objective){
+minObjective = objective;
+savemesh(Th,"tmp/optimaldesign.mesh");
+string DataNameTh = "u";
+int[int] OrderTh = [1];
+savevtk("results/resultlineardiffusionMinTh.vtu", Th, u, dataname=DataNameTh, order=OrderTh);
+}
+cout << "old objective: " << oldObjective << "   new objective: " << objective << endl;
+if (oldObjective > objective){
+   if (iterLineSearch == 0)
+      cout << "step accepted without line search" << endl;
+   else
+      cout << "step accepted after " + iterLineSearch +  " line search steps" << endl;
+   objectivehistory[iter] = objective;
+   break;
+}
+else{
+   cout << "step size reduced after " + iterLineSearch +  " line search steps" << endl;
+   shapeVelocity=shapeVelocity/2;
+   v0=v0*0.75;
+}
+} // end of line search
+string DataNameTh = "u";
+int[int] OrderTh = [1];
+savevtk("results/resultlineardiffusionTh" + iter + ".vtu", Th, u,   dataname=DataNameTh, order=OrderTh);
+}
+exit;

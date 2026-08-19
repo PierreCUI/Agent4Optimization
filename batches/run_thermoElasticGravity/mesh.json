@@ -1,0 +1,30 @@
+{
+  "extracted": {
+    "category": "code",
+    "mesh_code": "real bb = 0.2;\n\nborder C01(t=0, bb){x=t; y=0; label=5;}\n\nborder C02(t=0, 0.45*bb){x=bb; y=t; label=1;}\n\nborder C03(t=0, 0.05*bb){x=bb; y=0.45*bb+t; label=2;}\n\n//border C04(t=0, 0.45*bb){x=bb; y=0.55*bb+t; label=1;}\n\nborder C05(t=0, bb){x=bb-t; y=bb/2; label=3;} // symmetry edge\n\nborder C06(t=0, bb/2){x=0.; y=bb/2-t; label=4;} // left edge\n\nint n = 50;\n\n//mesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C05(n) + C06(n));\n\nmesh Th = square(4*n,n,[4*x,y]);\n\nsavemesh(Th,\"Mesh1.mesh\");",
+    "geometry_description": "",
+    "labels_found": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+    ],
+    "has_syntax_errors": false,
+    "syntax_error_details": ""
+  },
+  "designed": {
+    "mesh_code": "real bb = 0.2;\n\nborder C01(t=0, bb){x=t; y=0; label=5;}\n\nborder C02(t=0, 0.45*bb){x=bb; y=t; label=1;}\n\nborder C03(t=0, 0.05*bb){x=bb; y=0.45*bb+t; label=2;}\n\n//border C04(t=0, 0.45*bb){x=bb; y=0.55*bb+t; label=1;}\n\nborder C05(t=0, bb){x=bb-t; y=bb/2; label=3;} // symmetry edge\n\nborder C06(t=0, bb/2){x=0.; y=bb/2-t; label=4;} // left edge\n\nint n = 50;\n\n//mesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C05(n) + C06(n));\n\nmesh Th = square(4*n,n,[4*x,y]);\n\nsavemesh(Th,\"Mesh1.mesh\");",
+    "mesh_code_source": "extracted",
+    "mesh_code_rationale": "",
+    "labels_used": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+    ],
+    "dimension": 2,
+    "domain_description": "The extracted code defines several border segments with labels 1 through 5, but the final mesh is created by square(4*n,n,[4*x,y]), producing a 4-by-1 Cartesian rectangle that is saved as Mesh1.mesh."
+  }
+}

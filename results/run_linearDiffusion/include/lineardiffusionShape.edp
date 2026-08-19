@@ -1,0 +1,5 @@
+varf lineardiffusionShape([Ax, Ay],[Vx, Vy], tgv=-2) = 
+    int2d(Th)((1.00000000000000*(phi<0) + 0.100000000000000*(1-(phi<0)))*ell*(dx(Vx) + dy(Vy))) 
+ + int2d(Th)(-(1.00000000000000*(phi<0) + 0.100000000000000*(1-(phi<0)))*lambda*(2.0*(dx(Vx)*dx(u) + dx(Vy)*dy(u))*dx(u) + 2.0*(dy(Vx)*dx(u) + dy(Vy)*dy(u))*dy(u) - (dx(Vx) + dy(Vy))*(dx(u)^2.0 + dy(u)^2.0))) 
+ + int2d(Th)((1.00000000000000*(phi<0) + 0.100000000000000*(1-(phi<0)))*lambda*(-dx(Vx)*dx(adju)*dx(u) + dx(Vx)*dy(adju)*dy(u) - dy(Vx)*dx(adju)*dy(u) - dy(Vx)*dy(adju)*dx(u) - dx(Vy)*dx(adju)*dy(u) - dx(Vy)*dy(adju)*dx(u) + dy(Vy)*dx(adju)*dx(u) - dy(Vy)*dy(adju)*dy(u))) 
+ - int2d(Th)(f*(dx(Vx) + dy(Vy))*adju);

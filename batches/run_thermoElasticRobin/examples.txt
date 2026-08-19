@@ -1,0 +1,7 @@
+run_thermoElastic
+run_linearElasticityBridge
+run_linearElasticity_Target
+run_linearElasticity_TargetKragtraeger
+run_linearElasticity_Targetmesh
+run_linearDiffusion
+run_linearElasticity

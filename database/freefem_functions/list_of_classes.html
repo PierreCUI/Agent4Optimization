@@ -1,0 +1,64 @@
+<html><head><title>Classes in AutoFreeFem</title></head><body><h1>Classes in AutoFreeFem </h1><ul><h2>Thursday, June 06, 2024 </h2><ul><li><strong>autofreefem.differentialoperators</strong>
+<strong> : Differential operators</strong>
+<ul>
+<li>div : Divergence. Lowers the tensor order by 1.</li>
+<li>divPerturbed : Divergence after a shape pertubation.</li>
+<li>dt : Time derivative</li>
+<li>grad : Gradient. Raises the tensor order by 1.</li>
+</ul><li><strong>autofreefem.fields</strong>
+<strong> : Field quantities</strong>
+<ul>
+<li>AutofreefemBase : Abstract base class for string input parsing</li>
+<li>BaseField : Abstract base class for fields</li>
+<li>Boundary : Boundary of a Domain</li>
+<li>BoundaryFunction : Define Dirichlet boundary functions for different directions</li>
+<li>CharacteristicFunction : Generalized characteristic function</li>
+<li>Constant : Physical constant. AutoFreeFem generates a Latex table of all constants.</li>
+<li>Domain : Domain with possible boundaries</li>
+<li>Expression : Abriviation of mathematical expression</li>
+<li>ExpressionPerturbed : Expression after shape pertubation</li>
+<li>Parameter </li>
+<li>ParameterField : Given parameter field</li>
+<li>ParameterPerturbed </li>
+<li>ScalarField : Scalar field, e.g. temperature</li>
+<li>VectorField : Vector field, e.g. displacement</li>
+<li>VelocityField : Shape pertubation velocity field</li>
+</ul><li><strong>autofreefem.integraloperators</strong>
+<strong> : Integrals</strong>
+<ul>
+<li>dsx : Surface integral. Integral over a d-1 dimensional region.</li>
+<li>dx : Domain integral</li>
+</ul><li><strong>autofreefem.lagrangian</strong>
+<ul>
+<li>Lagrangian : Main class of AutoFreeFem. </li>
+</ul><li><strong>autofreefem.matrix_functions</strong>
+<strong> : Functions acting on matricies of size d x d</strong>
+<ul>
+<li>MasterMatrixFunction : Abstract base class for matrix functions</li>
+<li>determinant : Matrix determinant</li>
+<li>inverse : Matrix inverse</li>
+<li>inverse_transpose : Matrix inverse and transpose</li>
+<li>tr : Matrix trace</li>
+<li>transpose : Matrix transpose</li>
+</ul><li><strong>autofreefem.operators</strong>
+<strong> : Operators acting on tensors and geometric quantities</strong>
+<ul>
+<li>SurfaceNormalVector : Normal vector to a surface</li>
+<li>TensorProduct : Tensor product between 2 tensors</li>
+<li>ex : Unit vector in x-direction</li>
+<li>ey : Unit vector in y-direction</li>
+<li>ez : Unit vector in z-direction</li>
+<li>identity : Identity matrix</li>
+<li>inner : Dot product between 2 tensors</li>
+<li>inner2 : Double-dot product between 2 tensors</li>
+<li>ln : Logarithm</li>
+</ul><li><strong>autofreefem.shapepertubation</strong>
+<strong> : Quantities of the shape pertubation Jacobian</strong>
+<ul>
+<li>Finv : Inverse of the shape pertubation Jacobian.</li>
+<li>detF : Determinant of the shape pertubation Jacobian.</li>
+</ul><li><strong>autofreefem.units</strong>
+<ul>
+<li>base_unit </li>
+<li>derived_unit </li>
+</ul></ul></body></html>

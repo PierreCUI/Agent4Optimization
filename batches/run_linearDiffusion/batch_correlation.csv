@@ -1,0 +1,13 @@
+feature,metric,n_rows,metric_mean,moris_u_star,moris_u_star_pct,effect_rel_pct,spearman_rho,p_value
+hmax,avg_time_per_epoch_s,375,30.168659,27.406289,90.84,81.28,-0.9283,0.0
+hmax,ff_max_memory_mb,375,400.994083,332.456584,82.91,73.68,-0.3558,0.0
+hmax,ff_avg_memory_mb,375,305.882016,249.334607,81.51,72.37,-0.3963,0.0
+hmin,avg_time_per_epoch_s,375,30.168659,116.130966,384.94,99.32,-0.7111,0.0
+hmin,ff_max_memory_mb,375,400.994083,1422.536504,354.75,87.71,-0.2791,0.0
+hmin,ff_avg_memory_mb,375,305.882016,1091.327903,356.78,84.42,-0.3044,0.0
+mesh_n,avg_time_per_epoch_s,375,30.168659,1.4905,4.94,4.77,0.0407,0.432165
+mesh_n,ff_max_memory_mb,375,400.994083,14.439218,3.6,2.97,-0.004,0.938367
+mesh_n,ff_avg_memory_mb,375,305.882016,14.461139,4.73,4.97,-0.0334,0.519593
+p_degree,avg_time_per_epoch_s,375,30.168659,1.226484,4.07,8.13,0.1272,0.013714
+p_degree,ff_max_memory_mb,375,400.994083,258.487216,64.46,128.92,0.9202,0.0
+p_degree,ff_avg_memory_mb,375,305.882016,169.562508,55.43,110.87,0.9025,0.0

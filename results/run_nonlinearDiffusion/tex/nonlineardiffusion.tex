@@ -1,0 +1,64 @@
+\documentclass[preview]{standalone}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{bm}
+\let\oldcdot\cdot
+\usepackage{breqn}
+\let\cdot\oldcdot
+\begin{document}
+Let $\phi(x)$ be the level-set function and
+ \begin{align*}\raisebox{\depth}{$\chi$}(x) &= \begin{cases} 1 & \mbox{if}\quad \phi(x) < 0 \\ 1/10 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases}.\end{align*}
+The Lagrangian of the nonlinear diffusion problem is
+\begin{dmath*}
+\mathcal L(\left[ u\right],\left[ \delta u\right]) = J(u) -  \int_{D} f \delta u \,dx +  \int_{D} \raisebox{\depth}{$\chi$} \lambda(u) \left(  \nabla u  \cdot  \nabla \delta u  \right) \,dx , 
+\end{dmath*}
+with 
+\begin{align*}
+J(u) &=  \int_{D} \ell \raisebox{\depth}{$\chi$} \,dx +  \int_{D} \raisebox{\depth}{$\chi$} \lambda(u) \left(  \nabla u  \cdot  \nabla u  \right) \,dx,\\
+\lambda(u) &= \left(\alpha u^{2} + 1\right) \lambda_{0}.
+ \end{align*}
+Let
+\begin{equation*}
+V_{u} = \{ u \in \mathbb P_{2}(D)| u = \mathtt{\text{0.}}  \quad \text{{on}} \quad\Gamma_{3} \},\end{equation*}
+\begin{equation*}
+V_{\delta u} = \{ \delta u \in \mathbb P_{2}(D)| \delta u = 0  \quad \text{{on}} \quad\Gamma_{3} \}.\end{equation*}
+The state $\left[ u\right] \in  V_{u}$ is the solution of the non-linear problem
+\begin{dmath*}
+-  \int_{D} f \delta u \,dx +  \int_{D} \raisebox{\depth}{$\chi$} \lambda(u) \left(  \nabla u  \cdot  \nabla \delta u  \right) \,dx = 0\qquad \forall\; \delta u . 
+\end{dmath*}
+In order to compute a Newton step we define
+\begin{dmath*}
+\partial_{(u,\hat u)} \lambda(\hat u,u) = 2 \alpha \lambda_{0} \hat u u.
+ \end{dmath*}
+The Newton update $\left[ \hat u\right]$ at the state $\left[ u\right]$ is the solution of
+\begin{dmath*}
+ \int_{D} \raisebox{\depth}{$\chi$} \lambda(u) \left(  \nabla \delta u  \cdot  \nabla \hat u  \right) + \raisebox{\depth}{$\chi$} \partial_{(u,\hat u)} \lambda(\hat u,u) \left(  \nabla u  \cdot  \nabla \delta u  \right) \,dx =  \int_{D} f \delta u \,dx -  \int_{D} \raisebox{\depth}{$\chi$} \lambda(u) \left(  \nabla u  \cdot  \nabla \delta u  \right) \,dx\qquad \forall\; \delta u . 
+\end{dmath*}
+The adjoint state $\left[ \tilde u\right]$ to the direct state $\left[ u\right]$ is the solution of
+\begin{dmath*}
+\partial_{(u,\delta u)} J(\delta u,u) +  \int_{D} \raisebox{\depth}{$\chi$} \lambda(u) \left(  \nabla \delta u  \cdot  \nabla \tilde u  \right) + \raisebox{\depth}{$\chi$} \partial_{(u,\delta u)} \lambda(\delta u,u) \left(  \nabla u  \cdot  \nabla \tilde u  \right) \,dx = 0\qquad \forall\; \delta u , 
+\end{dmath*}
+with 
+\begin{align*}
+\partial_{(u,\delta u)} J(\delta u,u) &=  \int_{D} \left(2 \lambda(u) \left(  \nabla u  \cdot  \nabla \delta u  \right) + \partial_{(u,\delta u)} \lambda(\delta u,u) \left(  \nabla u  \cdot  \nabla u  \right)\right) \raisebox{\depth}{$\chi$} \,dx,\\
+\partial_{(u,\delta u)} \lambda(\delta u,u) &= 2 \alpha \lambda_{0} \delta u u.
+ \end{align*}
+In order to compute the shape derivative, we consider a shape pertubation $\mathbf x = T_t(\mathbf X) = \mathbf X + t \mathbf  V(X)$ with a suitable velocity field $\mathbf V$. The perturbed Lagrangian $\mathcal G$ using the Lagrangian state $\left[ u\right]^{L}$ is given by
+\begin{dmath*}
+\mathcal G(t,\left[ u\right]^{L},\left[ \delta u\right]^{L}) = \mathcal V(J) -  \int_{D} f  \operatorname{det}\mathbf F( t )  \delta u \,dx +  \int_{D} \raisebox{\depth}{$\chi$} \lambda(u)  \operatorname{det}\mathbf F( t )  \left( \left(  \nabla u  \cdot  \mathbf F^{-1}(t) \right) \cdot \left(  \nabla \delta u  \cdot  \mathbf F^{-1}(t) \right) \right) \,dx , 
+\end{dmath*}
+with
+\begin{dmath*}
+\mathcal V(J) =  \int_{D} \ell \raisebox{\depth}{$\chi$}  \operatorname{det}\mathbf F( t )  \,dx +  \int_{D} \raisebox{\depth}{$\chi$} \lambda(u)  \operatorname{det}\mathbf F( t )  \left( \left(  \nabla u  \cdot  \mathbf F^{-1}(t) \right) \cdot \left(  \nabla u  \cdot  \mathbf F^{-1}(t) \right) \right) \,dx.
+ \end{dmath*}
+For the direct state $\left[ u\right]$ and the adjoint state $\left[ \tilde u\right]$, the volume expression of the shape derivative is given by
+\begin{dmath*}
+DJ(\Omega)(\mathbf V) = \partial_{t} J(u,{\mathbf V}) +  \int_{D} \left(\operatorname{div} {\mathbf V} \left(  \nabla u  \cdot  \nabla \tilde u  \right) - \left(  \nabla \tilde u  \cdot \left(  \nabla u  \cdot  \nabla {\mathbf V}  \right) \right) - \left(  \nabla u  \cdot \left(  \nabla \tilde u  \cdot  \nabla {\mathbf V}  \right) \right)\right) \raisebox{\depth}{$\chi$} \lambda(u) \,dx -  \int_{D} f \operatorname{div} {\mathbf V} \tilde u \,dx , 
+\end{dmath*}
+with
+\begin{dmath*}
+\partial_{t} J(u,{\mathbf V}) =  \int_{D} \left(\operatorname{div} {\mathbf V} \left(  \nabla u  \cdot  \nabla u  \right) - 2 \left(  \nabla u  \cdot \left(  \nabla u  \cdot  \nabla {\mathbf V}  \right) \right)\right) \raisebox{\depth}{$\chi$} \lambda(u) \,dx +  \int_{D} \ell \raisebox{\depth}{$\chi$} \operatorname{div} {\mathbf V} \,dx.
+ \end{dmath*}
+\end{document}

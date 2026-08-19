@@ -1,0 +1,78 @@
+======================================================================
+REFLECTION LOG — run_thermoElasticGravity
+Started: 2026-08-11 18:46:40
+======================================================================
+
+--- Iteration 1 [19:03:41] ---
+Coarse:  wrong_result
+Fine:    empty_design
+Action:  local_fix
+Fix:     Reduced hmin/hmax from 0.5/1.0 to 0.02/0.05 so the prescribed phi features are resolved instead of being erased by the coarse MMG target, and lowered diffusion/increased v0 to stop the over-smoothed, barely-moving level-set evolution that caused the empty/stagnated design.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['-2', '0']
+
+--- Iteration 2 [19:12:56] ---
+Coarse:  wrong_result
+Fine:    physics_violation
+Action:  local_fix
+Fix:     Reduced v0 from 0.001 to 2e-5, increased diffusion to 0.5 and hmin/hmax to 0.04/0.1 to stop the exponentially growing advection step that caused the MMG hang/step timeout.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['-2', '0']
+
+--- Iteration 3 [19:18:53] ---
+Coarse:  wrong_result
+Fine:    physics_violation
+Action:  local_fix
+Fix:     Reduced v0 to 2e-6, increased diffusion to 2.0, and raised hmax to 0.15 (keeping hmin=0.04 to preserve the required phi strip at y<0.05) to prevent the MMG remeshing hang at iteration 11.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['-2', '0']
+
+--- Iteration 4 [19:24:06] ---
+Coarse:  wrong_result
+Fine:    physics_violation
+Action:  local_fix
+Fix:     Reduced the shape advection speed to 2e-8, increased level-set diffusion to 5.0, and capped iterations at 12 to prevent the MMG remeshing hang observed at iteration 13 while keeping the prescribed phi expression and boundary labels unchanged.
+Outcome: FreeFEM failed — Python rc=0, 2 .edp, FreeFEM rcs=['-3', '0']
+
+--- Iteration 5 [19:31:22] ---
+Coarse:  freefem_error
+Fine:    ff_unknown
+Action:  local_fix
+Fix:     Increased v0 from 2e-8 to 2e-5, reduced diffusion from 5.0 to 2.0, raised line-search attempts to 10, and set iterations to 100 so the optimization actually descends and saves MinTh.vtu instead of aborting from early stagnation.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['-3', '0']
+
+--- Iteration 6 [19:38:30] ---
+Coarse:  wrong_result
+Fine:    physics_violation
+Action:  local_fix
+Fix:     Increased the shape advection speed from 2e-5 to 1e-4 while keeping the high diffusion (2.0) and mesh sizes (0.04/0.15) that prevent MMG degeneration, so the optimization achieves more than 5% objective improvement before the early-stagnation check and can save the final MinTh.vtu.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['-2', '0']
+
+--- Iteration 7 [19:46:16] ---
+Coarse:  wrong_result
+Fine:    physics_violation
+Action:  local_fix
+Fix:     Reduced the shape advection speed from 1e-4 to 1e-5 and the level-set diffusion from 2.0 to 0.5, lowered hmax to 0.1, and increased line-search attempts to 15 so the optimization takes smaller, sharper descent steps instead of the over-smoothed/overshooting steps that caused the objective to increase and MMG to hang.
+Outcome: FreeFEM failed — Python rc=0, 2 .edp, FreeFEM rcs=['-2', '0']
+
+--- Iteration 8 [19:55:20] ---
+Coarse:  freefem_error
+Fine:    ff_tool
+Action:  local_fix
+Fix:     Restored the empirically successful optimization parameters (v0=2e-5, diffusion=2.0, hmax=0.15) that previously produced MinTh.vtu, and capped iterations at 12 so the loop exits before the MMG remeshing hang observed around iteration 12, avoiding the step-timeout that prevented the final design from being written.
+Outcome: FreeFEM failed — Python rc=0, 2 .edp, FreeFEM rcs=['-3', '0']
+
+--- Iteration 9 [20:03:22] ---
+Coarse:  non_convergence
+Fine:    obj_divergence
+Action:  local_fix
+Fix:     Reduced v0 from 2e-5 to 2e-6 and increased the line-search budget to 20 so the level-set advection takes stable, non-diverging descent steps while allowing enough iterations for the objective to improve instead of oscillating upward.
+Outcome: FreeFEM failed — Python rc=0, 2 .edp, FreeFEM rcs=['-2', '0']
+
+--- Iteration 10 [20:10:39] ---
+Coarse:  freefem_error
+Fine:    ff_tool
+Action:  local_fix
+Fix:     Increased v0 to 1e-4 and reduced maxLineSearch to 10, matching the previously successful parameter set, so the first descent step is accepted quickly and MinTh.vtu is written before the repeated-remesh step timeout occurs.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['-2', '0']
+
+======================================================================
+FINAL STATUS: give_up_max (10 iteration(s))
+======================================================================

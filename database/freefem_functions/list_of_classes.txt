@@ -1,0 +1,78 @@
+# Classes in AutoFreeFem
+
+## Thursday, June 06, 2024
+
+<<<<<<< HEAD
+    * **autofreefem.differentialoperators** **: Differential operators**
+=======
+    * **autofreefem.differentialoperators****Differential operators**
+>>>>>>> 856b62ba2c63716389d5b8f8aecd42d7fee15c3d
+      * div : Divergence. Lowers the tensor order by 1.
+      * divPerturbed : Divergence after a shape pertubation.
+      * dt : Time derivative
+      * grad : Gradient. Raises the tensor order by 1.
+<<<<<<< HEAD
+    * **autofreefem.fields** **: Field quantities**
+=======
+    * **autofreefem.fields****Field quantities**
+>>>>>>> 856b62ba2c63716389d5b8f8aecd42d7fee15c3d
+      * AutofreefemBase : Abstract base class for string input parsing
+      * BaseField : Abstract base class for fields
+      * Boundary : Boundary of a Domain
+      * BoundaryFunction : Define Dirichlet boundary functions for different directions
+      * CharacteristicFunction : Generalized characteristic function
+      * Constant : Physical constant. AutoFreeFem generates a Latex table of all constants.
+      * Domain : Domain with possible boundaries
+      * Expression : Abriviation of mathematical expression
+      * ExpressionPerturbed : Expression after shape pertubation
+      * Parameter 
+      * ParameterField : Given parameter field
+      * ParameterPerturbed 
+      * ScalarField : Scalar field, e.g. temperature
+      * VectorField : Vector field, e.g. displacement
+      * VelocityField : Shape pertubation velocity field
+<<<<<<< HEAD
+    * **autofreefem.integraloperators** **: Integrals**
+=======
+    * **autofreefem.integraloperators****Integrals**
+>>>>>>> 856b62ba2c63716389d5b8f8aecd42d7fee15c3d
+      * dsx : Surface integral. Integral over a d-1 dimensional region.
+      * dx : Domain integral
+    * **autofreefem.lagrangian**
+      * Lagrangian : Main class of AutoFreeFem. 
+<<<<<<< HEAD
+    * **autofreefem.matrix_functions** **: Functions acting on matricies of size d x d**
+=======
+    * **autofreefem.matrix_functions****Functions acting on matricies of size d x d**
+>>>>>>> 856b62ba2c63716389d5b8f8aecd42d7fee15c3d
+      * MasterMatrixFunction : Abstract base class for matrix functions
+      * determinant : Matrix determinant
+      * inverse : Matrix inverse
+      * inverse_transpose : Matrix inverse and transpose
+      * tr : Matrix trace
+      * transpose : Matrix transpose
+<<<<<<< HEAD
+    * **autofreefem.operators** **: Operators acting on tensors and geometric quantities**
+=======
+    * **autofreefem.operators****Operators acting on tensors and geometric quantities**
+>>>>>>> 856b62ba2c63716389d5b8f8aecd42d7fee15c3d
+      * SurfaceNormalVector : Normal vector to a surface
+      * TensorProduct : Tensor product between 2 tensors
+      * ex : Unit vector in x-direction
+      * ey : Unit vector in y-direction
+      * ez : Unit vector in z-direction
+      * identity : Identity matrix
+      * inner : Dot product between 2 tensors
+      * inner2 : Double-dot product between 2 tensors
+      * ln : Logarithm
+<<<<<<< HEAD
+    * **autofreefem.shapepertubation** **: Quantities of the shape pertubation Jacobian**
+=======
+    * **autofreefem.shapepertubation****Quantities of the shape pertubation Jacobian**
+>>>>>>> 856b62ba2c63716389d5b8f8aecd42d7fee15c3d
+      * Finv : Inverse of the shape pertubation Jacobian.
+      * detF : Determinant of the shape pertubation Jacobian.
+    * **autofreefem.units**
+      * base_unit 
+      * derived_unit 
+

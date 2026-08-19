@@ -1,0 +1,27 @@
+# Claude Code workspace / wrappers
+.claude/
+.claude-deepseek.env
+claude-deepseek.cmd
+claude-deepseek.ps1
+
+# IDE
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pth
+
+# Paper (kept private)
+paper/
+
+# Prediction artifacts (large / derived)
+prediction/csvs/
+prediction/models/
+
+# Per-problem FreeFem++ output meshes (large VTU files)
+results/*/results/
+
+# Local documentation
+MODELS.md

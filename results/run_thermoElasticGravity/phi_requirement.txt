@@ -1,0 +1,6 @@
+CRITICAL REQUIREMENT: The initial level-set function phi MUST be:
+phi = -0.1 - cos(pi * x) * cos(pi * 3 * y)*(y<0.9)*(y>0.05) + (y<0.05)
+
+This phi describes a specific part geometry. Do NOT change or simplify it.
+All other parameters (hmin, hmax, diffusion, v0, boundaryLabels, fixedLabels)
+may be adjusted to make the optimization converge with this phi.
