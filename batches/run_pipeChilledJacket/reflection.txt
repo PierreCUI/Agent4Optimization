@@ -1,0 +1,15 @@
+======================================================================
+REFLECTION LOG — run_pipeChilledJacket
+Started: 2026-09-11 13:20:55
+======================================================================
+
+--- Iteration 1 [13:26:36] ---
+Coarse:  wrong_result
+Fine:    phi_unsuitable
+Action:  local_fix
+Fix:     Combined the only probe that ran to completion with FreeFEM rc=0 (candidate 0: hmin=0.01, diffusion=2.0, v0=2e-6) with the well-resolved 6-hole mid-radius seed of candidate 4 (the best non-collapsing alternative phi, 18 epochs survived), which directly fixes the 'phi_unsuitable' diagnosis while keeping the proven numerically stabilised evolution; labels, objective, weak form and mesh are untouched.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['6', '8']
+
+======================================================================
+FINAL STATUS: pass (1 iteration(s))
+======================================================================

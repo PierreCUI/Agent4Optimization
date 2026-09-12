@@ -1,0 +1,25 @@
+\documentclass[preview]{standalone}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{bm}
+\let\oldcdot\cdot
+\usepackage{breqn}
+\let\cdot\oldcdot
+\begin{document}
+\begin{spacing}{1.2}
+\begin{tabular}{cccl}
+\toprule
+Stefan-Boltzmann constant & $\sigma$ & 5.67e-08 & $\frac{W}{K^4 m^2}$ \\ 
+ambient temperature & $u_{amb}$ & 298 & $K$ \\ 
+convective heat transfer coefficient (air side) & $h$ & 25 & $\frac{W}{K m^2}$ \\ 
+convective heat transfer coefficient (flue-gas side) & $h_{H}$ & 25 & $\frac{W}{K m^2}$ \\ 
+effective emissivity (gas-filled duct) & $\varepsilon_{g}$ & 0.9 & $-$ \\ 
+flue-gas temperature & $u_{H}$ & 338 & $K$ \\ 
+thermal conductivity (aluminium) & $k_{0}$ & 200 & $\frac{W}{K m}$ \\ 
+volume weight (initial estimate, calibrated by pipeline) & $\ell$ & 2.00e+03 & $\frac{W K}{m^3}$ \\ 
+\bottomrule
+\end{tabular}
+\end{spacing}
+\end{document}

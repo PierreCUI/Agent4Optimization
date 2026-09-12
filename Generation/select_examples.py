@@ -16,8 +16,8 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from configs import MAX_INPUT_TOKENS, MAX_SELECTOR_ROUNDS, TOKEN_BUDGET_RATIO
-from utils import parser_json
+from configs import MAX_INPUT_TOKENS, MAX_SELECTOR_ROUNDS, TOKEN_BUDGET_RATIO  # noqa: E402
+from utils import parser_json  # noqa: E402
 
 # ======================================================================
 # helpers
@@ -27,6 +27,11 @@ from utils import parser_json
 def _estimate_tokens(text: str) -> int:
     """Rough token count: ~4 chars per token."""
     return max(1, len(text) // 4)
+
+
+def _first_py(ex_dir: Path):
+    """The first .py file of an example directory, or None."""
+    return next((p for p in ex_dir.iterdir() if p.suffix == ".py"), None)
 
 
 def _build_summary(name: str, initial_path: Path, mesh_path: Path) -> dict:
@@ -46,14 +51,19 @@ def _build_summary(name: str, initial_path: Path, mesh_path: Path) -> dict:
             ]
             summary["state_is_nonlinear"] = ds.get("state_is_nonlinear", False)
             summary["num_constants"] = len(ds.get("constants", []))
+            summary["num_domains"] = len(ds.get("domains", []))
+            summary["num_interfaces"] = len(ds.get("interfaces", []))
             summary["has_adjoint"] = bool(
                 ex.get("adjoint_equation") or ds.get("adjoint_description")
             )
             summary["has_shape_derivative"] = bool(
                 ex.get("shape_derivative") or ds.get("shape_derivative_volume")
             )
-    except Exception:
-        pass
+    except Exception as e:
+        # A malformed initial.json must not silently degrade into a
+        # name-only candidate — warn so the selector knows the summary
+        # is partial.
+        warnings.warn(f"_build_summary {name}: initial.json parse error: {e}")
 
     try:
         if mesh_path.exists():
@@ -62,8 +72,8 @@ def _build_summary(name: str, initial_path: Path, mesh_path: Path) -> dict:
             mds = mesh.get("designed", {})
             summary["mesh_dim"] = mds.get("dimension")
             summary["mesh_labels"] = mds.get("labels_used", [])
-    except Exception:
-        pass
+    except Exception as e:
+        warnings.warn(f"_build_summary {name}: mesh.json parse error: {e}")
 
     return summary
 
@@ -71,6 +81,9 @@ def _build_summary(name: str, initial_path: Path, mesh_path: Path) -> dict:
 def load_example_summaries(examples_dir: Path) -> list[dict]:
     """Return a compact summary for every example folder with initial.json."""
     summaries = []
+    if not examples_dir.is_dir():
+        warnings.warn(f"select_examples: examples directory {examples_dir} not found.")
+        return summaries
     for folder in sorted(examples_dir.iterdir()):
         if not folder.is_dir():
             continue
@@ -104,6 +117,8 @@ _SELECTOR_SYSTEM = """\
     - linear vs nonlinear
     - physics domain (elasticity, diffusion, thermal, fluid, etc.)
     - mesh complexity (number of labels / boundaries)
+    - number of computational domains and interfaces (multi-domain problems
+      should prefer multi-domain examples)
     
     Return exactly one JSON object:
     {{"selected": ["example_name_1", "example_name_2", ...], "reasoning": "one sentence"}}
@@ -186,8 +201,9 @@ def select_examples(
     Multi-round LLM-based example selection.
 
     Round 1 — per-batch filtering.  Then iterative reduction until the
-    shortlist fits within 80% of MAX_INPUT_TOKENS (or MAX_SELECTOR_ROUNDS
-    is exhausted, in which case score-based trimming kicks in).
+    shortlist fits within TOKEN_BUDGET_RATIO × MAX_INPUT_TOKENS (or
+    MAX_SELECTOR_ROUNDS is exhausted, in which case score-based trimming
+    kicks in).
 
     If *trace* is provided (a list), each round's state is appended as a
     dict ``{"round": N, "action": "...", "count": int, "names": [...]}``.
@@ -206,6 +222,8 @@ def select_examples(
         ],
         "state_is_nonlinear": ds.get("state_is_nonlinear", False),
         "num_constants": len(ds.get("constants", [])),
+        "num_domains": len(ds.get("domains", [])),
+        "num_interfaces": len(ds.get("interfaces", [])),
     }
     if mesh_spec:
         mds = mesh_spec.get("designed", {})
@@ -219,19 +237,26 @@ def select_examples(
         warnings.warn("select_examples: no example summaries found")
         return []
 
-    def _add_trace(action, names):
+    def _add_trace(round_num: int, action, names):
         if trace is not None:
-            trace.append({"action": action, "count": len(names), "names": list(names)})
+            trace.append(
+                {"round": round_num, "action": action, "count": len(names), "names": list(names)}
+            )
 
     # ── Round 1: per-batch filtering ──────────────────────────────────
     batches = _build_batches(target_json, all_candidates)
     shortlist = _run_round1(agent, target_json, batches)
-    _add_trace(f"Round 1 ({len(batches)} batch(es))", shortlist)
+    _add_trace(1, f"Round 1 ({len(batches)} batch(es))", shortlist)
     if not shortlist:
         return []
 
-    # ── Iterative reduction: keep ranking until under 80% MAX ──────────
+    # ── Iterative reduction: keep ranking until under TOKEN_BUDGET_RATIO × MAX ──
     name_to_summary = {c["name"]: c for c in all_candidates}
+    # Round-1 output is raw LLM text — drop names that are not real
+    # example folders (the ranking rounds already filter; Round 1 did not).
+    shortlist = [n for n in shortlist if n in name_to_summary]
+    if not shortlist:
+        return []
     token_budget = int(MAX_INPUT_TOKENS * TOKEN_BUDGET_RATIO)
     round_num = 0
 
@@ -246,18 +271,20 @@ def select_examples(
                 ex_dir = examples_dir / n
                 if not ex_dir.is_dir():
                     continue
-                py_file = next((p for p in ex_dir.iterdir() if p.suffix == ".py"), None)
+                py_file = _first_py(ex_dir)
                 if py_file is not None:
                     real_tokens += _estimate_tokens(
                         py_file.read_text(encoding="utf-8", errors="replace")
                     )
             if real_tokens <= token_budget:
                 _add_trace(
+                    round_num + 2,
                     f"Round {round_num + 2} — fits budget ({real_tokens} actual <= {token_budget})",
                     shortlist,
                 )
                 break
             _add_trace(
+                round_num + 2,
                 f"Round {round_num + 2} — JSON fits ({current_tokens}) but .py over ({real_tokens}), continuing",
                 shortlist,
             )
@@ -279,13 +306,22 @@ def select_examples(
         )
         try:
             result = json.loads(parser_json(raw))
+            if not isinstance(result, dict):
+                # A JSON array / null passes json.loads but has no
+                # .get — warn and stop the reduction like the sibling
+                # guards in _run_round1.
+                warnings.warn(
+                    "select_examples reduction round returned "
+                    f"non-object JSON ({type(result).__name__}); stopping."
+                )
+                break
             new_shortlist = [n for n in result.get("selected", []) if n in set(shortlist)]
             if not new_shortlist:
                 break
             if new_shortlist == shortlist:
                 break
             shortlist = new_shortlist
-            _add_trace(f"Round {round_num + 2} — re-rank ({len(shortlist)} kept)", shortlist)
+            _add_trace(round_num + 2, f"Round {round_num + 2} — re-rank ({len(shortlist)} kept)", shortlist)
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             warnings.warn(f"select_examples reduction round failed: {e}")
             break
@@ -302,12 +338,12 @@ def select_examples(
             shortlist = _score_and_trim(
                 agent, target_json, shortlist, name_to_summary, examples_dir, token_budget
             )
-            _add_trace(f"Score round — trimmed to budget", shortlist)
+            _add_trace(round_num + 2, "Score round — trimmed to budget", shortlist)
 
     # ── Final safety trim ──────────────────────────────────────────────
     final = _trim_by_tokens(shortlist, examples_dir)
     if final != shortlist:
-        _add_trace("Final hard trim", final)
+        _add_trace(round_num + 2, "Final hard trim", final)
     return final
 
 
@@ -354,7 +390,20 @@ def _run_round1(agent, target_json: str, batches: list[list[dict]]) -> list[str]
         )
         try:
             result = json.loads(parser_json(raw))
-            all_selected.extend(result.get("selected", []))
+            if not isinstance(result, dict):
+                warnings.warn(
+                    f"select_examples round-1 returned non-object JSON "
+                    f"({type(result).__name__}) — skipping this batch."
+                )
+                continue
+            selected = result.get("selected", [])
+            if isinstance(selected, list):
+                all_selected.extend(selected)
+            else:
+                warnings.warn(
+                    f"select_examples round-1 'selected' is not a list "
+                    f"({type(selected).__name__}) — skipping this batch."
+                )
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             warnings.warn(f"select_examples round-1 JSON parse failed: {e}")
 
@@ -397,8 +446,28 @@ def _score_and_trim(
     )
 
     try:
-        result = json.loads(parser_json(raw.strip()))
+        result = json.loads(parser_json(raw))
+        if not isinstance(result, dict):
+            warnings.warn(
+                f"score_and_trim: non-object JSON ({type(result).__name__}) — "
+                f"keeping the full shortlist."
+            )
+            return shortlist
         scores = result.get("scores", {})
+        if not isinstance(scores, dict):
+            warnings.warn(
+                f"score_and_trim: scores is not an object ({type(scores).__name__}) — "
+                f"keeping the full shortlist."
+            )
+            return shortlist
+        # The scorer is instructed to score EVERY candidate; a partial
+        # dict silently drops the unscored ones — surface it instead.
+        unscored = sorted(set(shortlist) - set(scores))
+        if unscored:
+            warnings.warn(
+                f"score_and_trim: {len(unscored)} candidate(s) returned without a "
+                f"score ({unscored}) — they are dropped from the selection."
+            )
         sorted_names = sorted(
             (n for n in scores if n in shortlist),
             key=lambda n: scores.get(n, 0),
@@ -407,13 +476,8 @@ def _score_and_trim(
         trimmed = []
         total_tokens = 0
         for name in sorted_names:
-            py_file = None
             ex_dir = examples_dir / name
-            if ex_dir.is_dir():
-                for f in ex_dir.iterdir():
-                    if f.suffix == ".py":
-                        py_file = f
-                        break
+            py_file = _first_py(ex_dir) if ex_dir.is_dir() else None
             c_tokens = (
                 _estimate_tokens(py_file.read_text(encoding="utf-8", errors="replace"))
                 if py_file
@@ -430,18 +494,14 @@ def _score_and_trim(
 
 
 def _trim_by_tokens(names: list[str], examples_dir: Path) -> list[str]:
-    """Keep only the first N examples whose full .py fits in 80% MAX."""
+    """Keep only the first N examples whose full .py fits in
+    TOKEN_BUDGET_RATIO × MAX_INPUT_TOKENS."""
     token_budget = int(MAX_INPUT_TOKENS * TOKEN_BUDGET_RATIO)
     trimmed = []
     total_tokens = 0
     for name in names:
-        py_file = None
         ex_dir = examples_dir / name
-        if ex_dir.is_dir():
-            for f in ex_dir.iterdir():
-                if f.suffix == ".py":
-                    py_file = f
-                    break
+        py_file = _first_py(ex_dir) if ex_dir.is_dir() else None
         if py_file:
             tokens = _estimate_tokens(py_file.read_text(encoding="utf-8", errors="replace"))
             if total_tokens + tokens > token_budget:
@@ -466,11 +526,7 @@ def load_selected_examples(selected_names: list[str], examples_dir: Path = None)
         folder = examples_dir / name
         if not folder.is_dir():
             continue
-        py_file = None
-        for f in folder.iterdir():
-            if f.suffix == ".py":
-                py_file = f
-                break
+        py_file = _first_py(folder)
         if py_file:
             results.append(
                 {"name": name, "py": py_file.read_text(encoding="utf-8", errors="replace")}
@@ -549,4 +605,4 @@ if __name__ == "__main__":
             print(f"  {str(i + 1):<34} | {act:<42} | {n:<4} | {names_str}")
         print(f"  {'':>82} | Final: {', '.join(selected)}")
 
-    print(f"\nDone. Saved to results/*/examples.txt")
+    print("\nDone. Saved to results/*/examples.txt")

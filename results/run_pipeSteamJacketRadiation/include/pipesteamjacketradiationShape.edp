@@ -1,0 +1,11 @@
+varf pipesteamjacketradiationShape([Ax, Ay],[Vx, Vy], tgv=-2) = 
+    -int1d(Th, 3.00000000000000)(qb*(uamb - u)*(N.x*(N.x*dx(Vx) + N.y*dx(Vy)) + N.y*(N.x*dy(Vx) + N.y*dy(Vy)))) 
+ + int1d(Th, 3.00000000000000)(qb*(uamb - u)*(dx(Vx) + dy(Vy))) 
+ + int1d(Th, 3.00000000000000)(h*(uamb - u)*(N.x*(N.x*dx(Vx) + N.y*dx(Vy)) + N.y*(N.x*dy(Vx) + N.y*dy(Vy)))*adju) 
+ - int1d(Th, 3.00000000000000)(h*(uamb - u)*(dx(Vx) + dy(Vy))*adju) 
+ + int1d(Th, 2.00000000000000)(pen*(uH - u)*(N.x*(N.x*dx(Vx) + N.y*dx(Vy)) + N.y*(N.x*dy(Vx) + N.y*dy(Vy)))*adju) 
+ - int1d(Th, 2.00000000000000)(pen*(uH - u)*(dx(Vx) + dy(Vy))*adju) 
+ + int1d(Th, 3.00000000000000)(sigma*varepsilon*(uamb^4.0 - u^4.0)*(N.x*(N.x*dx(Vx) + N.y*dx(Vy)) + N.y*(N.x*dy(Vx) + N.y*dy(Vy)))*adju) 
+ - int1d(Th, 3.00000000000000)(sigma*varepsilon*(uamb^4.0 - u^4.0)*(dx(Vx) + dy(Vy))*adju) 
+ + int2d(Th)((1.00000000000000*(phi<0) + 0.000130000000000000*(1-(phi<0)))*ell*(dx(Vx) + dy(Vy))) 
+ + int2d(Th)((1.00000000000000*(phi<0) + 0.000130000000000000*(1-(phi<0)))*k0*(-dx(Vx)*dx(adju)*dx(u) + dx(Vx)*dy(adju)*dy(u) - dy(Vx)*dx(adju)*dy(u) - dy(Vx)*dy(adju)*dx(u) - dx(Vy)*dx(adju)*dy(u) - dx(Vy)*dy(adju)*dx(u) + dy(Vy)*dx(adju)*dx(u) - dy(Vy)*dy(adju)*dy(u)));

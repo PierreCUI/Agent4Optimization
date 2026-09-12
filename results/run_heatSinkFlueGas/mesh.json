@@ -1,0 +1,26 @@
+{
+  "extracted": {
+    "category": "code",
+    "mesh_code": "real L = 1.0;    // normalized design-domain width\nreal H = 1.0;    // normalized design-domain height\nreal lq = 0.2;   // half-length of the heated segment (hot side = central 40%)\nborder C01(t=0, L/2-lq){x=t; y=0; label=1;}         // bottom edge, adiabatic left\nborder C02(t=0, 2*lq){x=L/2-lq+t; y=0; label=2;}    // bottom edge, convective heating\nborder C03(t=0, L/2-lq){x=L/2+lq+t; y=0; label=1;}  // bottom edge, adiabatic right\nborder C04(t=0, H){x=L; y=t; label=3;}              // right edge, convection\nborder C05(t=0, L){x=L-t; y=H; label=3;}            // top edge, convection\nborder C06(t=0, H){x=0; y=H-t; label=3;}            // left edge, convection\nint n = 50;\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
+    "geometry_description": "The design domain is the normalized unit square D = [0,1] x [0,1] (cross-section of the heat sink); the bottom edge contains a central heated segment of length 0.4; normalized mesh parameters are L=1.0, H=1.0, lq=0.2.",
+    "labels_found": [
+      "1",
+      "2",
+      "3"
+    ],
+    "has_syntax_errors": false,
+    "syntax_error_details": ""
+  },
+  "designed": {
+    "mesh_code": "real L = 1.0;    // normalized design-domain width\nreal H = 1.0;    // normalized design-domain height\nreal lq = 0.2;   // half-length of the heated segment (hot side = central 40%)\nborder C01(t=0, L/2-lq){x=t; y=0; label=1;}         // bottom edge, adiabatic left\nborder C02(t=0, 2*lq){x=L/2-lq+t; y=0; label=2;}    // bottom edge, convective heating\nborder C03(t=0, L/2-lq){x=L/2+lq+t; y=0; label=1;}  // bottom edge, adiabatic right\nborder C04(t=0, H){x=L; y=t; label=3;}              // right edge, convection\nborder C05(t=0, L){x=L-t; y=H; label=3;}            // top edge, convection\nborder C06(t=0, H){x=0; y=H-t; label=3;}            // left edge, convection\nint n = 50;\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
+    "mesh_code_source": "extracted",
+    "mesh_code_rationale": "",
+    "labels_used": [
+      "1",
+      "2",
+      "3"
+    ],
+    "dimension": 2,
+    "domain_description": "Unit-square heat-sink design domain D=[0,1]x[0,1] with a central heated bottom segment (label 2), adiabatic remaining bottom edges (label 1), and convection cooling edges on the right, top, and left boundaries (label 3)."
+  }
+}

@@ -21,6 +21,6 @@
       "4"
     ],
     "dimension": 2,
-    "domain_description": "A 2D rectangular cantilever domain with a small loaded segment on the right edge, a clamped left edge, and homogeneous Neumann boundaries elsewhere."
+    "domain_description": "A 2.0 by 1.0 rectangular cantilever domain, with the left edge labeled 4, a small loaded segment on the right edge labeled 2, and all other boundary portions labeled 1."
   }
 }

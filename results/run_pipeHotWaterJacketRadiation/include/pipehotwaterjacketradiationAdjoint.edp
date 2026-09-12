@@ -1,0 +1,13 @@
+varf pipehotwaterjacketradiationAdjoint([adju],[deltau]) = 
+    -int1d(Th, 3.00000000000000)(qb*deltau) 
+ + int1d(Th, 3.00000000000000)(h*deltau*adju) 
+ + int1d(Th, 2.00000000000000)(hH*deltau*adju) 
+ - int1d(Th, 3.00000000000000)(-4.0*sigma*varepsilon*deltau*adju*u^3.0) 
+ + int2d(Th)((1.00000000000000*(phi<0) + 0.000130000000000000*(1-(phi<0)))*k0*(dx(deltau)*dx(adju) + dy(deltau)*dy(adju)));
+
+   matrix adjointMatrix = pipehotwaterjacketradiationAdjoint(Vhu, Vhu);
+   set(adjointMatrix, solver=sparsesolver);
+   real[int] adjointrhs = pipehotwaterjacketradiationAdjoint(0,Vhu);
+   real[int] adjointsol = adjointMatrix^-1 * adjointrhs;
+   adjointsol = -adjointsol; 
+   [adju[]] = adjointsol; 

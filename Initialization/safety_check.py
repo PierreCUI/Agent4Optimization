@@ -8,7 +8,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from utils import parser_json
+from utils import parser_json  # noqa: E402
 
 # ======================================================================
 # prompts
@@ -91,14 +91,30 @@ def safety_check(agent, problem_description):
 
     try:
         result = json.loads(parser_json(raw_response))
-        classification = result.get("classification", "reject")
-        filtered_description = result.get("filtered_description", "")
-        reason = result.get("reason", "unknown reason")
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         warnings.warn(
             f"Safety check JSON parsing failed: {e}. Falling back to 'pass' to avoid blocking legitimate queries."
         )
         return "pass", problem_description, ""
+    if not isinstance(result, dict):
+        # Valid JSON that is not an object (array/string/number) — same
+        # handling as a parse failure: fail open, never crash the pipeline.
+        warnings.warn(
+            f"Safety check returned non-object JSON ({type(result).__name__}); falling back to 'pass'."
+        )
+        return "pass", problem_description, ""
+
+    classification = result.get("classification")
+    if classification is None:
+        # A parsable-but-partial response (description present, category
+        # key omitted) must not hard-reject a legitimate query — same
+        # fail-open policy as the JSON parse failures above.
+        warnings.warn(
+            "Safety check response lacks 'classification'; falling back to 'pass'."
+        )
+        return "pass", problem_description, ""
+    filtered_description = result.get("filtered_description", "")
+    reason = result.get("reason", "unknown reason")
 
     if classification == "reject":
         return "reject", "", f"Query rejected: {reason}"
@@ -150,7 +166,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     for label, query in [("PASS", test_pass), ("REJECT", test_reject), ("PARTIAL", test_partial)]:
-        print(f"\n── Test: should be '{label}' ──")
+        print(f"\n-- Test: should be '{label}' --")
         status, desc, msg = safety_check(agent, query)
         print(f"  status:   {status}")
         if status != "pass":

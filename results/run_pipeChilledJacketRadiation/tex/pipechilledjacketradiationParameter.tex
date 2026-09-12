@@ -1,0 +1,26 @@
+\documentclass[preview]{standalone}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{bm}
+\let\oldcdot\cdot
+\usepackage{breqn}
+\let\cdot\oldcdot
+\begin{document}
+\begin{spacing}{1.2}
+\begin{tabular}{cccl}
+\toprule
+Dirichlet penalty coefficient & $pen$ & 1.00e+15 & $\frac{W}{K m^2}$ \\ 
+Stefan-Boltzmann constant & $\sigma$ & 5.67e-08 & $\frac{W}{K^4 m^2}$ \\ 
+ambient temperature & $u_{amb}$ & 298 & $K$ \\ 
+casing temperature weight (h*(u_amb-u_C)) & $q_{b}$ & 750 & $\frac{W}{m^2}$ \\ 
+convective heat transfer coefficient (environment) & $h$ & 25 & $\frac{W}{K m^2}$ \\ 
+refrigerant temperature (evaporator) & $u_{C}$ & 268 & $K$ \\ 
+surface emissivity (oxidised aluminium) & $\varepsilon$ & 0.8 & $-$ \\ 
+thermal conductivity (aluminium) & $k_{0}$ & 200 & $\frac{W}{K m}$ \\ 
+volume weight (initial estimate, calibrated by pipeline) & $\ell$ & 9.00e+03 & $\frac{W K}{m^3}$ \\ 
+\bottomrule
+\end{tabular}
+\end{spacing}
+\end{document}

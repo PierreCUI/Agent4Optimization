@@ -5,7 +5,7 @@
     "dimension": 2,
     "domain_name": "D",
     "mesh_variable": "Th",
-    "mesh_file": "meshelasticCantilever.txt",
+    "mesh_file": "mesh.txt",
     "mesh_labels_used": [
       "1",
       "2",
@@ -15,12 +15,12 @@
       {
         "name": "\\Gamma_N",
         "kind": "Neumann",
-        "description": "loaded boundary"
+        "description": "loaded boundary with vertical load component f"
       },
       {
         "name": "\\Gamma_4",
         "kind": "Dirichlet",
-        "description": "fixed boundary"
+        "description": "boundary with homogeneous Dirichlet condition u=0"
       }
     ],
     "fields": [
@@ -37,7 +37,7 @@
     ],
     "test_functions": [
       {
-        "name": "δu",
+        "name": "delta_u",
         "latex": "\\delta\\mathbf{u}",
         "type": "vector",
         "fe_space": "P2"
@@ -75,9 +75,14 @@
     ],
     "expressions": [
       {
+        "name": "lagrangian",
+        "latex": "\\mathcal L([\\mathbf u],[\\delta\\mathbf u])",
+        "formula": "J(\\mathbf u) - \\int_{\\Gamma_N} f (\\mathbf e_y \\cdot \\delta\\mathbf u)\\,ds_x + \\int_D (\\pmb\\sigma(\\mathbf u):\\nabla \\delta\\mathbf u)\\,dx"
+      },
+      {
         "name": "lambda",
         "latex": "\\lambda",
-        "formula": "-\\frac{E\\nu}{(\\nu+1)(2\\nu-1)}"
+        "formula": "-\\frac{E \\nu}{(\\nu+1)(2\\nu-1)}"
       },
       {
         "name": "mu",
@@ -86,48 +91,48 @@
       },
       {
         "name": "epsilon",
-        "latex": "\\pmb{\\varepsilon}(\\mathbf{u})",
-        "formula": "\\frac{\\nabla\\mathbf{u}+\\nabla\\mathbf{u}^\\top}{2}"
+        "latex": "\\pmb\\varepsilon(\\mathbf u)",
+        "formula": "\\frac{\\nabla \\mathbf u + (\\nabla \\mathbf u)^\\top}{2}"
       },
       {
         "name": "sigma",
-        "latex": "\\pmb{\\sigma}(\\mathbf{u})",
-        "formula": "\\chi\\left(\\mathbf{I}\\lambda\\operatorname{tr}(\\pmb{\\varepsilon}(\\mathbf{u}))+2\\mu\\pmb{\\varepsilon}(\\mathbf{u})\\right)"
-      },
-      {
-        "name": "partial_u_J",
-        "latex": "\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}J(\\delta\\mathbf{u},\\mathbf{u})",
-        "formula": "\\int_D \\left(\\pmb{\\sigma}(\\delta\\mathbf{u}):\\pmb{\\varepsilon}(\\mathbf{u})\\right)+\\left(\\pmb{\\sigma}(\\mathbf{u}):\\pmb{\\varepsilon}(\\delta\\mathbf{u})\\right)dx"
-      },
-      {
-        "name": "partial_t_sigma",
-        "latex": "\\partial_t\\pmb{\\sigma}(\\mathbf{V},\\mathbf{u})",
-        "formula": "\\chi\\left(\\mathbf{I}\\lambda\\operatorname{tr}(\\partial_t\\pmb{\\varepsilon}(\\mathbf{V},\\mathbf{u}))+2\\mu\\partial_t\\pmb{\\varepsilon}(\\mathbf{V},\\mathbf{u})\\right)"
+        "latex": "\\pmb\\sigma(\\mathbf u)",
+        "formula": "\\chi\\left(\\mathbf I \\lambda \\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu \\pmb\\varepsilon(\\mathbf u)\\right)"
       },
       {
         "name": "partial_t_epsilon",
-        "latex": "\\partial_t\\pmb{\\varepsilon}(\\mathbf{V},\\mathbf{u})",
-        "formula": "-\\frac{(\\nabla\\mathbf{u}\\cdot\\nabla\\mathbf{V})+(\\nabla\\mathbf{u}\\cdot\\nabla\\mathbf{V})^\\top}{2}"
+        "latex": "\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u)",
+        "formula": "-\\frac{(\\nabla \\mathbf u \\cdot \\nabla \\mathbf V) + (\\nabla \\mathbf u \\cdot \\nabla \\mathbf V)^\\top}{2}"
+      },
+      {
+        "name": "partial_t_sigma",
+        "latex": "\\partial_t \\pmb\\sigma(\\mathbf V,\\mathbf u)",
+        "formula": "\\chi\\left(\\mathbf I \\lambda \\operatorname{tr}(\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u)) + 2\\mu \\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u)\\right)"
       },
       {
         "name": "partial_t_J",
-        "latex": "\\partial_t J(\\mathbf{V},\\mathbf{u})",
-        "formula": "\\int_D \\ell\\chi\\operatorname{div}\\mathbf{V}dx+\\int_D \\operatorname{div}\\mathbf{V}(\\pmb{\\sigma}(\\mathbf{u}):\\pmb{\\varepsilon}(\\mathbf{u}))+(\\partial_t\\pmb{\\sigma}(\\mathbf{V},\\mathbf{u}):\\pmb{\\varepsilon}(\\mathbf{u}))+(\\pmb{\\sigma}(\\mathbf{u}):\\partial_t\\pmb{\\varepsilon}(\\mathbf{V},\\mathbf{u}))dx"
+        "latex": "\\partial_t J(\\mathbf V,\\mathbf u)",
+        "formula": "\\int_D \\ell \\chi \\operatorname{div}\\mathbf V \\,dx + \\int_D \\operatorname{div}\\mathbf V (\\pmb\\sigma(\\mathbf u):\\pmb\\varepsilon(\\mathbf u)) + (\\partial_t \\pmb\\sigma(\\mathbf V,\\mathbf u):\\pmb\\varepsilon(\\mathbf u)) + (\\pmb\\sigma(\\mathbf u):\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u))\\,dx"
       },
       {
         "name": "V_epsilon",
-        "latex": "\\mathcal{V}(\\pmb{\\varepsilon})",
-        "formula": "\\frac{(\\nabla\\mathbf{u}\\cdot\\mathbf{F}^{-1}(t))+(\\nabla\\mathbf{u}\\cdot\\mathbf{F}^{-1}(t))^\\top}{2}"
+        "latex": "\\mathcal V(\\pmb\\varepsilon)",
+        "formula": "\\frac{(\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)) + ((\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)))^\\top}{2}"
       },
       {
         "name": "V_sigma",
-        "latex": "\\mathcal{V}(\\pmb{\\sigma})",
-        "formula": "\\chi\\left(\\mathbf{I}\\lambda\\operatorname{tr}(\\mathcal{V}(\\pmb{\\varepsilon}))+2\\mu\\mathcal{V}(\\pmb{\\varepsilon})\\right)"
+        "latex": "\\mathcal V(\\pmb\\sigma)",
+        "formula": "\\chi\\left(\\mathbf I \\lambda \\operatorname{tr}(\\mathcal V(\\pmb\\varepsilon)) + 2\\mu \\mathcal V(\\pmb\\varepsilon)\\right)"
       },
       {
         "name": "V_J",
-        "latex": "\\mathcal{V}(J)",
-        "formula": "\\int_D \\ell\\chi\\operatorname{det}\\mathbf{F}(t)dx+\\int_D \\operatorname{det}\\mathbf{F}(t)(\\mathcal{V}(\\pmb{\\sigma}):\\mathcal{V}(\\pmb{\\varepsilon}))dx"
+        "latex": "\\mathcal V(J)",
+        "formula": "\\int_D \\ell \\chi \\operatorname{det}\\mathbf F(t)\\,dx + \\int_D \\operatorname{det}\\mathbf F(t) (\\mathcal V(\\pmb\\sigma):\\mathcal V(\\pmb\\varepsilon))\\,dx"
+      },
+      {
+        "name": "partial_J",
+        "latex": "\\partial_{(\\mathbf u,\\delta\\mathbf u)} J(\\delta\\mathbf u,\\mathbf u)",
+        "formula": "\\int_D (\\pmb\\sigma(\\delta\\mathbf u):\\pmb\\varepsilon(\\mathbf u)) + (\\pmb\\sigma(\\mathbf u):\\pmb\\varepsilon(\\delta\\mathbf u))\\,dx"
       }
     ],
     "characteristic_function": {
@@ -137,25 +142,26 @@
     },
     "objective": {
       "name": "J",
-      "description": "objective functional of the linear elasticity problem",
+      "description": "Objective functional consisting of a weighted domain integral and the elastic energy",
       "terms": [
-        "\\int_D \\ell\\chi dx",
-        "\\int_D (\\pmb{\\sigma}(\\mathbf{u}):\\pmb{\\varepsilon}(\\mathbf{u})) dx"
+        "\\int_D \\ell \\chi \\,dx",
+        "\\int_D (\\pmb\\sigma(\\mathbf u):\\pmb\\varepsilon(\\mathbf u))\\,dx"
       ]
     },
     "state_equation": {
-      "description": "linear elasticity state equation",
-      "weak_form_lhs": "-\\int_{\\Gamma_N} f(\\mathbf{e}_y\\cdot\\delta\\mathbf{u}) ds + \\int_D (\\pmb{\\sigma}(\\mathbf{u}):\\nabla\\delta\\mathbf{u}) dx",
+      "description": "Find u in V_u such that the weak linear elasticity equation holds for all delta_u in V_delta_u",
+      "weak_form_lhs": "\\int_D (\\pmb\\sigma(\\mathbf u):\\nabla \\delta\\mathbf u)\\,dx - \\int_{\\Gamma_N} f (\\mathbf e_y \\cdot \\delta\\mathbf u)\\,ds_x",
       "weak_form_rhs": "0",
       "is_nonlinear": false
     },
     "adjoint_equation": {
-      "description": "adjoint state equation",
-      "weak_form_lhs": "\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}J(\\delta\\mathbf{u},\\mathbf{u}) + \\int_D (\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}\\pmb{\\sigma}(\\delta\\mathbf{u}):\\nabla\\tilde{\\mathbf{u}}) dx",
+      "description": "Adjoint equation for tilde u in V_delta_u with test functions delta_u in V_u",
+      "weak_form_lhs": "\\int_D \\left(\\partial_{(\\mathbf u,\\delta\\mathbf u)} \\pmb\\sigma(\\delta\\mathbf u):\\nabla \\tilde{\\mathbf u}\\right)\\,dx + \\int_D \\left(\\pmb\\sigma(\\delta\\mathbf u):\\pmb\\varepsilon(\\mathbf u)\\right) + \\left(\\pmb\\sigma(\\mathbf u):\\pmb\\varepsilon(\\delta\\mathbf u)\\right)\\,dx",
       "weak_form_rhs": "0"
     },
     "shape_derivative": {
-      "volume_expression": "-\\left(\\int_{\\Gamma_N} f\\operatorname{div}\\mathbf{V}(\\mathbf{e}_y\\cdot\\tilde{\\mathbf{u}}) ds - \\int_{\\Gamma_N} f(\\mathbf{n}\\cdot(\\mathbf{n}\\cdot\\nabla\\mathbf{V}))(\\mathbf{e}_y\\cdot\\tilde{\\mathbf{u}}) ds\\right)+\\partial_t J(\\mathbf{V},\\mathbf{u})+\\int_D \\operatorname{div}\\mathbf{V}(\\pmb{\\sigma}(\\mathbf{u}):\\nabla\\tilde{\\mathbf{u}})+(\\partial_t\\pmb{\\sigma}(\\mathbf{V},\\mathbf{u}):\\nabla\\tilde{\\mathbf{u}})-(\\pmb{\\sigma}(\\mathbf{u}):(\\nabla\\tilde{\\mathbf{u}}\\cdot\\nabla\\mathbf{V})) dx"
+      "boundary_expression": "-\\left( \\int_{\\Gamma_N} f \\operatorname{div}\\mathbf V (\\mathbf e_y \\cdot \\tilde{\\mathbf u})\\,ds_x - \\int_{\\Gamma_N} f \\left(\\mathbf n \\cdot \\left(\\mathbf n \\cdot \\nabla \\mathbf V\\right)\\right) (\\mathbf e_y \\cdot \\tilde{\\mathbf u})\\,ds_x \\right)",
+      "volume_expression": "\\partial_t J(\\mathbf V,\\mathbf u) + \\int_D \\operatorname{div}\\mathbf V (\\pmb\\sigma(\\mathbf u):\\nabla \\tilde{\\mathbf u}) + (\\partial_t \\pmb\\sigma(\\mathbf V,\\mathbf u):\\nabla \\tilde{\\mathbf u}) - (\\pmb\\sigma(\\mathbf u):(\\nabla \\tilde{\\mathbf u}\\cdot\\nabla \\mathbf V))\\,dx"
     }
   },
   "designed": {
@@ -163,68 +169,67 @@
     "problem_type_source": "extracted",
     "problem_name": "run_linearElasticity",
     "problem_name_source": "designed",
-    "problem_name_rationale": "Run name specified by the user.",
+    "problem_name_rationale": "Target run name supplied in the task; underlying extracted problem is linearElasticity.",
     "dimension": 2,
     "dimension_source": "extracted",
     "domain_name": "D",
     "domain_name_source": "extracted",
     "mesh_variable": "Th",
     "mesh_variable_source": "extracted",
-    "mesh_file": "meshelasticCantilever.txt",
+    "mesh_file": "mesh.txt",
     "mesh_file_source": "extracted",
     "objective_name": "J",
     "objective_name_source": "extracted",
-    "objective_description": "objective functional of the linear elasticity problem",
+    "objective_description": "Objective functional consisting of a weighted domain integral and the elastic energy",
     "objective_description_source": "extracted",
     "objective_terms": [
-      "\\int_D \\ell\\chi dx",
-      "\\int_D (\\pmb{\\sigma}(\\mathbf{u}):\\pmb{\\varepsilon}(\\mathbf{u})) dx"
+      "\\int_D \\ell \\chi \\,dx",
+      "\\int_D (\\pmb\\sigma(\\mathbf u):\\pmb\\varepsilon(\\mathbf u))\\,dx"
     ],
-    "objective_terms_source": "extracted",
-    "state_description": "linear elasticity state equation",
+    "objective_terms_source": [
+      "extracted",
+      "extracted"
+    ],
+    "state_description": "Find u in V_u such that the weak linear elasticity equation holds for all delta_u in V_delta_u",
     "state_description_source": "extracted",
-    "state_weak_lhs": "-\\int_{\\Gamma_N} f(\\mathbf{e}_y\\cdot\\delta\\mathbf{u}) ds + \\int_D (\\pmb{\\sigma}(\\mathbf{u}):\\nabla\\delta\\mathbf{u}) dx",
+    "state_weak_lhs": "\\int_D (\\pmb\\sigma(\\mathbf u):\\nabla \\delta\\mathbf u)\\,dx - \\int_{\\Gamma_N} f (\\mathbf e_y \\cdot \\delta\\mathbf u)\\,ds_x",
     "state_weak_lhs_source": "extracted",
     "state_weak_rhs": "0",
     "state_weak_rhs_source": "extracted",
     "state_is_nonlinear": false,
     "state_is_nonlinear_source": "extracted",
-    "adjoint_description": "adjoint state equation",
+    "adjoint_description": "Adjoint equation for tilde u in V_delta_u with test functions delta_u in V_u",
     "adjoint_description_source": "extracted",
-    "adjoint_weak_lhs": "\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}J(\\delta\\mathbf{u},\\mathbf{u}) + \\int_D (\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}\\pmb{\\sigma}(\\delta\\mathbf{u}):\\nabla\\tilde{\\mathbf{u}}) dx",
+    "adjoint_weak_lhs": "\\int_D \\left(\\partial_{(\\mathbf u,\\delta\\mathbf u)} \\pmb\\sigma(\\delta\\mathbf u):\\nabla \\tilde{\\mathbf u}\\right)\\,dx + \\int_D \\left(\\pmb\\sigma(\\delta\\mathbf u):\\pmb\\varepsilon(\\mathbf u)\\right) + \\left(\\pmb\\sigma(\\mathbf u):\\pmb\\varepsilon(\\delta\\mathbf u)\\right)\\,dx",
     "adjoint_weak_lhs_source": "extracted",
     "adjoint_weak_rhs": "0",
     "adjoint_weak_rhs_source": "extracted",
-    "shape_derivative_volume": "-\\left(\\int_{\\Gamma_N} f\\operatorname{div}\\mathbf{V}(\\mathbf{e}_y\\cdot\\tilde{\\mathbf{u}}) ds - \\int_{\\Gamma_N} f(\\mathbf{n}\\cdot(\\mathbf{n}\\cdot\\nabla\\mathbf{V}))(\\mathbf{e}_y\\cdot\\tilde{\\mathbf{u}}) ds\\right)+\\partial_t J(\\mathbf{V},\\mathbf{u})+\\int_D \\operatorname{div}\\mathbf{V}(\\pmb{\\sigma}(\\mathbf{u}):\\nabla\\tilde{\\mathbf{u}})+(\\partial_t\\pmb{\\sigma}(\\mathbf{V},\\mathbf{u}):\\nabla\\tilde{\\mathbf{u}})-(\\pmb{\\sigma}(\\mathbf{u}):(\\nabla\\tilde{\\mathbf{u}}\\cdot\\nabla\\mathbf{V})) dx",
-    "shape_derivative_volume_source": "extracted",
-    "shape_derivative_boundary": "-\\int_{\\Gamma_N} f\\operatorname{div}\\mathbf{V}(\\mathbf{e}_y\\cdot\\tilde{\\mathbf{u}}) ds + \\int_{\\Gamma_N} f(\\mathbf{n}\\cdot(\\mathbf{n}\\cdot\\nabla\\mathbf{V}))(\\mathbf{e}_y\\cdot\\tilde{\\mathbf{u}}) ds",
-    "shape_derivative_boundary_source": "designed",
-    "shape_derivative_boundary_rationale": "Boundary part isolated from the extracted shape derivative expression.",
+    "shape_derivative_volume": "\\partial_t J(\\mathbf V,\\mathbf u) + \\int_D \\operatorname{div}\\mathbf V (\\pmb\\sigma(\\mathbf u):\\nabla \\tilde{\\mathbf u}) + (\\partial_t \\pmb\\sigma(\\mathbf V,\\mathbf u):\\nabla \\tilde{\\mathbf u}) - (\\pmb\\sigma(\\mathbf u):(\\nabla \\tilde{\\mathbf u}\\cdot\\nabla \\mathbf V))\\,dx",
+    "shape_derivative_boundary": "-\\left( \\int_{\\Gamma_N} f \\operatorname{div}\\mathbf V (\\mathbf e_y \\cdot \\tilde{\\mathbf u})\\,ds_x - \\int_{\\Gamma_N} f \\left(\\mathbf n \\cdot \\left(\\mathbf n \\cdot \\nabla \\mathbf V\\right)\\right) (\\mathbf e_y \\cdot \\tilde{\\mathbf u})\\,ds_x \\right)",
     "shape_derivative_source": "extracted",
     "boundaries": [
       {
         "name": "\\Gamma_1",
         "label": "1",
         "kind": "Neumann",
-        "description": "free boundary with homogeneous Neumann condition",
+        "description": "Unloaded free boundary (top/bottom edges) allowed to evolve during optimization",
         "source": "designed",
-        "rationale": "Label 1 from mesh_labels_used; added as the unloaded Neumann boundary of the cantilever."
+        "rationale": "Mesh label 1 appears in mesh_labels_used but has no boundary condition in the extracted spec; completed as a homogeneous Neumann free boundary."
       },
       {
         "name": "\\Gamma_N",
         "label": "2",
         "kind": "Neumann",
-        "description": "loaded boundary with prescribed traction f e_y",
+        "description": "Loaded boundary with vertical load component f",
         "source": "designed",
-        "rationale": "Extracted loaded boundary Gamma_N; label 2 assigned by geometric reasoning to the right edge of the cantilever mesh."
+        "rationale": "Name and Neumann condition are extracted; label 2 is assigned by geometric reconciliation of a cantilever mesh with labels 1, 2 and 4, where the right edge carries the vertical load."
       },
       {
         "name": "\\Gamma_4",
         "label": "4",
         "kind": "Dirichlet",
-        "description": "fixed boundary with zero displacement",
-        "source": "designed",
-        "rationale": "Extracted fixed boundary Gamma_4; label 4 assigned to the left clamped edge."
+        "description": "Boundary with homogeneous Dirichlet condition u=0",
+        "source": "extracted"
       }
     ],
     "fields": [
@@ -238,8 +243,8 @@
         "dirichlet_labels": [
           "4"
         ],
-        "source": "mixed",
-        "rationale": "Displacement field from extracted spec; unit chosen as meter and Dirichlet label converted to concrete mesh label 4."
+        "source": "designed",
+        "rationale": "Vector displacement field u and its P2 FE space are extracted; the unit and the numeric Dirichlet label are completed for consistency with boundary label 4."
       }
     ],
     "test_functions": [
@@ -287,9 +292,15 @@
     ],
     "expressions": [
       {
+        "name": "lagrangian",
+        "latex": "\\mathcal L([\\mathbf u],[\\delta\\mathbf u])",
+        "formula": "J(\\mathbf u) - \\int_{\\Gamma_N} f (\\mathbf e_y \\cdot \\delta\\mathbf u)\\,ds_x + \\int_D (\\pmb\\sigma(\\mathbf u):\\nabla \\delta\\mathbf u)\\,dx",
+        "source": "extracted"
+      },
+      {
         "name": "lambda",
         "latex": "\\lambda",
-        "formula": "-\\frac{E\\nu}{(\\nu+1)(2\\nu-1)}",
+        "formula": "-\\frac{E \\nu}{(\\nu+1)(2\\nu-1)}",
         "source": "extracted"
       },
       {
@@ -300,93 +311,88 @@
       },
       {
         "name": "epsilon",
-        "latex": "\\pmb{\\varepsilon}(\\mathbf{u})",
-        "formula": "\\frac{\\nabla\\mathbf{u}+\\nabla\\mathbf{u}^\\top}{2}",
+        "latex": "\\pmb\\varepsilon(\\mathbf u)",
+        "formula": "\\frac{\\nabla \\mathbf u + (\\nabla \\mathbf u)^\\top}{2}",
         "source": "extracted"
       },
       {
         "name": "sigma",
-        "latex": "\\pmb{\\sigma}(\\mathbf{u})",
-        "formula": "\\chi\\left(\\mathbf{I}\\lambda\\operatorname{tr}(\\pmb{\\varepsilon}(\\mathbf{u}))+2\\mu\\pmb{\\varepsilon}(\\mathbf{u})\\right)",
-        "source": "extracted"
-      },
-      {
-        "name": "partial_u_J",
-        "latex": "\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}J(\\delta\\mathbf{u},\\mathbf{u})",
-        "formula": "\\int_D \\left(\\pmb{\\sigma}(\\delta\\mathbf{u}):\\pmb{\\varepsilon}(\\mathbf{u})\\right)+\\left(\\pmb{\\sigma}(\\mathbf{u}):\\pmb{\\varepsilon}(\\delta\\mathbf{u})\\right)dx",
-        "source": "extracted"
-      },
-      {
-        "name": "partial_t_sigma",
-        "latex": "\\partial_t\\pmb{\\sigma}(\\mathbf{V},\\mathbf{u})",
-        "formula": "\\chi\\left(\\mathbf{I}\\lambda\\operatorname{tr}(\\partial_t\\pmb{\\varepsilon}(\\mathbf{V},\\mathbf{u}))+2\\mu\\partial_t\\pmb{\\varepsilon}(\\mathbf{V},\\mathbf{u})\\right)",
+        "latex": "\\pmb\\sigma(\\mathbf u)",
+        "formula": "\\chi\\left(\\mathbf I \\lambda \\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu \\pmb\\varepsilon(\\mathbf u)\\right)",
         "source": "extracted"
       },
       {
         "name": "partial_t_epsilon",
-        "latex": "\\partial_t\\pmb{\\varepsilon}(\\mathbf{V},\\mathbf{u})",
-        "formula": "-\\frac{(\\nabla\\mathbf{u}\\cdot\\nabla\\mathbf{V})+(\\nabla\\mathbf{u}\\cdot\\nabla\\mathbf{V})^\\top}{2}",
+        "latex": "\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u)",
+        "formula": "-\\frac{(\\nabla \\mathbf u \\cdot \\nabla \\mathbf V) + (\\nabla \\mathbf u \\cdot \\nabla \\mathbf V)^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "partial_t_sigma",
+        "latex": "\\partial_t \\pmb\\sigma(\\mathbf V,\\mathbf u)",
+        "formula": "\\chi\\left(\\mathbf I \\lambda \\operatorname{tr}(\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u)) + 2\\mu \\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u)\\right)",
         "source": "extracted"
       },
       {
         "name": "partial_t_J",
-        "latex": "\\partial_t J(\\mathbf{V},\\mathbf{u})",
-        "formula": "\\int_D \\ell\\chi\\operatorname{div}\\mathbf{V}dx+\\int_D \\operatorname{div}\\mathbf{V}(\\pmb{\\sigma}(\\mathbf{u}):\\pmb{\\varepsilon}(\\mathbf{u}))+(\\partial_t\\pmb{\\sigma}(\\mathbf{V},\\mathbf{u}):\\pmb{\\varepsilon}(\\mathbf{u}))+(\\pmb{\\sigma}(\\mathbf{u}):\\partial_t\\pmb{\\varepsilon}(\\mathbf{V},\\mathbf{u}))dx",
+        "latex": "\\partial_t J(\\mathbf V,\\mathbf u)",
+        "formula": "\\int_D \\ell \\chi \\operatorname{div}\\mathbf V \\,dx + \\int_D \\operatorname{div}\\mathbf V (\\pmb\\sigma(\\mathbf u):\\pmb\\varepsilon(\\mathbf u)) + (\\partial_t \\pmb\\sigma(\\mathbf V,\\mathbf u):\\pmb\\varepsilon(\\mathbf u)) + (\\pmb\\sigma(\\mathbf u):\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u))\\,dx",
         "source": "extracted"
       },
       {
         "name": "V_epsilon",
-        "latex": "\\mathcal{V}(\\pmb{\\varepsilon})",
-        "formula": "\\frac{(\\nabla\\mathbf{u}\\cdot\\mathbf{F}^{-1}(t))+(\\nabla\\mathbf{u}\\cdot\\mathbf{F}^{-1}(t))^\\top}{2}",
+        "latex": "\\mathcal V(\\pmb\\varepsilon)",
+        "formula": "\\frac{(\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)) + ((\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)))^\\top}{2}",
         "source": "extracted"
       },
       {
         "name": "V_sigma",
-        "latex": "\\mathcal{V}(\\pmb{\\sigma})",
-        "formula": "\\chi\\left(\\mathbf{I}\\lambda\\operatorname{tr}(\\mathcal{V}(\\pmb{\\varepsilon}))+2\\mu\\mathcal{V}(\\pmb{\\varepsilon})\\right)",
+        "latex": "\\mathcal V(\\pmb\\sigma)",
+        "formula": "\\chi\\left(\\mathbf I \\lambda \\operatorname{tr}(\\mathcal V(\\pmb\\varepsilon)) + 2\\mu \\mathcal V(\\pmb\\varepsilon)\\right)",
         "source": "extracted"
       },
       {
         "name": "V_J",
-        "latex": "\\mathcal{V}(J)",
-        "formula": "\\int_D \\ell\\chi\\operatorname{det}\\mathbf{F}(t)dx+\\int_D \\operatorname{det}\\mathbf{F}(t)(\\mathcal{V}(\\pmb{\\sigma}):\\mathcal{V}(\\pmb{\\varepsilon}))dx",
+        "latex": "\\mathcal V(J)",
+        "formula": "\\int_D \\ell \\chi \\operatorname{det}\\mathbf F(t)\\,dx + \\int_D \\operatorname{det}\\mathbf F(t) (\\mathcal V(\\pmb\\sigma):\\mathcal V(\\pmb\\varepsilon))\\,dx",
         "source": "extracted"
       },
       {
-        "name": "F",
-        "latex": "\\mathbf{F}(t)",
-        "formula": "\\mathbf{I} + t\\nabla\\mathbf{V}",
-        "source": "designed",
-        "rationale": "Deformation gradient used by the V_epsilon and V_J expressions."
+        "name": "partial_J",
+        "latex": "\\partial_{(\\mathbf u,\\delta\\mathbf u)} J(\\delta\\mathbf u,\\mathbf u)",
+        "formula": "\\int_D (\\pmb\\sigma(\\delta\\mathbf u):\\pmb\\varepsilon(\\mathbf u)) + (\\pmb\\sigma(\\mathbf u):\\pmb\\varepsilon(\\delta\\mathbf u))\\,dx",
+        "source": "extracted"
       }
     ],
     "characteristic_function": {
       "latex": "\\chi(x)",
       "strong_value": 1,
       "weak_value": 0.01,
-      "source": "extracted",
-      "rationale": "Topology characteristic function: strong material chi=1, ersatz void chi=0.01."
+      "source": "extracted"
     },
     "optimization_config": {
-      "mesh_file": "meshelasticCantilever.txt",
-      "hmin": 0.01,
+      "mesh_file": "mesh.txt",
+      "hmin": 0.005,
       "hmax": 0.05,
       "diffusion": 0.0001,
-      "v0": 0.001,
+      "v0": 0.01,
       "iterations": 50,
-      "level_set_initial": "min(0.5 - abs(y-0.5), sqrt((x-1.0)^2 + (y-0.5)^2) - 0.3)",
+      "level_set_initial": "-min(min(x, 2-x), min(y, 1-y))",
       "boundary_labels": [
         "1",
-        "2"
+        "2",
+        "4"
       ],
       "fixed_labels": [
+        "2",
         "4"
       ],
       "extra_params": {
-        "reinit_interval": 5
+        "reinitialization": "pde",
+        "filter_radius": 0.02
       },
-      "source": "mixed",
-      "rationale": "mesh_file extracted; all solver parameters designed for the 2D cantilever topology-optimization run: hmin/hmax resolve the design domain, diffusion and v0 stabilise the level-set evolution, 50 iterations allow convergence, the initial level set is solid except for a central void, and boundary/fixed labels follow the reconciled cantilever labels."
+      "source": "designed",
+      "rationale": "No optimization_config was extracted. Values are designed for a level-set cantilever topology optimization on the 2-by-1 mesh mesh.txt: hmin/hmax follow the domain size, diffusion is a small regularization, v0 is the CFL-scaled normal velocity, the initial level set is the signed-distance fill of the rectangle, and labels 2 and 4 are fixed because they carry the load and Dirichlet conditions."
     }
   }
 }

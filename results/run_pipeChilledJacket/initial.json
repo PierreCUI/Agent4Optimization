@@ -1,0 +1,344 @@
+{
+ "extracted": {
+  "problem_type": "topology_optimization",
+  "problem_name": "pipeChilledJacket",
+  "dimension": 2,
+  "domain_name": "D",
+  "mesh_variable": "Th",
+  "mesh_file": "mesh.txt",
+  "mesh_labels_used": [
+   "3",
+   "2"
+  ],
+  "boundaries": [
+   {
+    "name": "\\Gamma_o",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "outer circle of the pipe casing, fixed boundary exchanging heat with the warm environment through a Robin condition with coefficient h and ambient temperature u_amb",
+    "mesh_label": "3"
+   },
+   {
+    "name": "\\Gamma_i",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "inner circle (tube wall) held at the refrigerant temperature u_C; the constant-temperature condition is imposed as a penalty Robin condition with coefficient pen",
+    "mesh_label": "2"
+   }
+  ],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K"
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "delta_u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity of aluminium",
+    "unit": "W/(m K)"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity of air",
+    "unit": "W/(m K)"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "effective convective heat transfer coefficient of the environment",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature of the warm environment",
+    "unit": "K"
+   },
+   {
+    "name": "u_C",
+    "latex": "u_C",
+    "value": 268,
+    "description": "refrigerant evaporating temperature imposed on the inner wall",
+    "unit": "K"
+   },
+   {
+    "name": "pen",
+    "latex": "\\operatorname{pen}",
+    "value": 1000000000000000,
+    "description": "penalty coefficient implementing the constant-temperature condition on the inner boundary",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "value": 750,
+    "description": "casing temperature weight, q_b = h (u_amb - u_C) = 25 * 30",
+    "unit": "W/m^2"
+   },
+   {
+    "name": "R",
+    "latex": "R",
+    "value": 0.5,
+    "description": "outer radius of the pipe cross-section",
+    "unit": "m"
+   },
+   {
+    "name": "r0",
+    "latex": "r_0",
+    "value": 0.1,
+    "description": "initial inner radius of the design annulus",
+    "unit": "m"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "formula": "h \\left( u_{amb} - u_{C} \\right) = 25 \\times 30 = 750"
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": 0.00013
+  },
+  "objective": {
+   "name": "J",
+   "description": "Minimizing J keeps the casing cold, i.e. it maximizes the heat absorbed from the environment through Gamma_o and delivered to the refrigerant; the outer-surface temperature integral is weighted by q_b and the material cost is weighted by the Lagrange multiplier ell.",
+   "terms": [
+    "\\int_{D} \\ell \\chi \\,dx",
+    "\\int_{\\Gamma_o} q_b u \\,ds_x"
+   ]
+  },
+  "state_equation": {
+   "description": "Linear diffusion (heat conduction) problem for the state u in P2(D) with weak-material conductivity k*chi and Robin-type conditions on the inner and outer circles.",
+   "weak_form_lhs": "\\int_{D} k \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_i} \\operatorname{pen} u \\delta u \\,ds_x + \\int_{\\Gamma_o} h u \\delta u \\,ds_x",
+   "weak_form_rhs": "\\int_{\\Gamma_i} \\operatorname{pen} u_{C} \\delta u \\,ds_x + \\int_{\\Gamma_o} h u_{amb} \\delta u \\,ds_x",
+   "is_nonlinear": false
+  },
+  "adjoint_equation": {
+   "description": "Adjoint state \\tilde u to the direct state u; the adjoint load comes from the partial derivative of the objective, \\partial_u J(\\delta u) = \\int_{\\Gamma_o} q_b \\delta u \\,ds_x.",
+   "weak_form_lhs": "\\int_{D} k \\chi \\left( \\nabla \\delta u \\cdot \\nabla \\tilde u \\right) \\,dx + \\int_{\\Gamma_i} \\operatorname{pen} \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_o} h \\delta u \\tilde u \\,ds_x",
+   "weak_form_rhs": "- \\int_{\\Gamma_o} q_b \\delta u \\,ds_x"
+  },
+  "shape_derivative": {
+   "volume_expression": "\\int_{D} \\left( \\operatorname{div} \\mathbf V \\left( \\nabla u \\cdot \\nabla \\tilde u \\right) - \\left( \\nabla \\tilde u \\cdot \\left( \\nabla u \\cdot \\nabla \\mathbf V \\right) \\right) - \\left( \\nabla u \\cdot \\left( \\nabla \\tilde u \\cdot \\nabla \\mathbf V \\right) \\right) \\right) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf V \\,dx",
+   "boundary_expression": "\\int_{\\Gamma_i} \\kappa \\operatorname{pen} \\left( u - u_{C} \\right) \\tilde u \\left( \\mathbf V \\cdot \\mathbf n \\right) \\,ds_x"
+  }
+ },
+ "designed": {
+  "problem_type": "topology_optimization",
+  "problem_type_source": "extracted",
+  "problem_name": "pipeChilledJacket",
+  "problem_name_source": "extracted",
+  "dimension": 2,
+  "dimension_source": "extracted",
+  "domain_name": "D",
+  "domain_name_source": "extracted",
+  "mesh_variable": "Th",
+  "mesh_variable_source": "extracted",
+  "mesh_file": "mesh.txt",
+  "mesh_file_source": "extracted",
+  "objective_name": "J",
+  "objective_name_source": "extracted",
+  "objective_description": "Minimizing J keeps the casing cold, i.e. it maximizes the heat absorbed from the environment through Gamma_o and delivered to the refrigerant; the outer-surface temperature integral is weighted by q_b and the material cost is weighted by the Lagrange multiplier ell.",
+  "objective_description_source": "extracted",
+  "objective_terms": [
+   "\\int_{D} \\ell \\chi \\,dx",
+   "\\int_{\\Gamma_o} q_b u \\,ds_x"
+  ],
+  "objective_terms_source": "extracted",
+  "state_description": "Linear diffusion (heat conduction) problem for the state u in P2(D) with weak-material conductivity k*chi and Robin-type conditions on the inner and outer circles.",
+  "state_description_source": "extracted",
+  "state_weak_lhs": "\\int_{D} k \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_i} \\operatorname{pen} u \\delta u \\,ds_x + \\int_{\\Gamma_o} h u \\delta u \\,ds_x",
+  "state_weak_lhs_source": "extracted",
+  "state_weak_rhs": "\\int_{\\Gamma_i} \\operatorname{pen} u_{C} \\delta u \\,ds_x + \\int_{\\Gamma_o} h u_{amb} \\delta u \\,ds_x",
+  "state_weak_rhs_source": "extracted",
+  "state_is_nonlinear": false,
+  "state_is_nonlinear_source": "extracted",
+  "adjoint_description": "Adjoint state \\tilde u to the direct state u; the adjoint load comes from the partial derivative of the objective, \\partial_u J(\\delta u) = \\int_{\\Gamma_o} q_b \\delta u \\,ds_x.",
+  "adjoint_description_source": "extracted",
+  "adjoint_weak_lhs": "\\int_{D} k \\chi \\left( \\nabla \\delta u \\cdot \\nabla \\tilde u \\right) \\,dx + \\int_{\\Gamma_i} \\operatorname{pen} \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_o} h \\delta u \\tilde u \\,ds_x",
+  "adjoint_weak_lhs_source": "extracted",
+  "adjoint_weak_rhs": "- \\int_{\\Gamma_o} q_b \\delta u \\,ds_x",
+  "adjoint_weak_rhs_source": "extracted",
+  "shape_derivative_volume": "\\int_{D} \\left( \\operatorname{div} \\mathbf V \\left( \\nabla u \\cdot \\nabla \\tilde u \\right) - \\left( \\nabla \\tilde u \\cdot \\left( \\nabla u \\cdot \\nabla \\mathbf V \\right) \\right) - \\left( \\nabla u \\cdot \\left( \\nabla \\tilde u \\cdot \\nabla \\mathbf V \\right) \\right) \\right) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf V \\,dx",
+  "shape_derivative_volume_source": "extracted",
+  "shape_derivative_boundary": "\\int_{\\Gamma_i} \\kappa \\operatorname{pen} \\left( u - u_{C} \\right) \\tilde u \\left( \\mathbf V \\cdot \\mathbf n \\right) \\,ds_x",
+  "shape_derivative_boundary_source": "extracted",
+  "shape_derivative_source": "extracted",
+  "boundaries": [
+   {
+    "name": "\\Gamma_o",
+    "label": "3",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "outer circle of the pipe casing, fixed boundary exchanging heat with the warm environment through a Robin condition with coefficient h and ambient temperature u_amb",
+    "source": "extracted"
+   },
+   {
+    "name": "\\Gamma_i",
+    "label": "2",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "inner circle (tube wall) held at the refrigerant temperature u_C; the constant-temperature condition is imposed as a penalty Robin condition with coefficient pen",
+    "source": "extracted"
+   }
+  ],
+  "interfaces": [],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": null,
+    "dirichlet_labels": [],
+    "source": "extracted",
+    "rationale": "No Dirichlet boundaries are present; the constant-temperature condition on \\Gamma_i is imposed weakly as a penalty Robin condition, so dirichlet_labels is empty."
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "delta_u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "source": "extracted"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity of aluminium",
+    "unit": "W/(m K)",
+    "source": "extracted"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity of air",
+    "unit": "W/(m K)",
+    "source": "extracted"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "effective convective heat transfer coefficient of the environment",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature of the warm environment",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "u_C",
+    "latex": "u_C",
+    "value": 268,
+    "description": "refrigerant evaporating temperature imposed on the inner wall",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "pen",
+    "latex": "\\operatorname{pen}",
+    "value": 1000000000000000,
+    "description": "penalty coefficient implementing the constant-temperature condition on the inner boundary",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "value": 750,
+    "description": "casing temperature weight, q_b = h (u_amb - u_C) = 25 * 30",
+    "unit": "W/m^2",
+    "source": "extracted"
+   },
+   {
+    "name": "R",
+    "latex": "R",
+    "value": 0.5,
+    "description": "outer radius of the pipe cross-section",
+    "unit": "m",
+    "source": "extracted"
+   },
+   {
+    "name": "r0",
+    "latex": "r_0",
+    "value": 0.1,
+    "description": "initial inner radius of the design annulus",
+    "unit": "m",
+    "source": "extracted"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "formula": "h \\left( u_{amb} - u_{C} \\right) = 25 \\times 30 = 750",
+    "source": "extracted"
+   },
+   {
+    "name": "k",
+    "latex": "k",
+    "formula": "k_0",
+    "source": "designed",
+    "rationale": "The extracted state and adjoint weak forms use the symbol k; it is the solid thermal conductivity k_0 = 200 W/(m K). The weak void conductivity is obtained from the weak characteristic function value 1.3e-4, since k_0 * 1.3e-4 = 0.026 = k_air."
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": 0.00013,
+   "source": "extracted",
+   "rationale": "Weak value chosen so that k_0 * chi_weak = k_air, regularising the void phase."
+  },
+  "optimization_config": {
+   "mesh_file": "mesh.txt",
+   "hmin": 0.005,
+   "hmax": 0.05,
+   "diffusion": 0.0001,
+   "v0": 0.01,
+   "iterations": 30,
+   "level_set_initial": "\\sqrt{x^2 + y^2} - r_0",
+   "boundary_labels": [
+    "2"
+   ],
+   "fixed_labels": [
+    "3"
+   ],
+   "extra_params": {},
+   "source": "designed",
+   "rationale": "Designed from domain size R=0.5 m: hmin=0.005 (1/100 R), hmax=0.05 (1/10 R), diffusion=1e-4, v0=0.01, 30 iterations. Initial level set is positive in the design annulus r>r0, representing a fully solid aluminium casing; Gamma_i (label 2) is movable/design and Gamma_o (label 3) is fixed. The internal level-set boundary label 10 is design by default and is not listed in either boundary label list."
+  }
+ }
+}

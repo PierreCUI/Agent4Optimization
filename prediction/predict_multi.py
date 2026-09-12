@@ -2,8 +2,8 @@
 (parallel).
 
 Full grid over the whole hyperparameter space:
-25 network structures (1 to 5 hidden layers x 64/128/256/512/1024 units)
-x 3 learning rates x 6 batch sizes = 450 configs.
+12 network structures (1 to 3 hidden layers x 128/256/512/1024 units)
+x 3 learning rates x 6 batch sizes = 216 configs.
 Weight decay (1e-5) and patience (300) stay fixed at the baseline values.
 Configs are trained in parallel (WORKERS worker processes; each worker has
 its own CUDA context, so results stay deterministic and identical to a
@@ -36,10 +36,10 @@ CSV_DIR = HERE / "csvs"
 
 WORKERS = 8
 
-# 1 to 5 hidden layers for each width (width-major order)
+# 1 to 3 hidden layers for each width (width-major order)
 STRUCTURES = [[w] * d
-              for w in (64, 128, 256, 512, 1024)
-              for d in (1, 2, 3, 4, 5)]
+              for w in (128, 256, 512, 1024)
+              for d in (1, 2, 3)]
 LRS = [1e-4, 1e-3, 1e-2]
 BATCH_SIZES = [8, 16, 32, 64, 128, 256]
 GRID = [(hidden, lr, bs)
@@ -120,7 +120,7 @@ def ensure_outputs():
 
 
 def main():
-    """Run all 450 configs in parallel (resuming existing results) and
+    """Run all 216 configs in parallel (resuming existing results) and
     write report_multi.md."""
     ensure_outputs()
     # progress goes to stdout and is appended to grid_search.log, so a

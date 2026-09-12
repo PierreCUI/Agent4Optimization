@@ -1,0 +1,402 @@
+{
+ "extracted": {
+  "problem_type": "shape_optimization",
+  "problem_name": "heatSinkWaterWallTempConductivity",
+  "dimension": 2,
+  "domain_name": "D",
+  "mesh_variable": "Th",
+  "mesh_file": "mesh.txt",
+  "mesh_labels_used": [
+   "1",
+   "2",
+   "3",
+   "4"
+  ],
+  "boundaries": [
+   {
+    "name": "\\Gamma_H",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "gas-side convective boundary (central 40% of the bottom edge) with heat transfer coefficient h_H and hot-fluid temperature u_H",
+    "mesh_label": "2"
+   },
+   {
+    "name": "\\Gamma_c",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "air-cooling left and right edges exchanging heat with ambient air through coefficient h; their shape is optimised",
+    "mesh_label": "3"
+   },
+   {
+    "name": "water wall",
+    "kind": "Dirichlet",
+    "design_role": "fixed",
+    "description": "top edge isothermal water-wall heat sink held at the prescribed reference temperature of zero kelvin",
+    "mesh_label": "4"
+   },
+   {
+    "name": "bottom edge adiabatic",
+    "kind": "Neumann",
+    "design_role": "fixed",
+    "description": "remaining parts of the bottom edge, adiabatic (zero flux)",
+    "mesh_label": "1"
+   }
+  ],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "\\left[ u \\right]",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": 0,
+    "dirichlet_labels": [
+     "4"
+    ]
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "delta u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity of aluminium at u_amb",
+    "unit": "W/(K m)"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity of air (weak material)",
+    "unit": "W/(K m)"
+   },
+   {
+    "name": "beta",
+    "latex": "\\beta",
+    "value": 0.0005,
+    "description": "linear temperature coefficient of conductivity",
+    "unit": "1/K"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient (air side)",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature",
+    "unit": "K"
+   },
+   {
+    "name": "h_H",
+    "latex": "h_H",
+    "value": 25,
+    "description": "convective heat transfer coefficient (hot-fluid / gas side)",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_H",
+    "latex": "u_H",
+    "value": 338,
+    "description": "hot-fluid (low-temperature exhaust gas) temperature",
+    "unit": "K"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "value": 1000,
+    "description": "gas-side temperature weight, heat flux the gas side would absorb if the surface reached ambient temperature",
+    "unit": "W/m^2"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "k(u)",
+    "latex": "k(u)",
+    "formula": "k_0 \\left( 1 + \\beta \\left( u - u_{amb}\\right)\\right)"
+   },
+   {
+    "name": "J(u)",
+    "latex": "J(u)",
+    "formula": "\\int_{D} \\ell \\chi \\,dx + \\int_{\\Gamma_H} q_b u \\,ds_x"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "formula": "h_H \\left( u_H - u_{amb}\\right)"
+   },
+   {
+    "name": "chi(x)",
+    "latex": "\\chi(x)",
+    "formula": "1 \\text{ if } \\phi(x) < 0, \\quad k_{air}/k_0 \\text{ if } \\phi(x) \\ge 0"
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi (x)",
+   "strong_value": 1,
+   "weak_value": 0.00013
+  },
+  "objective": {
+   "name": "J(u)",
+   "description": "minimise the gas-side surface temperature at fixed material cost, i.e. maximize the heat recovered from the flue gas",
+   "terms": [
+    "\\int_{D} \\ell \\chi \\,dx (material cost)",
+    "\\int_{\\Gamma_H} q_b u \\,ds_x (gas-side surface temperature weighted by q_b)"
+   ]
+  },
+  "state_equation": {
+   "description": "Non-linear steady heat conduction with temperature-dependent conductivity k(u) and Robin convection on the gas side \\Gamma_H and cooling edges \\Gamma_c; Dirichlet value 0 on the water wall.",
+   "weak_form_lhs": "\\int_{D} k(u) \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} h_H u \\delta u \\,ds_x + \\int_{\\Gamma_c} h u \\delta u \\,ds_x",
+   "weak_form_rhs": "\\int_{\\Gamma_H} h_H u_{H} \\delta u \\,ds_x + \\int_{\\Gamma_c} h u_{amb} \\delta u \\,ds_x",
+   "is_nonlinear": true
+  },
+  "newton_linearisation": {
+   "description": "Newton update \\hat u at state u; conductivity linearised as \\partial_{u}[k(u) \\nabla u \\cdot \\nabla \\delta u] \\hat u = k(u) \\nabla \\hat u \\cdot \\nabla \\delta u + k_0 \\beta \\hat u \\nabla u \\cdot \\nabla \\delta u; state updated as u <- u - \\hat u.",
+   "weak_form": "\\int_{D} k(u) \\chi \\left( \\nabla \\hat u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{D} k_0 \\beta \\hat u \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} h_H \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_c} h \\hat u \\delta u \\,ds_x = \\int_{D} k(u) \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} h_H \\left( u - u_H\\right) \\delta u \\,ds_x + \\int_{\\Gamma_c} h \\left( u - u_{amb}\\right) \\delta u \\,ds_x"
+  },
+  "adjoint_equation": {
+   "description": "Adjoint state \\tilde u to the direct state u; the adjoint operator is the linearisation of the state operator at u (transposed conductivity linearisation), with adjoint load from \\partial_{u} J(\\delta u) = \\int_{\\Gamma_H} q_b \\delta u \\,ds_x.",
+   "weak_form_lhs": "\\int_{D} k(u) \\chi \\left( \\nabla \\delta u \\cdot \\nabla \\tilde u \\right) \\,dx + \\int_{D} k_0 \\beta \\delta u \\chi \\left( \\nabla u \\cdot \\nabla \\tilde u \\right) \\,dx + \\int_{\\Gamma_H} h_H \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_c} h \\delta u \\tilde u \\,ds_x",
+   "weak_form_rhs": "- \\int_{\\Gamma_H} q_b \\delta u \\,ds_x"
+  },
+  "shape_derivative": {
+   "volume_expression": "\\int_{D} \\left(\\operatorname{div} {\\mathbf V} \\left( \\nabla u \\cdot \\nabla \\tilde u \\right) - \\left( \\nabla \\tilde u \\cdot \\left( \\nabla u \\cdot \\nabla {\\mathbf V} \\right) \\right) - \\left( \\nabla u \\cdot \\left( \\nabla \\tilde u \\cdot \\nabla {\\mathbf V} \\right) \\right)\\right) k(u) \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} {\\mathbf V} \\,dx",
+   "boundary_expression": "\\int_{\\Gamma_c} \\kappa h \\left( u - u_{amb}\\right) \\tilde u \\left(\\mathbf V \\cdot \\mathbf n\\right) \\,ds_x"
+  },
+  "optimization_params": {
+   "level_set_initial": "I-beam without holes: a full-width top flange (thickness 0.2) lying along the water wall, a bottom flange (length 0.5, thickness 0.2) under the gas-side footprint, and a web of width 0.2 running the full height between them."
+  }
+ },
+ "designed": {
+  "problem_type": "shape_optimization",
+  "problem_type_source": "extracted",
+  "problem_name": "heatSinkWaterWallTempConductivity",
+  "problem_name_source": "extracted",
+  "dimension": 2,
+  "dimension_source": "extracted",
+  "domain_name": "D",
+  "domain_name_source": "extracted",
+  "mesh_variable": "Th",
+  "mesh_variable_source": "extracted",
+  "mesh_file": "mesh.txt",
+  "mesh_file_source": "extracted",
+  "objective_name": "J(u)",
+  "objective_name_source": "extracted",
+  "objective_description": "minimise the gas-side surface temperature at fixed material cost, i.e. maximize the heat recovered from the flue gas",
+  "objective_description_source": "extracted",
+  "objective_terms": [
+   "\\int_{D} \\ell \\chi \\,dx (material cost)",
+   "\\int_{\\Gamma_H} q_b u \\,ds_x (gas-side surface temperature weighted by q_b)"
+  ],
+  "objective_terms_source": "extracted",
+  "state_description": "Non-linear steady heat conduction with temperature-dependent conductivity k(u) and Robin convection on the gas side \\Gamma_H and cooling edges \\Gamma_c; Dirichlet value 0 on the water wall.",
+  "state_description_source": "extracted",
+  "state_weak_lhs": "\\int_{D} k(u) \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} h_H u \\delta u \\,ds_x + \\int_{\\Gamma_c} h u \\delta u \\,ds_x",
+  "state_weak_lhs_source": "extracted",
+  "state_weak_rhs": "\\int_{\\Gamma_H} h_H u_{H} \\delta u \\,ds_x + \\int_{\\Gamma_c} h u_{amb} \\delta u \\,ds_x",
+  "state_weak_rhs_source": "extracted",
+  "state_is_nonlinear": true,
+  "state_is_nonlinear_source": "extracted",
+  "newton_description": "Newton update \\hat u at state u; conductivity linearised as \\partial_{u}[k(u) \\nabla u \\cdot \\nabla \\delta u] \\hat u = k(u) \\nabla \\hat u \\cdot \\nabla \\delta u + k_0 \\beta \\hat u \\nabla u \\cdot \\nabla \\delta u; state updated as u <- u - \\hat u.",
+  "newton_weak_form": "\\int_{D} k(u) \\chi \\left( \\nabla \\hat u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{D} k_0 \\beta \\hat u \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} h_H \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_c} h \\hat u \\delta u \\,ds_x = \\int_{D} k(u) \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} h_H \\left( u - u_H\\right) \\delta u \\,ds_x + \\int_{\\Gamma_c} h \\left( u - u_{amb}\\right) \\delta u \\,ds_x",
+  "newton_source": "extracted",
+  "adjoint_description": "Adjoint state \\tilde u to the direct state u; the adjoint operator is the linearisation of the state operator at u (transposed conductivity linearisation), with adjoint load from \\partial_{u} J(\\delta u) = \\int_{\\Gamma_H} q_b \\delta u \\,ds_x.",
+  "adjoint_description_source": "extracted",
+  "adjoint_weak_lhs": "\\int_{D} k(u) \\chi \\left( \\nabla \\delta u \\cdot \\nabla \\tilde u \\right) \\,dx + \\int_{D} k_0 \\beta \\delta u \\chi \\left( \\nabla u \\cdot \\nabla \\tilde u \\right) \\,dx + \\int_{\\Gamma_H} h_H \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_c} h \\delta u \\tilde u \\,ds_x",
+  "adjoint_weak_lhs_source": "extracted",
+  "adjoint_weak_rhs": "- \\int_{\\Gamma_H} q_b \\delta u \\,ds_x",
+  "adjoint_weak_rhs_source": "extracted",
+  "shape_derivative_volume": "\\int_{D} \\left(\\operatorname{div} {\\mathbf V} \\left( \\nabla u \\cdot \\nabla \\tilde u \\right) - \\left( \\nabla \\tilde u \\cdot \\left( \\nabla u \\cdot \\nabla {\\mathbf V} \\right) \\right) - \\left( \\nabla u \\cdot \\left( \\nabla \\tilde u \\cdot \\nabla {\\mathbf V} \\right) \\right)\\right) k(u) \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} {\\mathbf V} \\,dx",
+  "shape_derivative_volume_source": "extracted",
+  "shape_derivative_boundary": "\\int_{\\Gamma_c} \\kappa h \\left( u - u_{amb}\\right) \\tilde u \\left(\\mathbf V \\cdot \\mathbf n\\right) \\,ds_x",
+  "shape_derivative_boundary_source": "extracted",
+  "boundaries": [
+   {
+    "name": "\\Gamma_H",
+    "label": "2",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "gas-side convective boundary (central 40% of the bottom edge) with heat transfer coefficient h_H and hot-fluid temperature u_H",
+    "source": "extracted"
+   },
+   {
+    "name": "\\Gamma_c",
+    "label": "3",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "air-cooling left and right edges exchanging heat with ambient air through coefficient h; their shape is optimised",
+    "source": "extracted"
+   },
+   {
+    "name": "water wall",
+    "label": "4",
+    "kind": "Dirichlet",
+    "design_role": "fixed",
+    "description": "top edge isothermal water-wall heat sink held at the prescribed reference temperature of zero kelvin",
+    "source": "extracted"
+   },
+   {
+    "name": "bottom edge adiabatic",
+    "label": "1",
+    "kind": "Neumann",
+    "design_role": "fixed",
+    "description": "remaining parts of the bottom edge, adiabatic (zero flux)",
+    "source": "extracted"
+   }
+  ],
+  "interfaces": [],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "\\left[ u \\right]",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": 0,
+    "dirichlet_labels": [
+     "4"
+    ],
+    "source": "extracted"
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "delta u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "source": "extracted"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity of aluminium at u_amb",
+    "unit": "W/(K m)",
+    "source": "extracted"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity of air (weak material)",
+    "unit": "W/(K m)",
+    "source": "extracted"
+   },
+   {
+    "name": "beta",
+    "latex": "\\beta",
+    "value": 0.0005,
+    "description": "linear temperature coefficient of conductivity",
+    "unit": "1/K",
+    "source": "extracted"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient (air side)",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "h_H",
+    "latex": "h_H",
+    "value": 25,
+    "description": "convective heat transfer coefficient (hot-fluid / gas side)",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_H",
+    "latex": "u_H",
+    "value": 338,
+    "description": "hot-fluid (low-temperature exhaust gas) temperature",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "value": 1000,
+    "description": "gas-side temperature weight, heat flux the gas side would absorb if the surface reached ambient temperature",
+    "unit": "W/m^2",
+    "source": "extracted"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "k(u)",
+    "latex": "k(u)",
+    "formula": "k_0 \\left( 1 + \\beta \\left( u - u_{amb}\\right)\\right)",
+    "source": "extracted"
+   },
+   {
+    "name": "J(u)",
+    "latex": "J(u)",
+    "formula": "\\int_{D} \\ell \\chi \\,dx + \\int_{\\Gamma_H} q_b u \\,ds_x",
+    "source": "extracted"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "formula": "h_H \\left( u_H - u_{amb}\\right)",
+    "source": "extracted"
+   },
+   {
+    "name": "chi(x)",
+    "latex": "\\chi(x)",
+    "formula": "1 \\text{ if } \\phi(x) < 0, \\quad k_{air}/k_0 \\text{ if } \\phi(x) \\ge 0",
+    "source": "extracted"
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi (x)",
+   "strong_value": 1,
+   "weak_value": 0.00013,
+   "source": "extracted"
+  },
+  "optimization_config": {
+   "mesh_file": "mesh.txt",
+   "hmin": 0.005,
+   "hmax": 0.05,
+   "diffusion": 0.0001,
+   "v0": 0.001,
+   "iterations": 30,
+   "level_set_initial": "I-beam without holes: a full-width top flange (thickness 0.2) lying along the water wall, a bottom flange (length 0.5, thickness 0.2) under the gas-side footprint, and a web of width 0.2 running the full height between them.",
+   "boundary_labels": [
+    "3"
+   ],
+   "fixed_labels": [
+    "1",
+    "2",
+    "4"
+   ],
+   "extra_params": {},
+   "source": "designed",
+   "rationale": "hmin/hmax chosen for an O(1) domain to resolve the level-set interface and the thin I-beam features; diffusion 1e-4 is standard level-set regularisation; v0 1e-3 is a conservative extension velocity; 30 iterations balances cost and convergence for a 2D heat-sink shape optimisation; level_set_initial and mesh_file are carried from the extracted spec; boundary_labels/fixed_labels follow the extracted design roles: the Robin cooling edge Gamma_c is movable, while the adiabatic bottom edge, gas-side Robin edge, and Dirichlet water wall are fixed."
+  }
+ }
+}

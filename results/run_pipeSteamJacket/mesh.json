@@ -1,0 +1,24 @@
+{
+  "extracted": {
+    "category": "code",
+    "mesh_code": "real R = 0.5;    // outer radius of the pipe cross-section (fixed, diameter 1 m)\nreal r0 = 0.15;  // initial inner radius (the inner boundary is a design boundary)\nborder C01(t=0, 2*pi){x=R*cos(t); y=R*sin(t); label=3;}   // outer circle, Robin environment (fixed)\nborder C02(t=0, 2*pi){x=r0*cos(t); y=r0*sin(t); label=2;} // inner circle, heat source (design)\nint n = 100;\nmesh Th = buildmesh(C01(n) + C02(-n));",
+    "geometry_description": "Annular cross-section of a district-heating pipe with outer radius R=0.5 m and initial inner radius r0=0.15 m.",
+    "labels_found": [
+      "3",
+      "2"
+    ],
+    "has_syntax_errors": false,
+    "syntax_error_details": ""
+  },
+  "designed": {
+    "mesh_code": "real R = 0.5;    // outer radius of the pipe cross-section (fixed, diameter 1 m)\nreal r0 = 0.15;  // initial inner radius (the inner boundary is a design boundary)\nborder C01(t=0, 2*pi){x=R*cos(t); y=R*sin(t); label=3;}   // outer circle, Robin environment (fixed)\nborder C02(t=0, 2*pi){x=r0*cos(t); y=r0*sin(t); label=2;} // inner circle, heat source (design)\nint n = 100;\nmesh Th = buildmesh(C01(n) + C02(-n));",
+    "mesh_code_source": "extracted",
+    "mesh_code_rationale": "",
+    "labels_used": [
+      "3",
+      "2"
+    ],
+    "dimension": 2,
+    "domain_description": "Annular cross-section of a district-heating pipe with outer radius R=0.5 m and initial inner radius r0=0.15 m."
+  }
+}

@@ -1,0 +1,54 @@
+\documentclass[preview]{standalone}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{bm}
+\let\oldcdot\cdot
+\usepackage{breqn}
+\let\cdot\oldcdot
+\begin{document}
+Let $\phi(x)$ be the level-set function and
+ \begin{align*}\raisebox{\depth}{$\chi$}(x) &= \begin{cases} 1 & \mbox{if}\quad \phi(x) < 0 \\ 1.3e-4 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases}.\end{align*}
+The Lagrangian of the pipe chilled jacket problem is
+\begin{dmath*}
+\mathcal L(\left[ u\right],\left[ \delta u\right]) = J(u) -  \int_{\partial D} \left(u_{C} - u\right) pen \delta u \,ds_x -  \int_{\partial D} \left(u_{amb} - u\right) h \delta u \,ds_x +  \int_{D} k_{0} \raisebox{\depth}{$\chi$} \left(  \nabla u  \cdot  \nabla \delta u  \right) \,dx , 
+\end{dmath*}
+with 
+\begin{align*}
+J(u) &=  \int_{\partial D} q_{b} u \,ds_x +  \int_{D} \ell \raisebox{\depth}{$\chi$} \,dx.
+ \end{align*}
+Let
+\begin{equation*}
+V_{u} = \mathbb P_{2},\end{equation*}
+\begin{equation*}
+V_{\delta u} = \mathbb P_{2}.\end{equation*}
+The state $\left[ u\right] \in  V_{u}$ is the solution of the linear problem
+\begin{dmath*}
+-  \int_{\partial D} \left(u_{C} - u\right) pen \delta u \,ds_x -  \int_{\partial D} \left(u_{amb} - u\right) h \delta u \,ds_x +  \int_{D} k_{0} \raisebox{\depth}{$\chi$} \left(  \nabla u  \cdot  \nabla \delta u  \right) \,dx = 0\qquad \forall\; {\delta u\in V_{\delta u}} . 
+\end{dmath*}
+The adjoint state $\left[ \tilde u\right] \in  V_{\delta u}$ to the direct state $\left[ u\right]$ is the solution of
+\begin{dmath*}
+\partial_{(u,\delta u)} J(\delta u) +  \int_{\partial D} h \delta u \tilde u \,ds_x +  \int_{\partial D} pen \delta u \tilde u \,ds_x +  \int_{D} k_{0} \raisebox{\depth}{$\chi$} \left(  \nabla \delta u  \cdot  \nabla \tilde u  \right) \,dx = 0\qquad \forall\; {\delta u\in V_{u}} , 
+\end{dmath*}
+with 
+\begin{align*}
+\partial_{(u,\delta u)} J(\delta u) &=  \int_{\partial D} q_{b} \delta u \,ds_x.
+ \end{align*}
+In order to compute the shape derivative, we consider a shape pertubation $\mathbf x = T_t(\mathbf X) = \mathbf X + t \mathbf  V(X)$ with a suitable velocity field $\mathbf V$. The perturbed Lagrangian $\mathcal G$ using the Lagrangian state $\left[ u\right]^{L}$ is given by
+\begin{dmath*}
+\mathcal G(t,\left[ u\right]^{L},\left[ \delta u\right]^{L}) = \mathcal V(J) -  \int_{\partial D} \left(u_{C} - u\right) pen  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \delta u \,ds_x -  \int_{\partial D} \left(u_{amb} - u\right) h  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \delta u \,ds_x +  \int_{D} k_{0} \raisebox{\depth}{$\chi$}  \operatorname{det}\mathbf F( t )  \left( \left(  \nabla u  \cdot  \mathbf F^{-1}(t) \right) \cdot \left(  \nabla \delta u  \cdot  \mathbf F^{-1}(t) \right) \right) \,dx , 
+\end{dmath*}
+with
+\begin{dmath*}
+\mathcal V(J) =  \int_{\partial D} q_{b}  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} u \,ds_x +  \int_{D} \ell \raisebox{\depth}{$\chi$}  \operatorname{det}\mathbf F( t )  \,dx.
+ \end{dmath*}
+For the direct state $\left[ u\right]$ and the adjoint state $\left[ \tilde u\right]$, the volume expression of the shape derivative is given by
+\begin{dmath*}
+DJ(\Omega)(\mathbf V) = \partial_{t} J(u,{\mathbf V}) -  \int_{\partial D} \left(u_{C} - u\right) pen \operatorname{div} {\mathbf V} \tilde u \,ds_x +  \int_{\partial D} \left(u_{C} - u\right) pen \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \tilde u \,ds_x -  \int_{\partial D} \left(u_{amb} - u\right) h \operatorname{div} {\mathbf V} \tilde u \,ds_x +  \int_{\partial D} \left(u_{amb} - u\right) h \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \tilde u \,ds_x +  \int_{D} \left(\operatorname{div} {\mathbf V} \left(  \nabla u  \cdot  \nabla \tilde u  \right) - \left(  \nabla \tilde u  \cdot \left(  \nabla u  \cdot  \nabla {\mathbf V}  \right) \right) - \left(  \nabla u  \cdot \left(  \nabla \tilde u  \cdot  \nabla {\mathbf V}  \right) \right)\right) k_{0} \raisebox{\depth}{$\chi$} \,dx , 
+\end{dmath*}
+with
+\begin{dmath*}
+\partial_{t} J(u,{\mathbf V}) =  \int_{\partial D} q_{b} \operatorname{div} {\mathbf V} u \,ds_x -  \int_{\partial D} q_{b} \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) u \,ds_x +  \int_{D} \ell \raisebox{\depth}{$\chi$} \operatorname{div} {\mathbf V} \,dx.
+ \end{dmath*}
+\end{document}

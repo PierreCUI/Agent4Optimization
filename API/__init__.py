@@ -1,4 +1,5 @@
 from .API import (
+    AgentRouter,
     CodeAgent,
     CodeWriter,
 )
@@ -10,17 +11,17 @@ from .API_chatgpt import (
 )
 from .API_deepseek import (
     DeepSeekCodeAgentV4Flash,
+    DeepSeekCodeAgentV4FlashVision,
     DeepSeekCodeAgentV4Pro,
     DeepSeekCodeWriter,
 )
 from .API_gemini import (
-    GeminiCodeAgent35Flash,
-    GeminiCodeAgent36Flash,
+    GeminiCodeAgent37Flash,
     GeminiCodeWriter,
 )
 from .API_qwen import (
-    QwenCodeAgent37Max,
-    QwenCodeAgent37Plus,
+    QwenCodeAgent38Flash,
+    QwenCodeAgent38Max,
     QwenCodeWriter,
 )
 
@@ -28,6 +29,7 @@ __all__ = [
     # API
     "CodeAgent",
     "CodeWriter",
+    "AgentRouter",
     # API_chatgpt
     "ChatGPTCodeWriter",
     "ChatGPTCodeAgent56Sol",
@@ -37,12 +39,12 @@ __all__ = [
     "DeepSeekCodeWriter",
     "DeepSeekCodeAgentV4Pro",
     "DeepSeekCodeAgentV4Flash",
+    "DeepSeekCodeAgentV4FlashVision",
     # API_gemini
     "GeminiCodeWriter",
-    "GeminiCodeAgent36Flash",
-    "GeminiCodeAgent35Flash",
+    "GeminiCodeAgent37Flash",
     # API_qwen
     "QwenCodeWriter",
-    "QwenCodeAgent37Max",
-    "QwenCodeAgent37Plus",
+    "QwenCodeAgent38Max",
+    "QwenCodeAgent38Flash",
 ]

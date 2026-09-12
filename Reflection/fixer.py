@@ -6,6 +6,9 @@ Two modes:
 - rewrite: full regeneration of main.py + mesh.txt from original problem.
 
 Both modes return a dict {"main": ..., "mesh": ..., "rationale": ...}.
+An optional *fix_direction* instruction (parallel reflection) restricts
+the repair to ONE idea — the probe round's diversity comes from each
+candidate exploring a different direction.
 """
 
 import json
@@ -31,6 +34,9 @@ def apply(
     action: str,
     outer_iterations: int = 100,
     inner_iterations: int = 10,
+    images=None,
+    image_section: str = "",
+    fix_direction: str = "",
 ) -> dict:
     """
     Apply a fix for the current error.
@@ -52,6 +58,8 @@ def apply(
         action: "local_fix" or "rewrite".
         outer_iterations: Target outer-loop epochs.
         inner_iterations: Target inner-loop iterations.
+        fix_direction: Optional probe direction instruction (parallel
+            reflection: each candidate explores exactly one direction).
 
     Returns:
         {"main": str, "mesh": str, "rationale": str}.
@@ -59,70 +67,21 @@ def apply(
         "_error": str}.
     """
     if action == "rewrite":
-        return _rewrite(
-            agent,
-            problem_description,
-            main_py,
-            mesh_txt,
-            run_result_json,
-            objective_data,
-            convergence_data,
-            edp_code,
-            reflection_history,
-            doc_text,
-            analysis_artifacts,
-            coarse,
-            fine,
-            outer_iterations,
-            inner_iterations,
-        )
+        from .prompts import FIX_REWRITE_SYSTEM, FIX_REWRITE_USER
+
+        system, user = FIX_REWRITE_SYSTEM, FIX_REWRITE_USER
     else:
-        return _local_fix(
-            agent,
-            problem_description,
-            main_py,
-            mesh_txt,
-            run_result_json,
-            objective_data,
-            convergence_data,
-            edp_code,
-            reflection_history,
-            doc_text,
-            analysis_artifacts,
-            coarse,
-            fine,
-            outer_iterations,
-            inner_iterations,
-        )
+        from .prompts import FIX_LOCAL_SYSTEM, FIX_LOCAL_USER
 
+        system, user = FIX_LOCAL_SYSTEM, FIX_LOCAL_USER
 
-def _local_fix(
-    agent,
-    problem_description,
-    main_py,
-    mesh_txt,
-    run_result_json,
-    objective_data,
-    convergence_data,
-    edp_code,
-    reflection_history,
-    doc_text,
-    analysis_artifacts,
-    coarse,
-    fine,
-    outer_iterations,
-    inner_iterations,
-) -> dict:
-    """Targeted repair of the specific (coarse, fine) error."""
-    from .prompts import FIX_LOCAL_SYSTEM, FIX_LOCAL_USER
-
-    prompt_list = [
-        {"role": "system", "content": FIX_LOCAL_SYSTEM},
-        {"role": "user", "content": FIX_LOCAL_USER},
-    ]
-
-    agent.set_prompt_list(prompt_list)
-    raw = agent.invoke(
+    agent.set_prompt_list(
+        [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+    )
+    raw = agent.invoke_multimodal(
         {
             "problem_description": problem_description,
             "main_py": main_py,
@@ -138,69 +97,43 @@ def _local_fix(
             "fine": fine,
             "outer_iterations": str(outer_iterations),
             "inner_iterations": str(inner_iterations),
-        }
-    )
-
-    return _parse_fix_response(raw)
-
-
-def _rewrite(
-    agent,
-    problem_description,
-    main_py,
-    mesh_txt,
-    run_result_json,
-    objective_data,
-    convergence_data,
-    edp_code,
-    reflection_history,
-    doc_text,
-    analysis_artifacts,
-    coarse,
-    fine,
-    outer_iterations,
-    inner_iterations,
-) -> dict:
-    """Full regeneration of main.py + mesh.txt."""
-    from .prompts import FIX_REWRITE_SYSTEM, FIX_REWRITE_USER
-
-    prompt_list = [
-        {"role": "system", "content": FIX_REWRITE_SYSTEM},
-        {"role": "user", "content": FIX_REWRITE_USER},
-    ]
-
-    agent.set_prompt_list(prompt_list)
-    raw = agent.invoke(
-        {
-            "problem_description": problem_description,
-            "main_py": main_py,
-            "mesh_txt": mesh_txt,
-            "run_result_json": run_result_json,
-            "objective_data": objective_data or "(not available)",
-            "convergence_data": convergence_data or "(not available)",
-            "reflection_history": reflection_history or "(first attempt)",
-            "doc_text": doc_text,
-            "analysis_artifacts": analysis_artifacts or "(not available)",
-            "coarse": coarse,
-            "fine": fine,
-            "outer_iterations": str(outer_iterations),
-            "inner_iterations": str(inner_iterations),
-        }
+            "fix_direction": fix_direction or "",
+            "image_section": image_section,
+        },
+        images=images,
     )
 
     return _parse_fix_response(raw)
 
 
 def _parse_fix_response(raw: str) -> dict:
-    """Parse LLM JSON response, with fallback on failure."""
+    """Parse LLM JSON response, with fallback on failure.
+
+    A response carrying NEITHER ``main`` NOR ``mesh`` code (wrong key
+    names, schema drift, empty output) is treated as a parse failure —
+    the reflector retries instead of permanently giving up.
+    """
     try:
         result = json.loads(parser_json(raw))
-        if "main" not in result:
-            result["main"] = ""
-        if "mesh" not in result:
-            result["mesh"] = ""
-        if "rationale" not in result:
-            result["rationale"] = ""
+        if not isinstance(result, dict):
+            warnings.warn(f"fixer returned non-object JSON ({type(result).__name__}).")
+            return {"main": "", "mesh": "", "rationale": "", "_error": "non-object JSON response"}
+
+        main = result.get("main")
+        mesh = result.get("mesh")
+        # Type validation first: a non-string flows to write_text and
+        # crashes the whole pipeline.
+        if main is not None and not isinstance(main, str):
+            return {"main": "", "mesh": "", "rationale": "", "_error": "main is not a string"}
+        if mesh is not None and not isinstance(mesh, str):
+            return {"main": "", "mesh": "", "rationale": "", "_error": "mesh is not a string"}
+        has_code = (
+            (isinstance(main, str) and main.strip() != "")
+            or (isinstance(mesh, str) and mesh.strip() != "")
+        )
+        if not has_code:
+            warnings.warn("fixer response carries neither main nor mesh code.")
+            return {"main": "", "mesh": "", "rationale": "", "_error": "no main/mesh in response"}
         return result
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         warnings.warn(f"fixer JSON parse failed: {e}")

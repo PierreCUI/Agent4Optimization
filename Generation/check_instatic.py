@@ -15,7 +15,12 @@ Checks performed (see ``_CHECKS`` for the complete list):
   8. mesh_ref       — ``mesh=`` argument + labels in code exist in mesh spec
   9. dsx_labels     — dsx(...Th, label) labels are valid (mesh labels or Boundary indices)
  10. dimension_3d   — ``dimensions=3`` present for 3D problems
- 11. labels_consistency — boundaryLabels/fixedLabels match ProblemSpec boundary kinds
+ 11. labels_consistency — explicit design_role in the ProblemSpec matches
+     the code; no label in both lists.  (Kind-based heuristics are NOT
+     enforced: the reference corpus intentionally mixes physical kinds and
+     design roles.)
+ 12. internal_boundary_labels — label 10 (the label-10 material boundary)
+     never appears in boundaryLabels/fixedLabels
 """
 
 import ast
@@ -31,8 +36,138 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from Generation.label_conventions import AUTO_FIX_LABEL_INSTRUCTIONS
-from utils import parser_json
+from Generation.label_conventions import AUTO_FIX_LABEL_INSTRUCTIONS  # noqa: E402
+from utils import code_masked_positions, parser_json  # noqa: E402
+
+# ======================================================================
+# shared helpers
+# ======================================================================
+
+
+def _call_content(code: str, m) -> str | None:
+    """Return the text between the parens of the call whose opening paren
+    is at *m.end()* (m = a regex match of ``<func>(``).
+
+    Quote-aware: parentheses inside string arguments (e.g. a Boundary
+    LaTeX ``r'\\Gamma(\\alpha)'``) must not desync the depth counter.
+    Returns None when the call is unbalanced (nested scan of the same
+    code should then just skip it).
+    """
+    start = m.end()
+    depth = 1
+    i = start
+    quote = None
+    while i < len(code) and depth > 0:
+        ch = code[i]
+        if quote:
+            if ch == quote and code[i - 1] != "\\":
+                quote = None
+        elif ch in ("'", '"'):
+            quote = ch
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        i += 1
+    return code[start : i - 1] if depth == 0 else None
+
+
+def _strip_comments(text: str) -> str:
+    """Return *text* with ``#`` line comments removed, strings intact.
+
+    Generated code can contain commented-out examples (the coder prompt
+    shows setup_optimization/Boundary/Lagrangian shapes) — substring
+    checks must not take comment text for real code.
+
+    Line offsets are preserved (each removed comment becomes exactly one
+    newline); backslash escapes and triple-quoted strings are handled so
+    a ``#`` inside a string is never taken for a comment.
+    """
+    out = []
+    quote = None
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if quote:
+            if ch == "\\" and len(quote) == 1:
+                out.append(ch)
+                if i + 1 < n:
+                    out.append(text[i + 1])
+                    i += 2
+                else:
+                    i += 1
+                continue
+            if text.startswith(quote, i):
+                out.extend(text[i : i + len(quote)])
+                i += len(quote)
+                quote = None
+                continue
+            out.append(ch)
+            i += 1
+        elif ch in ("'", '"'):
+            quote = next((q for q in ('"""', "'''", '"', "'") if text.startswith(q, i)), ch)
+            out.append(ch)
+            i += 1
+        elif ch == "#":
+            # comment: discard through the end of the line, newline
+            # included (append exactly one "\n" in its place)
+            while i < n and text[i] != "\n":
+                i += 1
+            if i < n:
+                i += 1
+            out.append("\n")
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
+def _top_level_split(text: str) -> list[str]:
+    """Split *text* on commas at the TOP level (not inside parentheses
+    or quotes) — used to parse Domain(...)/Boundary(...) call arguments."""
+    parts, cur, depth = [], [], 0
+    quote = None
+    for ch in text:
+        if quote:
+            cur.append(ch)
+            if ch == quote:
+                quote = None
+            continue
+        if ch in ("'", '"'):
+            quote = ch
+            cur.append(ch)
+        elif ch == "(":
+            depth += 1
+            cur.append(ch)
+        elif ch == ")":
+            depth -= 1
+            cur.append(ch)
+        elif ch == "," and depth == 0:
+            parts.append("".join(cur).strip())
+            cur = []
+        else:
+            cur.append(ch)
+    parts.append("".join(cur).strip())
+    return parts
+
+
+def _parse_label_lists(code: str) -> tuple[set, set]:
+    """Extract ``boundaryLabels=[...]`` / ``fixedLabels=[...]`` from *code*.
+
+    Returns ``(code_boundary, code_fixed)`` as sets of stripped label
+    strings.  Both regexes match the canonical multi-line list format
+    produced by the coder.
+    """
+    code_boundary = set()
+    code_fixed = set()
+    for kw, target in (("boundaryLabels", code_boundary), ("fixedLabels", code_fixed)):
+        m = re.search(rf"{kw}\s*=\s*\[([^\]]+)\]", code)
+        if m:
+            target.update(
+                lbl.strip().strip("'\"") for lbl in m.group(1).split(",") if lbl.strip()
+            )
+    return code_boundary, code_fixed
+
 
 # ======================================================================
 # check registry — each check returns a list of error dicts
@@ -69,26 +204,68 @@ def _check_syntax(code: str) -> list[dict]:
 
 
 def _check_boundary_args(code: str) -> list[dict]:
-    """Boundary() second argument must be 'ThL', not 'Th'."""
-    pattern = re.compile(r"Boundary\([^)]+,\s*'Th'(?:\s*,|\s*\))")
-    matches = pattern.findall(code)
+    """Boundary() second argument must be 'ThL', not 'Th'.
+
+    Paren-counting argument split: a LaTeX argument like
+    ``r'\\Gamma(0.5)'`` contains balanced parens and either quote style
+    is accepted, so no Boundary call is missed by a flat regex.  Comments
+    are stripped first — a commented-out wrong example is not code.
+    """
+    matches = 0
+    code_nc = _strip_comments(code)
+    for m in re.finditer(r"\bBoundary\(", code_nc):
+        call_text = _call_content(code_nc, m)
+        if call_text is None:
+            continue
+        args = _top_level_split(call_text)
+        if len(args) >= 2 and args[1].strip() in ("'Th'", '"Th"'):
+            matches += 1
     if matches:
         return [
             {
                 "check": "boundary_args",
                 "severity": "warning",
-                "message": f"Boundary() uses 'Th' instead of 'ThL' ({len(matches)} occurrence(s)).",
+                "message": f"Boundary() uses 'Th' instead of 'ThL' ({matches} occurrence(s)).",
             }
         ]
     return []
 
 
+def _find_latex_ell_var(code: str) -> str | None:
+    """Return the variable name assigned ``= Constant(<latex>\\ell)``.
+
+    AST-based, so both quote styles (``r'\\ell'`` / ``r"\\ell"``),
+    whitespace variants and comments are handled; on unparseable code
+    (the syntax check reports that anyway) fall back to a tolerant regex.
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        m = re.search(
+            r"(\w+)\s*=\s*Constant\s*\(\s*r?\s*['\"]\\ell['\"]", code
+        )
+        return m.group(1) if m else None
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "Constant"
+        ):
+            a0 = node.value.args[0] if node.value.args else None
+            if isinstance(a0, ast.Constant) and a0.value == "\\ell":
+                return node.targets[0].id
+    return None
+
+
 def _check_afac_naming(code: str) -> list[dict]:
     """If a Lagrange multiplier constant uses LaTeX ``\\ell``, the Python
     variable should be ``Afac`` and bare ``ell`` must not appear in expressions."""
-    has_latex_ell = re.search(r"(\w+)\s*=\s*Constant\(r'\\ell'", code)
-    if has_latex_ell:
-        var_name = has_latex_ell.group(1)
+    has_latex_ell = _find_latex_ell_var(code)
+    if has_latex_ell is not None:
+        var_name = has_latex_ell
         # Warn if Python variable is 'ell' instead of the preferred 'Afac'
         if var_name == "ell":
             return [
@@ -99,48 +276,95 @@ def _check_afac_naming(code: str) -> list[dict]:
                     "consider renaming to 'Afac' for consistency.",
                 }
             ]
-        # Error if bare 'ell' used in expressions elsewhere
-        if re.search(r"\bell\b", code):
-            lines_with_ell = [
-                l.strip()
-                for l in code.split("\n")
-                if re.search(r"\bell\b", l) and "Constant" not in l and "r'\\ell'" not in l
+        # Error if bare 'ell' used in expressions elsewhere — only the
+        # *identifier* counts: a comment ("# ell is the multiplier") or a
+        # string (r'\ell') must not trigger a repair round.  AST-based so
+        # the check sees Names only; on unparseable code fall back to a
+        # quote/comment-aware line scan (the syntax check reports the
+        # real problem anyway).
+        ell_lines = []
+        try:
+            for node in ast.walk(ast.parse(code)):
+                if isinstance(node, ast.Name) and node.id == "ell":
+                    ell_lines.append(node.lineno)
+        except SyntaxError:
+            for i, l in enumerate(code.split("\n")):
+                l_code = re.sub(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"", "", l)
+                l_code = re.sub(r"#.*", "", l_code)
+                if re.search(r"\bell\b", l_code):
+                    ell_lines.append(i + 1)
+        if ell_lines:
+            return [
+                {
+                    "check": "afac_naming",
+                    "severity": "error",
+                    "message": f"Variable '{var_name}' defined for Lagrange "
+                    f"multiplier but 'ell' used in expressions.",
+                }
             ]
-            if lines_with_ell:
-                return [
-                    {
-                        "check": "afac_naming",
-                        "severity": "error",
-                        "message": f"Variable '{var_name}' defined for Lagrange "
-                        f"multiplier but 'ell' used in expressions.",
-                    }
-                ]
     return []
 
 
 def _check_chi_latex(code: str) -> list[dict]:
-    """CharacteristicFunction must have full LaTeX: ``\\raisebox{\\depth}{$\\chi$}``."""
+    """The *contrast* CharacteristicFunction must have full LaTeX:
+    ``\\raisebox{\\depth}{$\\chi$}``.
+
+    CharacteristicFunction is also used for material-property fields
+    with plain names (``'E'``, ``'k'``, ``r'\\alpha_T'``) — only a LaTeX
+    string that actually denotes chi needs the decoration.
+
+    The first argument may be a quoted literal (``'...'`` / ``r'...'`` /
+    ``"..."`` / ``r"..."``) or a variable name whose value is assigned in
+    the code (e.g. ``chi = r'\\chi'``); both are inspected, so an
+    unquoted variable cannot silently bypass the check.
+    """
     if "CharacteristicFunction" not in code:
         return []
-    # Match CharacteristicFunction( ... ) and inspect its first argument
-    m = re.search(r"CharacteristicFunction\(\s*(r'.+?'|\".+?\")\s*,", code)
-    if m:
+
+    def _is_full_latex(s: str) -> bool:
+        return "raisebox" in s and "\\depth" in s
+
+    matches = []  # latex strings found (or None when unresolved)
+    for m in re.finditer(r"CharacteristicFunction\(\s*((?:r)?(['\"]).*?\2)\s*,", code):
         arg = m.group(1)
-        if "raisebox" not in arg and "\\depth" not in arg:
+        # Drop an optional r prefix FIRST, then strip the quotes —
+        # dropping the first char instead would remove the opening quote
+        # of a bare '\chi' / "\chi" literal and skip the check.
+        lit = arg[1:] if arg[:1] == "r" else arg
+        if lit[:1] in ("'", '"') and lit[-1:] == lit[:1]:
+            matches.append(lit[1:-1])
+    # Unquoted-variable first arguments: resolve the assignment for the
+    # variable name (e.g. `chi = r'\chi'` -> inspect that string).
+    # Only look at the code BEFORE the call (a later assignment would be
+    # a NameError anyway) and require a line-anchored assignment so an
+    # unrelated earlier `chi = '...'` string is not misattributed.
+    # Single-letter names are variables here just as much as longer ones.
+    for m in re.finditer(r"CharacteristicFunction\(\s*(\w+)\s*,", code):
+        var = m.group(1)
+        am = re.search(rf"(?m)^\s*{var}\s*=\s*((?:r)?(['\"]).*?\2)", code[: m.start()])
+        if am:
+            lit = am.group(1)[1:] if am.group(1)[:1] == "r" else am.group(1)
+            if lit[:1] in ("'", '"') and lit[-1:] == lit[:1]:
+                matches.append(lit[1:-1])
+
+    for latex in matches:
+        # Only the chi-carrying contrast function: property fields use
+        # plain names ('E', 'k', '\\alpha_T') and need no decoration.
+        if "\\chi" in latex and not _is_full_latex(latex):
             return [
                 {
                     "check": "chi_latex",
                     "severity": "warning",
                     "message": f"CharacteristicFunction LaTeX should use "
-                    f"r'\\raisebox{{\\depth}}{{$\\chi$}}' not {arg}.",
+                    f"r'\\raisebox{{\\depth}}{{$\\chi$}}' not {latex!r}.",
                 }
             ]
     return []
 
 
 def _check_lagrangian(code: str) -> list[dict]:
-    """Ensure Lagrangian is instantiated."""
-    if "Lagrangian([" not in code:
+    """Ensure Lagrangian is instantiated (comment text does not count)."""
+    if not re.search(r"Lagrangian\s*\(\s*\[", _strip_comments(code)):
         return [
             {
                 "check": "lagrangian",
@@ -152,8 +376,15 @@ def _check_lagrangian(code: str) -> list[dict]:
 
 
 def _check_setup_opt(code: str) -> list[dict]:
-    """Ensure setup_optimization or lag.run is called."""
-    if "setup_optimization" not in code and "lag.run(" not in code:
+    """Ensure setup_optimization or lag.run is called.
+
+    Call-form regexes on comment-stripped code, so a comment mentioning
+    ``setup_optimization(...)`` cannot satisfy the check for a missing call.
+    """
+    code_nc = _strip_comments(code)
+    if not re.search(r"\bsetup_optimization\s*\(", code_nc) and not re.search(
+        r"\blag\.run\s*\(", code_nc
+    ):
         return [
             {
                 "check": "setup_opt",
@@ -166,9 +397,13 @@ def _check_setup_opt(code: str) -> list[dict]:
 
 def _check_mesh_ref(code: str, mesh_spec: dict = None) -> list[dict]:
     """Ensure mesh= argument references a reasonable filename."""
-    mesh_match = re.search(r"mesh\s*=\s*'([^']+)'", code)
+    # Comments stripped — a commented-out mesh='...' example must not
+    # fake a match (or fake its absence), like every other substring
+    # check in this module.
+    code_nc = _strip_comments(code)
+    mesh_match = re.search(r"mesh\s*=\s*'([^']+)'", code_nc)
     if not mesh_match:
-        mesh_match = re.search(r'mesh\s*=\s*"([^"]+)"', code)
+        mesh_match = re.search(r'mesh\s*=\s*"([^"]+)"', code_nc)
     if not mesh_match:
         return [
             {
@@ -189,19 +424,10 @@ def _check_mesh_ref(code: str, mesh_spec: dict = None) -> list[dict]:
     # If mesh_spec is available, check labels consistency
     if mesh_spec:
         ds = mesh_spec.get("designed", {})
-        mesh_labels = set(str(l) for l in ds.get("labels_used", []))
+        mesh_labels = set(str(l) for l in (ds.get("labels_used") or []))
         if mesh_labels:
-            # Extract labels from boundaryLabels/fixedLabels in code
-            bl_match = re.search(r"boundaryLabels\s*=\s*\[([^\]]+)\]", code)
-            fl_match = re.search(r"fixedLabels\s*=\s*\[([^\]]+)\]", code)
-            code_labels = set()
-            for m in (bl_match, fl_match):
-                if m:
-                    code_labels.update(
-                        lbl
-                        for lbl in (x.strip().strip("'\"") for x in m.group(1).split(","))
-                        if lbl and lbl != "999"
-                    )
+            code_boundary, code_fixed = _parse_label_lists(code)
+            code_labels = (code_boundary | code_fixed) - {"999"}
             unknown = code_labels - mesh_labels
             if unknown:
                 return [
@@ -216,127 +442,201 @@ def _check_mesh_ref(code: str, mesh_spec: dict = None) -> list[dict]:
 
 
 def _check_dimension_3d(code: str, problem_spec: dict = None) -> list[dict]:
-    """If problem is 3D, ensure dimensions=3 is passed to Lagrangian."""
-    if problem_spec:
-        ds = problem_spec.get("designed", {})
-        if ds.get("dimension") == 3:
-            if "dimensions=3" not in code:
-                return [
-                    {
-                        "check": "dimension_3d",
-                        "severity": "error",
-                        "message": "3D problem detected but 'dimensions=3' missing from Lagrangian().",
-                    }
-                ]
-    return []
+    """If problem is 3D, ensure dimensions=3 is passed to Lagrangian.
+
+    Scoped to the Lagrangian call text (comments stripped) so a comment
+    mentioning ``dimensions=3`` or a kwarg in another call cannot satisfy
+    the check for a missing flag.
+    """
+    if not problem_spec:
+        return []
+    ds = problem_spec.get("designed", {})
+    if ds.get("dimension") != 3:
+        return []
+    # Only REAL Lagrangian calls count: a Lagrangian(...)-shaped example
+    # inside a docstring/string or comment must not satisfy the check
+    # (the code mask rejects matches whose start is masked).
+    masked = code_masked_positions(code)
+    for m in re.finditer(r"\bLagrangian\s*\(", code):
+        if m.start() in masked:
+            continue
+        call_text = _call_content(code, m)
+        if call_text is not None and re.search(r"\bdimensions\s*=\s*3\b", call_text):
+            return []
+    return [
+        {
+            "check": "dimension_3d",
+            "severity": "error",
+            "message": "3D problem detected but 'dimensions=3' missing from Lagrangian().",
+        }
+    ]
 
 
 def _check_dsx_labels(code: str, mesh_spec: dict = None) -> list[dict]:
     """
-    Validate that dsx(..., Th, label) labels exist in the mesh.
+    Validate that dsx(..., <mesh_var>, label) labels are consistent.
 
-    AutoFreeFEM's dsx label is an INDEX into Domain's Boundary list
-    when Boundaries are declared, or a raw mesh label otherwise.
-    This check verifies that raw integer labels (no Boundaries)
-    correspond to actual labels in the mesh file.
+    autofreefem's dsx semantics (``integraloperators.py`` ``dsx._sympystr``):
+    *label* < number of declared Boundaries  → INDEX into the Domain's
+    Boundary list;
+    *label* >= that count (or none declared) → RAW mesh label.
+    Only the raw-label mode can be wrong (an unknown raw label silently
+    evaluates to 0 in FreeFEM); an index always resolves to a declared
+    Boundary.  The semantics are decided PER DOMAIN: a Boundary object
+    declared elsewhere (another Domain, or not attached at all) must NOT
+    flip a different domain's valid raw mesh label into an index check.
     """
     if not mesh_spec:
         return []
 
     ds_info = mesh_spec.get("designed", {})
     mesh_labels = set()
-    for src in [ds_info.get("labels_used", []), ds_info.get("all_labels", [])]:
-        if src:
-            for l in src:
-                try:
-                    mesh_labels.add(int(l) if not isinstance(l, (int, float)) else l)
-                except (ValueError, TypeError):
-                    pass  # skip non-numeric labels like '2/4' or named labels
+    for key in ("labels_used", "all_labels"):
+        src = ds_info.get(key)
+        if not isinstance(src, (list, tuple, set)):
+            continue
+        for lbl in src:
+            try:
+                mesh_labels.add(int(lbl) if not isinstance(lbl, (int, float)) else lbl)
+            except (ValueError, TypeError):
+                pass  # skip non-numeric labels like '2/4' or named labels
 
     if not mesh_labels:
         return []
 
-    # Check if Domain() has Boundary objects
-    has_boundary = bool(re.search(r"=\s*Boundary\(", code))
-    boundary_count = len(re.findall(r"=\s*Boundary\(", code))
+    # All scans below run on comment-stripped code: a commented-out
+    # ``bndN = Boundary(...)`` declaration would inflate the per-Domain
+    # count and flip a genuinely invalid RAW label into the index mode.
+    # (No positions are reported back, so stripping is safe here.)
+    code = _strip_comments(code)
 
-    # Extract dsx labels with paren-counting (handles nested calls like
-    # dsx(inner(u, testu), Th, 3)).  The regex fallback catches trivial cases.
-    dsx_labels_raw = []
-    dsx_labels_str = []
+    # --- per-Domain Boundary counts: mesh variable -> n_boundaries ---
+    domain_info = {}
+    for m in re.finditer(r"\bDomain\(", code):
+        call_text = _call_content(code, m)
+        if call_text is None:
+            continue
+        args = _top_level_split(call_text)
+        mesh_var = ""
+        if len(args) >= 2:
+            mesh_var = args[1].strip().strip("'\"")
+        # Boundaries bound to THIS domain: inline Boundary(...) calls in
+        # the argument list PLUS declarations referenced by bare name
+        # (canonical coder pattern: bndN = Boundary(...); ...;
+        # Domain('D', 'Th', bndN)).
+        n_bound = len(re.findall(r"\bBoundary\(", call_text))
+        for a in args[2:]:
+            name = a.strip()
+            if re.fullmatch(r"[A-Za-z_]\w*", name):
+                n_bound += len(re.findall(rf"\b{name}\s*=\s*Boundary\(", code))
+        if mesh_var:
+            # A declaration with boundaries (re)defines the semantics;
+            # absent boundaries keep the raw-label semantics.
+            if n_bound > 0 or mesh_var not in domain_info:
+                domain_info[mesh_var] = n_bound
+
+    # --- dsx calls: (mesh_var, label) via paren-counting ---
+    dsx_pairs = []
     for m in re.finditer(r"\bdsx\(", code):
-        start = m.end()
-        depth = 1
-        i = start
-        while i < len(code) and depth > 0:
-            if code[i] == "(":
-                depth += 1
-            elif code[i] == ")":
-                depth -= 1
-            i += 1
-        call_text = code[start : i - 1]  # text between dsx( and the matching )
-        # Extract the label: last argument after the last comma
-        # Pattern: ..., Th, LABEL
-        label_match = re.search(r",\s*Th\s*,\s*(\d+)\s*$", call_text)
-        if label_match:
-            dsx_labels_raw.append(label_match.group(1))
+        call_text = _call_content(code, m)
+        if call_text is None:
+            continue
+        # Pattern: ..., <mesh_var>, LABEL — the label need NOT be the
+        # final argument (extra kwargs like weight=... are allowed).
+        lm = re.search(r",\s*(\w+)\s*,\s*(\d+)\s*(?:,|$)", call_text)
+        if lm:
+            dsx_pairs.append((lm.group(1), int(lm.group(2))))
         else:
-            label_match = re.search(r",\s*Th\s*,\s*'(\d+)'\s*$", call_text)
-            if label_match:
-                dsx_labels_str.append(label_match.group(1))
+            lm = re.search(r",\s*(\w+)\s*,\s*'(\d+)'\s*(?:,|$)", call_text)
+            if lm:
+                dsx_pairs.append((lm.group(1), int(lm.group(2))))
 
     errors = []
+    for var, lbl in dsx_pairs:
+        if lbl == 999:
+            continue  # label 999 is always the level-set boundary, exempt
+        count = domain_info.get(var, 0)
+        if count > 0 and lbl < count:
+            # INDEX mode — the package resolves to the label-th declared
+            # Boundary (label 0 = first, 1 = second, ...); always valid.
+            continue
+        # RAW-label mode (no Boundaries declared, or label >= count with
+        # Boundaries declared — the package falls through to int1d(Th, lbl)).
+        if lbl not in mesh_labels:
+            errors.append(
+                {
+                    "check": "dsx_labels",
+                    "severity": "error",
+                    "message": (
+                        f"dsx({var}) uses label {lbl}, but the mesh only has "
+                        f"labels {sorted(mesh_labels)}.  "
+                        f"With {count} Boundary object(s) declared, labels "
+                        f"0..{count - 1} are indices and labels >= {count} are "
+                        f"raw mesh labels.  Label {lbl} will silently evaluate "
+                        f"to 0 in FreeFEM, likely causing wrong results — use "
+                        f"an index below {count} or one of the existing mesh labels."
+                    ),
+                }
+            )
 
-    if has_boundary and boundary_count > 0:
-        # Labels are boundary indices; verify they are in range
-        for lbl_str in dsx_labels_raw + dsx_labels_str:
-            lbl = int(lbl_str)
-            if lbl == 999:
-                continue  # label 999 is always the level-set interface, exempt
-            if lbl >= boundary_count:
-                errors.append(
+    return errors
+
+
+def _check_internal_boundary_labels(code: str) -> list[dict]:
+    """Label 10 (the label-10 MATERIAL boundary — a hole or the solid/void
+    boundary of the level set within ONE domain) must not appear in
+    boundaryLabels or fixedLabels.  The label-10 boundary is design by
+    default (it moves with the level set) and carries no physical
+    condition, and both lists are for NON-10 boundaries only.
+
+    NOTE: label 10 is NOT the interface of a multi-domain problem — an
+    interface separates TWO computational domains, is a non-10 boundary
+    with its own design role (design or fixed) and a continuity
+    condition, and uses its own mesh label (never 10).  This check
+    applies to label 10 only."""
+    errors = []
+    code_boundary, code_fixed = _parse_label_lists(code)
+    for kw, labels in (("boundaryLabels", code_boundary), ("fixedLabels", code_fixed)):
+        if "10" in labels:
+            errors.append(
                     {
-                        "check": "dsx_labels",
+                        "check": "internal_boundary_labels",
                         "severity": "error",
                         "message": (
-                            f"dsx label {lbl} is a Boundary index, but Domain() has "
-                            f"only {boundary_count} Boundary object(s).  "
-                            f"Valid indices: 0..{boundary_count - 1}.  "
-                            f"Use index 0 for the first Boundary, 1 for the second, etc."
+                            f"Label 10 (the label-10 material boundary) appears in "
+                            f"{kw}.  Label 10 marks the material boundary "
+                            f"(a hole / solid-void boundary) — it is NOT a "
+                            f"non-10 boundary.  The label-10 boundary is design "
+                            f"by default and never belongs in boundaryLabels or "
+                            f"fixedLabels — remove it."
                         ),
                     }
                 )
-    else:
-        # No Boundaries — labels are raw mesh labels; verify they exist in mesh
-        for lbl_str in dsx_labels_raw + dsx_labels_str:
-            lbl = int(lbl_str)
-            if lbl not in mesh_labels and lbl != 999:
-                errors.append(
-                    {
-                        "check": "dsx_labels",
-                        "severity": "error",
-                        "message": (
-                            f"dsx uses label {lbl}, but the mesh only has labels "
-                            f"{sorted(mesh_labels)}.  Label {lbl} will silently "
-                            f"evaluate to 0 in FreeFEM, likely causing wrong results.  "
-                            f"Either declare Boundary objects and use indices, "
-                            f"or use one of the existing mesh labels."
-                        ),
-                    }
-                )
-
     return errors
 
 
 def _check_labels_consistency(code: str, problem_spec: dict = None) -> list[dict]:
     """
-    Validate label allocation against boundary types from ProblemSpec.
+    Validate the DESIGN role (boundaryLabels vs fixedLabels) of the non-10
+    boundaries against an EXPLICIT design_role from the ProblemSpec.
 
-    Rules:
-    - Dirichlet labels → must be in fixedLabels (shape-frozen), NOT in
-      boundaryLabels (shape-optimisable).
-    - Neumann labels → must be in boundaryLabels, NOT in fixedLabels.
+    Non-10 boundaries carry two independent aspects:
+    - design role: design (movable → boundaryLabels) or fixed (frozen → fixedLabels);
+    - physical condition: Dirichlet / Neumann / Robin.
+
+    Explicit design_role in the ProblemSpec is ground truth and the code
+    must match it.  WITHOUT an explicit role the physical-kind
+    "convention" is deliberately NOT enforced: the pipeline's reference
+    corpus mixes kinds and roles on purpose (a clamped Dirichlet edge
+    that participates in the design lives in boundaryLabels; a loaded
+    Neumann edge frozen by the device layout lives in fixedLabels), and
+    reported findings would otherwise trigger an auto-fix round that
+    inverts a working configuration.
+
+    Structural invariants:
     - No label may appear in BOTH lists.
+    - The label-10 boundary (material boundary) carries no physical
+      kind and is handled by _check_internal_boundary_labels.
     """
     if not problem_spec:
         return []
@@ -346,72 +646,67 @@ def _check_labels_consistency(code: str, problem_spec: dict = None) -> list[dict
     if not boundaries:
         return []
 
-    # Classify labels by boundary kind
-    dirichlet_labels = set()
-    neumann_labels = set()
+    design_role = {}  # label -> "design" | "fixed"
     for b in boundaries:
         label = str(b.get("label", ""))
-        kind = (b.get("kind", "") or "").lower()
-        if not label:
+        role = (b.get("design_role", "") or "").lower()
+        if not label or label == "10":
+            # The label-10 material boundary is handled exclusively by
+            # _check_internal_boundary_labels, never classified here.
             continue
-        if "dirichlet" in kind:
-            dirichlet_labels.add(label)
-        elif "neumann" in kind or "natural" in kind or "free" in kind:
-            neumann_labels.add(label)
-        elif "robin" in kind:
-            # Robin (mixed) BC: shape-optimisable like Neumann, but
-            # flag as a warning since the BC form depends on position.
-            neumann_labels.add(label)
+        if role in ("design", "fixed"):
+            design_role[label] = role
 
-    # Parse boundaryLabels and fixedLabels from code
-    bl_match = re.search(r"boundaryLabels\s*=\s*\[([^\]]+)\]", code)
-    fl_match = re.search(r"fixedLabels\s*=\s*\[([^\]]+)\]", code)
-
-    code_boundary = set()
-    code_fixed = set()
-    if bl_match:
-        for lbl in bl_match.group(1).split(","):
-            lbl = lbl.strip().strip("'\"")
-            if lbl:
-                code_boundary.add(lbl)
-    if fl_match:
-        for lbl in fl_match.group(1).split(","):
-            lbl = lbl.strip().strip("'\"")
-            if lbl:
-                code_fixed.add(lbl)
+    # Parse boundaryLabels and fixedLabels from code (shared helper)
+    code_boundary, code_fixed = _parse_label_lists(code)
 
     errors = []
 
-    # Rule 1: Dirichlet labels must NOT be in boundaryLabels
-    dirichlet_in_boundary = dirichlet_labels & code_boundary
-    if dirichlet_in_boundary:
-        errors.append(
-            {
-                "check": "labels_consistency",
-                "severity": "error",
-                "message": (
-                    f"Dirichlet label(s) {sorted(dirichlet_in_boundary)} found in "
-                    f"boundaryLabels.  Dirichlet boundaries are shape-FIXED — "
-                    f"move them to fixedLabels instead."
-                ),
-            }
-        )
+    # Rule 0: explicit design_role in the ProblemSpec is ground truth —
+    # the code must match it, regardless of the physical kind.
+    for lbl, role in design_role.items():
+        if role == "fixed" and lbl in code_boundary:
+            errors.append(
+                {
+                    "check": "labels_consistency",
+                    "severity": "error",
+                    "message": (
+                        f"Label {lbl} has explicit design_role='fixed' in the "
+                        f"ProblemSpec but appears in boundaryLabels.  A fixed "
+                        f"(frozen) boundary must go in fixedLabels."
+                    ),
+                }
+            )
+        elif role == "design" and lbl in code_fixed:
+            errors.append(
+                {
+                    "check": "labels_consistency",
+                    "severity": "error",
+                    "message": (
+                        f"Label {lbl} has explicit design_role='design' in the "
+                        f"ProblemSpec but appears in fixedLabels.  A design "
+                        f"(movable) boundary must go in boundaryLabels."
+                    ),
+                }
+            )
+        elif lbl not in code_boundary and lbl not in code_fixed:
+            # Absence is as much a violation as misplacement: the
+            # explicit role must show up in the code somewhere.
+            errors.append(
+                {
+                    "check": "labels_consistency",
+                    "severity": "error",
+                    "message": (
+                        f"Label {lbl} has explicit design_role='{role}' in the "
+                        f"ProblemSpec but appears in NEITHER boundaryLabels nor "
+                        f"fixedLabels.  The design role must be assigned where it "
+                        f"is needed — put it in boundaryLabels (design/movable) or "
+                        f"fixedLabels (fixed/frozen) accordingly."
+                    ),
+                }
+            )
 
-    # Rule 2: Neumann labels should be in boundaryLabels (warning only)
-    neumann_not_in_boundary = neumann_labels - code_boundary
-    if neumann_labels and neumann_not_in_boundary:
-        errors.append(
-            {
-                "check": "labels_consistency",
-                "severity": "warning",
-                "message": (
-                    f"Neumann label(s) {sorted(neumann_not_in_boundary)} not in "
-                    f"boundaryLabels.  Neumann boundaries are shape-OPTIMISABLE."
-                ),
-            }
-        )
-
-    # Rule 3: No label in both lists
+    # Rule 2: No label in both lists
     overlap = code_boundary & code_fixed
     if overlap:
         errors.append(
@@ -420,7 +715,8 @@ def _check_labels_consistency(code: str, problem_spec: dict = None) -> list[dict
                 "severity": "error",
                 "message": (
                     f"Label(s) {sorted(overlap)} appear in BOTH boundaryLabels and "
-                    f"fixedLabels.  A label cannot be both optimisable and fixed."
+                    f"fixedLabels.  A boundary has exactly one design role — it "
+                    f"cannot be both movable and fixed."
                 ),
             }
         )
@@ -442,6 +738,7 @@ _CHECKS = [
     _check_dsx_labels,
     _check_dimension_3d,
     _check_labels_consistency,
+    _check_internal_boundary_labels,
 ]
 
 
@@ -551,7 +848,11 @@ def auto_fix(agent, code: str, errors: list[dict]) -> dict:
     )
 
     try:
-        return json.loads(parser_json(raw))
+        parsed = json.loads(parser_json(raw))
+        if not isinstance(parsed, dict):
+            warnings.warn(f"auto_fix returned non-object JSON ({type(parsed).__name__}).")
+            return {"main": code, "mesh": "", "_error": "non-object JSON response"}
+        return parsed
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         warnings.warn(f"auto_fix JSON parse failed: {e}")
         return {"main": code, "mesh": "", "_error": str(e)}
@@ -610,7 +911,7 @@ if __name__ == "__main__":
             sev = e["severity"].upper()
             print(f"    [{sev}] {e['check']}: {e['message']}")
 
-        summary_rows.append((name, status, errors))
+        summary_rows.append((name, status, errors, mesh_spec, problem_spec))
 
     # ── summary table ──
     print(f"\n{'=' * 70}")
@@ -618,16 +919,16 @@ if __name__ == "__main__":
     print(f"{'=' * 70}")
     print(f"| {'Problem':<42} | {'Status':<10} | Details")
     print(f"|{'-' * 42}|{'-' * 10}|{'-' * 40}")
-    for name, status, errors in summary_rows:
+    for name, status, errors, _, _ in summary_rows:
         detail = "; ".join(f"{e['check']}" for e in errors[:3])
         if len(errors) > 3:
             detail += f", ... (+{len(errors) - 3})"
         print(f"| {name:<42} | {status:<10} | {detail:<40}")
 
     # ── auto-fix test on first file with errors ──
-    files_with_errors = [(n, s, e) for n, s, e in summary_rows if e]
+    files_with_errors = [row for row in summary_rows if row[2]]
     if files_with_errors:
-        name, _, errors = files_with_errors[0]
+        name, _, errors, mesh_spec, problem_spec = files_with_errors[0]
         py_file = results_dir / name / "main.py"
         code = py_file.read_text(encoding="utf-8", errors="replace")
         print(f"\n{'=' * 70}")
@@ -637,11 +938,15 @@ if __name__ == "__main__":
         if "_error" in fixed:
             print(f"  Fix ERROR: {fixed['_error']}")
         else:
-            new_errors = static_check(fixed.get("main", ""))
-            print(f"  Errors before: {len(errors)}  →  after: {len(new_errors)}")
+            # Verify with the SAME specs THAT FILE was checked with (the
+            # loop variables are stale by now) — otherwise the
+            # dsx_labels/labels_consistency/dimension_3d checks silently
+            # disappear during the local test.
+            new_errors = static_check(fixed.get("main", ""), mesh_spec, problem_spec)
+            print(f"  Errors before: {len(errors)}  ->  after: {len(new_errors)}")
             for e in new_errors:
                 print(f"    [!] {e['check']}: {e['message']}")
     else:
-        print(f"\nAll files clean — auto_fix test skipped.")
+        print("\nAll files clean — auto_fix test skipped.")
 
-    print(f"\nDone.")
+    print("\nDone.")

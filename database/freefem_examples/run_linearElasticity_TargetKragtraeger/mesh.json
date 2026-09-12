@@ -25,6 +25,6 @@
       "10"
     ],
     "dimension": 2,
-    "domain_description": "2D cantilever rectangle [0,2]x[0,1] with left side label 4, right side label 2, bottom label 1, top label 3, and an interior square contour label 10; final region label adjusted to 3 via change."
+    "domain_description": "The extracted code first defines a 2-by-1 cantilever rectangle with a small right-edge segment labelled 2, then redefines Th as a 2-by-1 square containing a 0.6-by-0.6 square inner boundary labelled 10, and finally relabels the region to 3."
   }
 }

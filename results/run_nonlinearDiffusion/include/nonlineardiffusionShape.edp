@@ -1,5 +1,0 @@
-varf nonlineardiffusionShape([Ax, Ay],[Vx, Vy], tgv=-2) = 
-    int2d(Th)((1.00000000000000*(phi<0) + 0.100000000000000*(1-(phi<0)))*ell*(dx(Vx) + dy(Vy))) 
- - int2d(Th)(f*(dx(Vx) + dy(Vy))*adju) 
- + int2d(Th)(-(1.00000000000000*(phi<0) + 0.100000000000000*(1-(phi<0)))*lambda0*(alpha*u^2.0 + 1.0)*(2.0*(dx(Vx)*dx(u) + dx(Vy)*dy(u))*dx(u) + 2.0*(dy(Vx)*dx(u) + dy(Vy)*dy(u))*dy(u) - (dx(Vx) + dy(Vy))*(dx(u)^2.0 + dy(u)^2.0))) 
- + int2d(Th)(-(1.00000000000000*(phi<0) + 0.100000000000000*(1-(phi<0)))*lambda0*(alpha*u^2.0 + 1.0)*((dx(Vx)*dx(adju) + dx(Vy)*dy(adju))*dx(u) + (dx(Vx)*dx(u) + dx(Vy)*dy(u))*dx(adju) + (dy(Vx)*dx(adju) + dy(Vy)*dy(adju))*dy(u) + (dy(Vx)*dx(u) + dy(Vy)*dy(u))*dy(adju) - (dx(adju)*dx(u) + dy(adju)*dy(u))*(dx(Vx) + dy(Vy))));

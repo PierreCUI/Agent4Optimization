@@ -1,0 +1,371 @@
+{
+ "extracted": {
+  "problem_type": "shape_optimization",
+  "problem_name": "heatSinkColdPlateTempConductivity",
+  "dimension": 2,
+  "domain_name": "D",
+  "mesh_variable": "Th",
+  "mesh_file": "mesh.txt",
+  "mesh_labels_used": [
+   "1",
+   "2",
+   "3",
+   "4"
+  ],
+  "boundaries": [
+   {
+    "name": "\\Gamma_q",
+    "kind": "Neumann",
+    "design_role": "fixed",
+    "description": "chip heat flux boundary (central 40% of bottom edge)",
+    "mesh_label": "2"
+   },
+   {
+    "name": "adiabatic bottom",
+    "kind": "Neumann",
+    "design_role": "fixed",
+    "description": "adiabatic remaining bottom edge",
+    "mesh_label": "1"
+   },
+   {
+    "name": "cold plate",
+    "kind": "Dirichlet",
+    "design_role": "fixed",
+    "description": "top edge cooling-pipe wall held at zero temperature",
+    "mesh_label": "4"
+   },
+   {
+    "name": "\\Gamma_c",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "left and right convective cooling edges",
+    "mesh_label": "3"
+   }
+  ],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": 0,
+    "dirichlet_labels": [
+     "4"
+    ]
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "delta_u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity of aluminium at ambient temperature",
+    "unit": "W/(m K)"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity of air",
+    "unit": "W/(m K)"
+   },
+   {
+    "name": "beta",
+    "latex": "\\beta",
+    "value": 0.0005,
+    "description": "linear temperature coefficient of conductivity",
+    "unit": "1/K"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient (air)",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient air temperature",
+    "unit": "K"
+   },
+   {
+    "name": "q",
+    "latex": "q",
+    "value": 1000,
+    "description": "heat flux (chip)",
+    "unit": "W/m^2"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "k(u)",
+    "latex": "k(u)",
+    "formula": "k_0 (1 + \\beta (u - u_{amb}))"
+   },
+   {
+    "name": "J(u)",
+    "latex": "J(u)",
+    "formula": "\\int_D \\ell \\chi \\,dx + \\int_{\\Gamma_q} q u \\,ds_x"
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": 0.00013
+  },
+  "objective": {
+   "name": "J",
+   "description": "chip temperature integral (thermal compliance) minimized at fixed material cost",
+   "terms": [
+    "\\int_D \\ell \\chi \\,dx",
+    "\\int_{\\Gamma_q} q u \\,ds_x"
+   ]
+  },
+  "state_equation": {
+   "description": "nonlinear steady heat conduction with temperature-dependent conductivity and convective cooling",
+   "weak_form_lhs": "\\int_{D} k(u) \\chi ( \\nabla u \\cdot \\nabla \\delta u ) \\,dx + \\int_{\\Gamma_c} h u \\delta u \\,ds_x",
+   "weak_form_rhs": "\\int_{\\Gamma_q} q \\delta u \\,ds_x + \\int_{\\Gamma_c} h u_{amb} \\delta u \\,ds_x",
+   "is_nonlinear": true
+  },
+  "newton_linearisation": {
+   "description": "Newton linearisation of the state equation",
+   "weak_form": "\\int_{D} k(u) \\chi ( \\nabla \\hat u \\cdot \\nabla \\delta u ) \\,dx + \\int_{D} k_0 \\beta \\hat u \\chi ( \\nabla u \\cdot \\nabla \\delta u ) \\,dx + \\int_{\\Gamma_c} h \\hat u \\delta u \\,ds_x = \\int_{D} k(u) \\chi ( \\nabla u \\cdot \\nabla \\delta u ) \\,dx + \\int_{\\Gamma_c} h (u - u_{amb}) \\delta u \\,ds_x - \\int_{\\Gamma_q} q \\delta u \\,ds_x"
+  },
+  "adjoint_equation": {
+   "description": "adjoint state equation",
+   "weak_form_lhs": "\\int_{D} k(u) \\chi ( \\nabla \\delta u \\cdot \\nabla \\tilde u ) \\,dx + \\int_{D} k_0 \\beta \\delta u \\chi ( \\nabla u \\cdot \\nabla \\tilde u ) \\,dx + \\int_{\\Gamma_c} h \\delta u \\tilde u \\,ds_x",
+   "weak_form_rhs": "- \\int_{\\Gamma_q} q \\delta u \\,ds_x"
+  },
+  "shape_derivative": {
+   "volume_expression": "\\int_{D} \\left( \\operatorname{div} \\mathbf{V} (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf{V})) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf{V})) \\right) k(u) \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf{V} \\,dx",
+   "boundary_expression": "\\int_{\\Gamma_c} \\kappa h (u - u_{amb}) \\tilde u (\\mathbf{V} \\cdot \\mathbf{n}) \\,ds_x"
+  },
+  "optimization_params": {
+   "level_set_initial": "I-beam without holes: full-width top flange (thickness 0.2) along the cooling wall, bottom flange (length 0.5, thickness 0.2) under the chip footprint, web of width 0.2 running full height between them"
+  }
+ },
+ "designed": {
+  "problem_type": "shape_optimization",
+  "problem_type_source": "extracted",
+  "problem_name": "heatSinkColdPlateTempConductivity",
+  "problem_name_source": "extracted",
+  "dimension": 2,
+  "dimension_source": "extracted",
+  "domain_name": "D",
+  "domain_name_source": "extracted",
+  "mesh_variable": "Th",
+  "mesh_variable_source": "extracted",
+  "mesh_file": "mesh.txt",
+  "mesh_file_source": "extracted",
+  "objective_name": "J",
+  "objective_name_source": "extracted",
+  "objective_description": "chip temperature integral (thermal compliance) minimized at fixed material cost",
+  "objective_description_source": "extracted",
+  "objective_terms": [
+   "\\int_D \\ell \\chi \\,dx",
+   "\\int_{\\Gamma_q} q u \\,ds_x"
+  ],
+  "objective_terms_source": "extracted",
+  "state_description": "nonlinear steady heat conduction with temperature-dependent conductivity and convective cooling",
+  "state_description_source": "extracted",
+  "state_weak_lhs": "\\int_{D} k(u) \\chi ( \\nabla u \\cdot \\nabla \\delta u ) \\,dx + \\int_{\\Gamma_c} h u \\delta u \\,ds_x",
+  "state_weak_lhs_source": "extracted",
+  "state_weak_rhs": "\\int_{\\Gamma_q} q \\delta u \\,ds_x + \\int_{\\Gamma_c} h u_{amb} \\delta u \\,ds_x",
+  "state_weak_rhs_source": "extracted",
+  "state_is_nonlinear": true,
+  "state_is_nonlinear_source": "extracted",
+  "newton_description": "Newton linearisation of the state equation",
+  "newton_description_source": "extracted",
+  "newton_weak_form": "\\int_{D} k(u) \\chi ( \\nabla \\hat u \\cdot \\nabla \\delta u ) \\,dx + \\int_{D} k_0 \\beta \\hat u \\chi ( \\nabla u \\cdot \\nabla \\delta u ) \\,dx + \\int_{\\Gamma_c} h \\hat u \\delta u \\,ds_x = \\int_{D} k(u) \\chi ( \\nabla u \\cdot \\nabla \\delta u ) \\,dx + \\int_{\\Gamma_c} h (u - u_{amb}) \\delta u \\,ds_x - \\int_{\\Gamma_q} q \\delta u \\,ds_x",
+  "newton_weak_form_source": "extracted",
+  "newton_source": "extracted",
+  "adjoint_description": "adjoint state equation",
+  "adjoint_description_source": "extracted",
+  "adjoint_weak_lhs": "\\int_{D} k(u) \\chi ( \\nabla \\delta u \\cdot \\nabla \\tilde u ) \\,dx + \\int_{D} k_0 \\beta \\delta u \\chi ( \\nabla u \\cdot \\nabla \\tilde u ) \\,dx + \\int_{\\Gamma_c} h \\delta u \\tilde u \\,ds_x",
+  "adjoint_weak_lhs_source": "extracted",
+  "adjoint_weak_rhs": "- \\int_{\\Gamma_q} q \\delta u \\,ds_x",
+  "adjoint_weak_rhs_source": "extracted",
+  "shape_derivative_volume": "\\int_{D} \\left( \\operatorname{div} \\mathbf{V} (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf{V})) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf{V})) \\right) k(u) \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf{V} \\,dx",
+  "shape_derivative_boundary": "\\int_{\\Gamma_c} \\kappa h (u - u_{amb}) \\tilde u (\\mathbf{V} \\cdot \\mathbf{n}) \\,ds_x",
+  "shape_derivative_source": "extracted",
+  "boundaries": [
+   {
+    "name": "\\Gamma_q",
+    "label": "2",
+    "kind": "Neumann",
+    "design_role": "fixed",
+    "description": "chip heat flux boundary (central 40% of bottom edge)",
+    "source": "extracted"
+   },
+   {
+    "name": "adiabatic bottom",
+    "label": "1",
+    "kind": "Neumann",
+    "design_role": "fixed",
+    "description": "adiabatic remaining bottom edge",
+    "source": "extracted"
+   },
+   {
+    "name": "cold plate",
+    "label": "4",
+    "kind": "Dirichlet",
+    "design_role": "fixed",
+    "description": "top edge cooling-pipe wall held at zero temperature",
+    "source": "extracted"
+   },
+   {
+    "name": "\\Gamma_c",
+    "label": "3",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "left and right convective cooling edges",
+    "source": "extracted"
+   }
+  ],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": 0,
+    "dirichlet_labels": [
+     "4"
+    ],
+    "source": "extracted"
+   },
+   {
+    "name": "tilde_u",
+    "latex": "\\tilde u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": null,
+    "dirichlet_labels": [],
+    "source": "designed",
+    "rationale": "Adjoint temperature field introduced for the Lagrangian-based shape derivative; same polynomial space and unit as the state temperature."
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "delta_u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "source": "extracted"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity of aluminium at ambient temperature",
+    "unit": "W/(m K)",
+    "source": "extracted"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity of air",
+    "unit": "W/(m K)",
+    "source": "extracted"
+   },
+   {
+    "name": "beta",
+    "latex": "\\beta",
+    "value": 0.0005,
+    "description": "linear temperature coefficient of conductivity",
+    "unit": "1/K",
+    "source": "extracted"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient (air)",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient air temperature",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "q",
+    "latex": "q",
+    "value": 1000,
+    "description": "heat flux (chip)",
+    "unit": "W/m^2",
+    "source": "extracted"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "k(u)",
+    "latex": "k(u)",
+    "formula": "k_0 (1 + \\beta (u - u_{amb}))",
+    "source": "extracted"
+   },
+   {
+    "name": "J(u)",
+    "latex": "J(u)",
+    "formula": "\\int_D \\ell \\chi \\,dx + \\int_{\\Gamma_q} q u \\,ds_x",
+    "source": "extracted"
+   },
+   {
+    "name": "heat_flux",
+    "latex": "\\mathbf{q}_h",
+    "formula": "- k(u) \\nabla u",
+    "source": "designed",
+    "rationale": "Standard derived thermal flux for post-processing and for verifying the nonlinear conduction model."
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": 0.00013,
+   "source": "extracted"
+  },
+  "optimization_config": {
+   "mesh_file": "mesh.txt",
+   "hmin": 0.01,
+   "hmax": 0.1,
+   "diffusion": 0.0001,
+   "v0": 0.001,
+   "iterations": 30,
+   "level_set_initial": "\\max\\left( \\min(x, 1.25-x, y-0.8, 1.0-y), \\min(x-0.375, 0.875-x, y, 0.2-y), \\min(x-0.525, 0.725-x, y-0.2, 0.8-y) \\right)",
+   "boundary_labels": [
+    "3"
+   ],
+   "fixed_labels": [
+    "1",
+    "2",
+    "4"
+   ],
+   "extra_params": {
+    "domain_width": 1.25,
+    "domain_height": 1.0
+   },
+   "source": "designed",
+   "rationale": "Designed optimization configuration for the level-set shape optimization. hmin/hmax are set to 0.01/0.1 for a domain of size about 1.25 x 1.0. Diffusion=1e-4 and v0=1e-3 are standard regularisation and velocity scales. 30 iterations balance cost and convergence. The initial level set is an I-beam: full-width top flange (thickness 0.2) along the top cooling wall, bottom flange (length 0.5, thickness 0.2) under the central chip footprint, and a central web of width 0.2 spanning between them. boundary_labels contains the movable Robin cooling boundary (label 3); fixed_labels contains the chip heat-flux boundary (2), the adiabatic bottom boundary (1), and the cold-plate Dirichlet boundary (4)."
+  }
+ }
+}

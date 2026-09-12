@@ -1,0 +1,12 @@
+Loaded: 729 rows
+Dropped failed runs (rc != 0): 0
+Dropped zero-time rows: 0
+Kept: 729 rows
+
+Effect table: C:\Users\98215\OneDrive\Desktop\Agent4FreeFem\batches\run_heatSinkColdPlateTempConductivity\batch_correlation.csv
+
+Impact ranking per metric (Morris mu*, % of metric mean per decade; per P-order for p_degree):
+  avg_time_per_epoch_s: hmax=54.9%  hmin=15.3%  v0=6.9%  diffusion=5.4%  mesh_n=3.7%  p_degree=0.3%
+  ff_max_memory_mb    : hmax=6.4%  hmin=4.4%  mesh_n=2.8%  v0=1.0%  p_degree=0.6%  diffusion=0.1%
+  ff_avg_memory_mb    : hmax=8.4%  mesh_n=3.2%  hmin=1.8%  diffusion=0.7%  p_degree=0.3%  v0=0.2%
+Heatmap: C:\Users\98215\OneDrive\Desktop\Agent4FreeFem\batches\run_heatSinkColdPlateTempConductivity\batch_heatmap.png

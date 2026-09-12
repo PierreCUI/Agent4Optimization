@@ -1,0 +1,7 @@
+varf pipehotwaterjacketResidual([incu],[deltau]) = 
+    -int1d(Th, 3)(h*uamb*deltau) 
+ + int1d(Th, 3)(h*deltau*u) 
+ - int1d(Th, 2)(hH*uH*deltau) 
+ + int1d(Th, 2)(hH*deltau*u) 
+ + int2d(Th)((1.00000000000000*(phi<0) + 0.000130000000000000*(1-(phi<0)))*k0*(dx(deltau)*dx(u) + dy(deltau)*dy(u)))
+ ;

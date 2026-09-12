@@ -1,0 +1,13 @@
+varf pipehotwaterjacketShape([Ax, Ay],[Vx, Vy], tgv=-2) = 
+    int1d(Th, 3)(h*uamb*(N.x*(N.x*dx(Vx) + N.y*dx(Vy)) + N.y*(N.x*dy(Vx) + N.y*dy(Vy)))*adju) 
+ - int1d(Th, 3)(h*uamb*(dx(Vx) + dy(Vy))*adju) 
+ - int1d(Th, 3)(h*(N.x*(N.x*dx(Vx) + N.y*dx(Vy)) + N.y*(N.x*dy(Vx) + N.y*dy(Vy)))*adju*u) 
+ + int1d(Th, 3)(h*(dx(Vx) + dy(Vy))*adju*u) 
+ + int1d(Th, 2)(hH*uH*(N.x*(N.x*dx(Vx) + N.y*dx(Vy)) + N.y*(N.x*dy(Vx) + N.y*dy(Vy)))*adju) 
+ - int1d(Th, 2)(hH*uH*(dx(Vx) + dy(Vy))*adju) 
+ - int1d(Th, 3)(hH*(uH - uamb)*(uamb - u)*(N.x*(N.x*dx(Vx) + N.y*dx(Vy)) + N.y*(N.x*dy(Vx) + N.y*dy(Vy)))) 
+ + int1d(Th, 3)(hH*(uH - uamb)*(uamb - u)*(dx(Vx) + dy(Vy))) 
+ - int1d(Th, 2)(hH*(N.x*(N.x*dx(Vx) + N.y*dx(Vy)) + N.y*(N.x*dy(Vx) + N.y*dy(Vy)))*adju*u) 
+ + int1d(Th, 2)(hH*(dx(Vx) + dy(Vy))*adju*u) 
+ + int2d(Th)((1.00000000000000*(phi<0) + 0.000130000000000000*(1-(phi<0)))*ell*(dx(Vx) + dy(Vy))) 
+ + int2d(Th)((1.00000000000000*(phi<0) + 0.000130000000000000*(1-(phi<0)))*k0*(-dx(Vx)*dx(adju)*dx(u) + dx(Vx)*dy(adju)*dy(u) - dy(Vx)*dx(adju)*dy(u) - dy(Vx)*dy(adju)*dx(u) - dx(Vy)*dx(adju)*dy(u) - dx(Vy)*dy(adju)*dx(u) + dy(Vy)*dx(adju)*dx(u) - dy(Vy)*dy(adju)*dy(u)));

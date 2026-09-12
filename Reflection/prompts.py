@@ -6,10 +6,12 @@ that are filled by the caller.
 """
 
 from Generation.label_conventions import (
+    DESIGN_DIRICHLET_PENALTY,
     DSX_LABEL_DIAGNOSIS,
     LABEL_999_AND_REGION3,
     LABEL_CONSISTENCY_FIX,
 )
+from Generation.phi_conventions import PHI_TEMPLATES
 
 # =========================================================================
 # Shared rules block — appended to every fixer prompt
@@ -24,8 +26,9 @@ RULES_BLOCK = (
       * ``"source": "extracted"`` — GROUND TRUTH from the problem statement.
         **NEVER change any extracted value, no matter what it is.**  The list of
         what is extracted varies per problem — ALWAYS check the actual ``source``
-        field in initial.json.  Typically extracted items include: boundary kind,
-        physical constants, field types, PDE structure, dimension.
+        field in initial.json.  Typically extracted items include: the boundary
+        PHYSICAL kinds (Dirichlet / Neumann / Robin), physical constants,
+        field types, PDE structure, dimension.
       * ``"source": "designed"`` — MUTABLE defaults.  These were NOT explicitly
         stated in the problem — the pipeline invented reasonable defaults.  You
         MAY adjust designed values to fix numerical issues: mesh parameters,
@@ -34,6 +37,34 @@ RULES_BLOCK = (
       truth.**  If the .tex states a boundary kind or constant value, it is
       immutable regardless of what initial.json's source field says.  Cross-check
       the problem_description against analysis_artifacts before changing anything.
+    - **Non-10 boundaries have two INDEPENDENT aspects — do not confuse
+      them.**  (1) The DESIGN role: design = movable → ``boundaryLabels``,
+      fixed = frozen → ``fixedLabels``.  Convention: Dirichlet (physics-fixed)
+      boundaries are normally fixed; Neumann / Robin (load / mixed) boundaries
+      are normally design.  **An explicit ``design_role`` in the ProblemSpec
+      is ground truth and overrides the convention** — e.g. a Neumann load
+      boundary whose position is prescribed by the device layout is
+      legitimately FIXED.  (2) The PHYSICAL condition: Dirichlet / Neumann /
+      Robin; a zero-load Neumann is a FREE boundary (adiabatic in thermal
+      problems, traction-free in mechanics) and is still Neumann.
+      The label-10 boundary (material boundary — holes / the solid-void
+      boundary of the level set, mesh label 10) is design by default,
+      carries NO physical condition, and NEVER appears in either list.
+    - **Multi-domain problems and interfaces.**  Most problems use ONE
+      computational domain; a problem with two or more materials / regions
+      needs one computational domain per material / region.  An INTERFACE
+      is the shared boundary of two computational domains (wherever it
+      lies — inside or on the outer boundary).  An interface is a NON-10
+      boundary with its own design role — design (movable) or fixed
+      (frozen), decided per problem (NOT design by default like label
+      10) — and its own physical condition, which is one of two
+      CONTINUITY conditions between the fields on the two sides: value
+      continuity (e.g. ``T1 = T2`` in diffusion) or normal-flux
+      continuity (e.g. ``k1 * grad(T1)·n = k2 * grad(T2)·n``).  These
+      are NOT Dirichlet/Neumann/Robin conditions (non-10 boundaries
+      only).  An interface is NOT the label-10 boundary: label 10 is the
+      solid/void boundary of the level set within ONE domain; an
+      interface separates TWO computational domains.
     - The mesh file is ALWAYS named ``mesh.txt``.  Never use any other filename
       in the ``mesh=`` argument of ``setup_optimization()``, regardless of what
       the ProblemSpec or any other file says.
@@ -46,14 +77,18 @@ RULES_BLOCK = (
     - If the ProblemSpec names a Lagrange multiplier constant ``ell``, the
       Python variable MUST be ``Afac`` with LaTeX ``r'\\ell'``.  Use ``Afac``
       everywhere in expressions, never bare ``ell``.
+    - The Afac VALUE is calibrated by the pipeline (geometric scan in the
+      reflection loop) — do NOT invent or re-tune it unless the reflection
+      log shows the calibration already failed to balance the design.
     - ``check_units=True`` is preferred.  Only set it to ``False`` when the
       unit system is genuinely ill-defined and there is no other option.
       If you disable it, explain why in the rationale.
     - **Ignore pdflatex errors** — they do not affect results.  Do not try to
       fix missing LaTeX packages or pdflatex not-found messages.
     - For 3D problems add ``dimensions=3`` to ``Lagrangian()``.
-    - Unit names in AutoFreeFEM are CAPITALIZED: ``meter``, ``kelvin``,
-      ``Newton``, ``Watt``, ``Pascal``.  Dimensionless: ``'-'``.
+    - Unit names in AutoFreeFEM are case-sensitive: ``meter`` and ``kelvin``
+      are lowercase, ``Newton``, ``Watt``, ``Pascal`` are capitalized.
+      Dimensionless: ``'-'``.
     - Omit ``dirichlet_value`` + ``dirichlet_labels`` arguments when no
       Dirichlet condition is needed.  Never pass ``None``.
     - **Never edit the generated .edp file directly.**  The .edp is an
@@ -88,8 +123,10 @@ CLASSIFY_COARSE_SYSTEM = """\
        (a) Monotonic downward trend throughout, OR
        (b) Down then stabilised: drops initially, then oscillates within a
            narrow band around a stable minimum for the final epochs.
-       Also check: FreeFEM verify exit code must be 0.  Use this ONLY when
-       the result is genuinely correct — avoid over-correction.
+       Also check: FreeFEM verify exit code should be 0; a nonzero exit is
+       acceptable only when the objective history shows convergence before
+       the failure.  Use this ONLY when the result is genuinely correct —
+       avoid over-correction.
 
     2. **autofreefem_error**
        The AutoFreeFEM Python code in main.py failed.
@@ -162,10 +199,10 @@ CLASSIFY_COARSE_SYSTEM = """\
 
 CLASSIFY_COARSE_USER = """\
     Problem: {problem_name}
-    
+
     Working directory contents:
     {context_text}
-    
+    {image_section}
     Classify the current state into exactly one category.
 """
 
@@ -191,12 +228,15 @@ CLASSIFY_FINE_AF_SYSTEM = """\
     - **api_semantic_error** — Exception from AutoFreeFEM internals about logically
       invalid input (e.g. "pde is not linear in test functions", "sum with different
       tensor orders detected", "No boundaryLabels or fixedLabels provided").
-    - **label_assignment_error** — boundaryLabels or fixedLabels in
-      setup_optimization() use labels that conflict with their boundary type.
-      A Dirichlet label must be in fixedLabels, NOT boundaryLabels.
-      A Neumann label should be in boundaryLabels.  A label must not appear in
-      both lists.  The static check would catch this — if it passed undetected
-      it means the ProblemSpec's boundary types were overridden or ignored.
+    - **label_assignment_error** — boundaryLabels (design = movable) or
+      fixedLabels (design = frozen) in setup_optimization() use labels that
+      conflict with the boundary's design role derived from its physical kind.
+      A Dirichlet (physics-fixed) label belongs in fixedLabels, NOT
+      boundaryLabels.  A Neumann / Robin (load / mixed) label belongs in
+      boundaryLabels.  A label must not appear in both lists, and label 10
+      (the label-10 material boundary) must not appear in either.  The
+      static check would catch this — if it passed undetected it means the
+      ProblemSpec's boundary types were overridden or ignored.
     - **unit_error** — Dimensions in the objective function are inconsistent
       (check_units=True was used and the unit system disagrees).
     - **mesh_file_error** — FileNotFoundError for mesh.txt, or mesh file with
@@ -243,12 +283,14 @@ CLASSIFY_FINE_FF_SYSTEM = """\
       exist in the mesh (label not found, Bad label, int1d/int2d on
       non-existent label).
     - **ff_label_semantics** — A boundary label exists in the mesh but is
-      assigned to the wrong role: e.g. a Dirichlet (fixed) label placed in
-      boundaryLabels where the shape derivative tries to move it, causing
-      FreeFEM errors like mesh warping near fixed boundaries, inconsistent
-      boundary conditions, or excessive mesh degeneration near the mis-assigned
-      label.  Also covers labels appearing in both boundaryLabels and
-      fixedLabels simultaneously.
+      assigned to the wrong DESIGN role: e.g. a Dirichlet (physics-fixed)
+      label placed in boundaryLabels (design = movable), where the shape
+      derivative tries to move it, causing FreeFEM errors like mesh warping
+      near fixed boundaries, inconsistent boundary conditions, or excessive
+      mesh degeneration near the mis-assigned label.  Also covers labels
+      appearing in both boundaryLabels and fixedLabels simultaneously, and
+      label 10 (the label-10 material boundary) wrongly appearing in
+      either list.
     - **ff_include** — An include or load statement failed (.idp file not
       found, cannot open include file).
     - **ff_tool** — An external tool failed (mmg2d_O3, mmg3d_O3, advect,
@@ -335,8 +377,8 @@ CLASSIFY_FINE_WRONG_SYSTEM = """\
     proves that MinTh.vtu EXISTS on disk (the renderer read and plotted it).
     If you see this section, **DO NOT select no_minth_vtu** — the file exists
     by definition.  Use the render summary's mesh statistics (points, cells,
-    field ranges) to choose between empty_design, pathological_objective, or
-    physics_violation.
+    field ranges) to choose between empty_design, pathological_objective,
+    physics_violation, or phi_unsuitable.
 
     Only select no_minth_vtu if the context text has NO "MinTh.vtu Render
     Summary" section AND none of the file listing mentions a *MinTh.vtu file.
@@ -353,6 +395,17 @@ CLASSIFY_FINE_WRONG_SYSTEM = """\
     - **physics_violation** — The final design violates physics constraints
       (displacement magnitude >> domain size, temperature out of physical
       range, stress exceeds material limits).
+    - **phi_unsuitable** — The failure traces back to the INITIAL LEVEL SET
+      (the ``phi=`` argument in main.py), not to the physics or the
+      parameters: the solid is fragmented into islands/beads, there is no
+      connected path from the load to the sink, the design never reaches a
+      FIXED boundary it must conduct through (a Dirichlet sink or load
+      edge — material contact on fixed boundaries is FROZEN by the
+      level-set evolution, so a seed with void there can never conduct),
+      the features are far thinner than hmax, or a high-frequency seed
+      pattern keeps degenerating the remesher while the physics and the
+      numerical parameters look correct.  The fix is a NEW phi, not new
+      parameters.
 
     ## Analysis Instructions
 
@@ -363,6 +416,14 @@ CLASSIFY_FINE_WRONG_SYSTEM = """\
     - Parse objective*.txt: check the magnitude of the final objective value.
       Compare with the order of magnitude expected from the problem constants.
     - Look at FreeFEM stdout for max-displacement or max-temperature prints.
+    - Read phi in main.py and the design's shape: if the solid does not
+      form a connected path from the load to the sink (the load is left on
+      void, the cooling wall is left uncovered, or the pieces are isolated
+      islands) while the physics and the numerical parameters look right,
+      the seed itself is the failure → phi_unsuitable.  Several separate
+      pieces are acceptable when EACH piece still conducts (e.g. two lobes
+      that both reach the load and the sink) — judge conduction, not the
+      piece count.
 
     ## Output
 
@@ -422,72 +483,128 @@ QUALITY_CHECK_SYSTEM = """\
     final MinTh.vtu file.
 
     Your task: determine whether the result is genuinely successful (pass) or
-    whether the result is wrong (wrong_result).
+    whether the result is wrong (wrong_result).  THERE ARE NO FIXED
+    THRESHOLDS — judge from the evidence below.
 
-    **IMPORTANT**: the MinTh.vtu render summary (text) contains mesh statistics
-    (point/cell counts, field value ranges).  Use that text — you CANNOT read
-    the .vtu or .png files directly.
+    ## Evidence available to you
 
-    ## CRITICAL — Use objective*.txt to Judge
+    1. **Imagery (you CAN see it)**: an attached composite image of the
+       design snapshots (solid/void Label distribution per iteration, in
+       chronological order).  Read it: a healthy run MOVES the interface
+       gradually and refines it; a broken run either fragments the design
+       suddenly, collapses to empty, or never evolves.
 
-    The objective*.txt file is the PRIMARY evidence.  Each data line is one
-    completed epoch.  Count them:
+    2. **Objective history** (objective*.txt) — each data line is one
+       completed epoch.  Count them against ``iterations=`` in main.py.
 
-    - **Very few epochs completed AND objective still changing rapidly**:
-      this is an EARLY crash, NOT a usable partial result.  The code has a
-      real bug (e.g. step size v0 too large, wrong labels, bad initial phi).
-      Classify as **wrong_result**.
+    3. **MinTh.vtu render summary** (text): point/cell counts and field
+       value ranges of the final design.
 
-    - **Many epochs completed AND objective clearly stabilised**:
-      the code worked for most of the run.  A late crash (e.g. mesh
-      degeneration) after the objective has plateaued is acceptable —
-      classify as **pass** if the final objective is reasonable.
+    4. **Taylor test** (convergenceShape*.txt) and FreeFEM return codes
+       (in the Quality Check Guidance section).
 
-    Use your judgment — there are no fixed percentage thresholds.  Look at
-    the shape of the objective curve: is it converging or still in steep
-    descent?
+    ## CRITICAL — judge EARLY STOP vs SUCCESS yourself
 
-    ## What to Check
+    The question is not "how many epochs completed" but "did the run do
+    REAL WORK, then either finish or break gracefully":
 
-    1. **Objective history** (objective*.txt) — PRIMARY:
-       - Count completed epochs.  Compare with ``iterations=`` in main.py.
-       - Check for NaN, Inf, pathologically large/small values.
-       - Very rapid drops (e.g. factor of 2 in 2-3 iterations) → v0 too
-         large → wrong_result.
+    - **EARLY CRASH (wrong_result)**: the run crashed well before the
+      requested epochs AND the objective is still in steep descent or the
+      design has not formed (empty / fragmented / unchanged from initial
+      phi).  A real bug is present (v0 too large, wrong labels, bad
+      initial phi, target imbalance).  Note: a coherent-looking design is
+      NOT enough — the objective curve must show a plateau.
 
-       **Late-stage behaviour is the KEY signal**.  Two patterns are healthy:
-       (a) MONOTONIC DOWNWARD: objective consistently decreases throughout.
-       (b) DOWN THEN STABILISE: objective drops, then oscillates within
-           the acceptable band (config value) around a stable minimum for
-           the final epochs.  This is pass.
+    - **SUCCESS (pass)**: the objective CURVE shows real work — a drop
+      then a plateau around a stable minimum (or monotonic decrease all
+      the way to the requested epochs) — and the design snapshots show a
+      coherent evolved structure.  The POSITION of the failure (late
+      epoch) and its cause (e.g. terminal mesh degeneration after the
+      objective has plateaued) are what matters: a nonzero FreeFEM exit
+      does NOT by itself invalidate the design.
 
-       Patterns that are NOT healthy:
-       - U-SHAPED: objective drops to a minimum, then consistently DRIFTS
-         UPWARD.  Parameters are fundamentally wrong → wrong_result.
-       - WILD OSCILLATION: never stabilises within the acceptable band.
-       - EARLY CRASH: very few epochs completed, objective still changing
-         rapidly → wrong_result.
+    Look at the SHAPE of the objective curve and the design evolution in
+    the snapshots: is it converging and coherent, or still rapidly
+    changing / incomplete?
 
-       **Avoid over-correction**: if the objective already matches pattern
-       (a) or (b), accept it as pass.  Do NOT demand perfection.
+    ## Patterns
 
-    2. **Render summary** (text) — the text block describes mesh dimensions
-       and field value ranges.  Use it as supporting evidence.
+    Healthy:
+    (a) DOWN THEN STABILISE — objective drops, then oscillates around a
+        clearly stable minimum for the final epochs.  This is the
+        signature of convergence: pass at ANY epoch count.
+    (b) MONOTONIC DOWNWARD TO COMPLETION — objective consistently
+        decreases and the run reached the requested epochs (iterations=
+        in main.py).  Pass when the design snapshots are coherent.
 
-    3. **Taylor test** (convergenceShape*.txt) — taylorShape should approx-
-       imately scale as O(t).  numShape should be small at the smallest t.
+    Not healthy (wrong_result):
+    - U-SHAPED — drops to a minimum then consistently DRIFTS UPWARD
+      (fundamentally wrong parameters).
+    - WILD OSCILLATION — never settles at all.
+    - TRUNCATED DESCENT — the run crashed well before the requested
+      epochs while the final epochs were still monotonically decreasing
+      (no plateau): the design has not converged, even if it looks
+      coherent.  The optimisation was cut short, typically by mesh
+      degeneration — the parameters must be stabilised and the run
+      repeated to reach its plateau.
+    - EMPTY OR FRAGMENTED final design in the snapshots.  Note: SPARSE is
+      not empty — thin connected conducting paths (a low-solid-fraction
+      design) are the expected optimum of conduction problems with a
+      volume penalty.  Judge emptiness from the render summary's solid
+      fraction (Label cell mean) and the objective values, not from how
+      thin the paths look.
 
-    ## Output
+    **Avoid over-correction**: if the objective matches (a) or (b) and
+    the snapshots are coherent, accept it as pass.  Do NOT demand
+    perfection — small residual oscillations around a stable level are
+    converged.  But a design that is STILL IMPROVING at the crash is not
+    a valid final result: accepting it would report a mid-optimisation
+    design as the solution.  When the final epochs show continued
+    monotone descent without a plateau, classify wrong_result so the
+    parameters get stabilised and the run reaches its plateau.
+
+    ## Symmetry (when the guidance states the problem is symmetric)
+
+    Look at the design image and judge whether the final design is
+    symmetric about the stated axis.  Tolerate SMALL asymmetries:
+    finite-element discretisation and remeshing leave ragged edges,
+    slightly different element counts and minor detail mismatches — a
+    symmetric design does NOT have to mirror pixel-for-pixel, and these
+    small differences are NOT a failure.  Only a CLEARLY lopsided design
+    (structure present on one side and absent on the other) is
+    wrong_result.
 
     ## CRITICAL — FreeFEM Return Codes
 
-    Check run_result.json for FreeFEM return codes:
-    - **verify_*.edp exit ≠ 0**: ALWAYS wrong_result.  The verification
-      step is a single state solve — it should never fail if the design
-      is valid.
-    - **optimize_*.edp exit ≠ 0**: wrong_result UNLESS the objective is
-      perfectly stabilised AND the crash is clearly in the last few
-      iterations (late mesh degeneration).
+    A nonzero exit does NOT by itself invalidate the design.  Judge
+    WHERE the failure happened relative to the objective curve:
+
+    - **Objective converged BEFORE the failure** (decreasing, then a
+      stable plateau): the failure is a late numerical artifact (e.g.
+      mesh degeneration, mesh reversal in the Taylor-test movemesh).
+      The design is valid — classify as pass.  This is the expected
+      pattern when more epochs were requested than the problem needs.
+
+    - **Objective still monotonically decreasing at the failure (no
+      plateau in the final epochs), no convergence visible, or the
+      design is fragmented/empty in the snapshots**: the run was cut
+      short before converging — a genuine numerical bug.  Classify as
+      wrong_result, even if the design has already formed.
+
+    ## Conduction sanity (heat problems)
+
+    The final design must CONDUCT: for every solid piece, a connected path
+    from the loaded boundary to the cooled boundary, with material in
+    contact with the cooled (Dirichlet) wall.  A design whose solid never
+    reaches the cooled wall, or whose material islands are isolated from
+    both the load and the sink, cannot transport heat — classify it as
+    wrong_result even when the objective curve looks converged.  The usual
+    cause is an initial phi that froze the contact or broke the path, not
+    the physics.  Judge CONDUCTION, not the piece count: a design with two
+    or more separate pieces is fine when each piece reaches the load and
+    the sink.
+
+    ## Output
 
     Return exactly one string: [pass, wrong_result]
     No markdown.  No explanation.  No punctuation.
@@ -495,10 +612,10 @@ QUALITY_CHECK_SYSTEM = """\
 
 QUALITY_CHECK_USER = """\
     Problem: {problem_name}
-    
+
     Working directory contents:
     {context_text}
-    
+    {image_section}
     Is the final result valid (pass) or wrong (wrong_result)?
 """
 
@@ -543,16 +660,63 @@ FIX_LOCAL_SYSTEM = (
       * If FreeFEM exit = 0 but still no MinTh.vtu: the .edp file may not
         include a final VTU export.  The setup_optimization call may have
         wrong parameters that caused FreeFEM to skip the final snapshot.
+    - **Wrong result — asymmetric design (symmetric problem)** (arrives
+      under physics_violation or empty_design): the problem
+      geometry and boundary conditions are symmetric about an axis, but the
+      design image shows a CLEARLY lopsided optimised design.  Small
+      asymmetries (ragged edges, minor detail mismatches from finite-element
+      discretisation and remeshing) are NOT a failure and need no fix.  For
+      a genuinely lopsided design the initial phi broke the symmetry —
+      sin-based oscillatory terms about the mirror axis are anti-symmetric
+      under reflection.  Replace phi with a SYMMETRIC pattern (cos-based
+      about the axis, e.g. '-0.4 - cos(2*pi*x/L)*cos(2*pi*y/H)', which is
+      symmetric about x = L/2 and y = H/2) and re-run; keep every other
+      parameter unchanged.
+    - **Wrong result — phi_unsuitable (the INITIAL LEVEL SET is the
+      failure)**: the seed made the problem infeasible or badly started.
+      Symptoms: a fragmented/beaded design, no connected path from the
+      load to the sink, no material contact with a fixed boundary that
+      must conduct (a Dirichlet sink or load edge — that contact is FROZEN
+      during the evolution), features far thinner than hmax, or a
+      high-frequency seed pattern that keeps crashing the remesher while
+      the physics and the numerical parameters are correct.  Replace phi
+      with a seed picked from the PHI TEMPLATE LIBRARY (injected below),
+      adapted per its usage guide: a connected trunk/branch member (or a
+      shape with a few holes, or the checkerboard when no fixed contact
+      is at stake) that covers the load segment and the sink segment,
+      with features several times hmax, smooth, low-frequency and
+      symmetric about any mirror axis.  Keep every other line unchanged —
+      do NOT work around a bad seed by changing the physics, the labels
+      or the numerical parameters.
     - **Wrong result — empty_design**: a MinTh.vtu exists but the design is
       essentially empty (only weak material, no solid region).  Check the
       render summary: if cell count is very low or all field values are near
       weak-material defaults, the optimisation converged to the trivial
       empty-design solution.
-      * Common causes: objective favours removing material (check sign of
-        Lagrange multiplier Afac), v0 too small (shape never evolves), or
-        the initial phi already covers the entire domain with weak material.
-      * Fix: increase Afac to penalise weak material more, or adjust the
-        initial phi to start with a clear solid region.
+      * **VERIFY the design is REALLY empty before fixing**: a SPARSE
+        design (thin connected conducting paths, low but nonzero solid
+        fraction) is the legitimate optimum of conduction problems with a
+        volume penalty — it is NOT empty.  Check the render summary's
+        Label cell mean (the solid fraction) and the objective values
+        before concluding emptiness.
+      * **DIAGNOSE WHICH OF TWO CAUSES made the design empty**:
+        (a) a SIGN ERROR — the objective terms or boundary loads in the
+            code have the opposite sign to the problem statement, so
+            removing material lowers the objective and the optimisation
+            legitimately empties the design.  Compare the objective sign
+            in main.py against the formulation in the paper/tex file:
+            if the code contradicts the problem statement (e.g. the
+            statement minimises temperature/heat spreading but the code
+            maximizes it), fix the sign to match the problem statement.
+        (b) a GENUINE COLLAPSE — the objective as stated genuinely
+            favours removing material (check the Lagrange multiplier
+            Afac balance), or the design eroded numerically (v0 too
+            small, shape never evolves, bad initial phi already covers
+            the domain with weak material).
+      * Fix for (a): correct the sign of the offending term to match the
+        problem statement — and only then.
+      * Fix for (b): increase Afac to penalise weak material more, or
+        adjust v0 / the initial phi to start with a clear solid region.
     - **Hardware limits**: reduce mesh resolution (hmin/hmax), reduce
       iteration counts, coarsen the initial mesh to lower memory usage.
     - **Late-stage mesh degeneration (mesh_degen)**: if objective*.txt shows many completed
@@ -563,12 +727,14 @@ FIX_LOCAL_SYSTEM = (
       * Adjust hmax proportionally to maintain mesh quality.
       * Increase diffusion (level-set regularisation) by factor of 10-100.
       * Reduce v0 (shape advection speed) by factor of 5-10.
-      * Use fewer iterations by setting iterations= to the epoch count
-        BEFORE the crash occurred.
-      **IMPORTANT**: you MUST try all of the above before resorting to
-      iteration truncation.  Truncating iterations alone without fixing
-      parameters is a LAST RESORT only when the objective has ALREADY
-      stabilised for many epochs and all parameter adjustments failed.
+      * NEVER truncate iterations=: the formal run keeps the iteration
+        count given in the budget (the pipeline's probe runs use short
+        budgets of their own, chosen outside your control), and a late
+        crash after the objective has stabilised is accepted by the
+        quality check — leave iterations= untouched.
+      **IMPORTANT**: you MUST try all of the above parameter
+      stabilisations before leaving the design as-is; the quality check
+      (not the fixer) judges whether a converged early stop is valid.
     - **MMG hang (mmg_hang / step timeout)**: FreeFEM / MMG entered an infinite
       remesh loop — the process was killed by the watchdog.  This is a SEVERE
       form of mesh degeneration where the level-set evolution creates
@@ -579,10 +745,12 @@ FIX_LOCAL_SYSTEM = (
       * Increase diffusion by factor of 100-500 to heavily smooth the
         velocity field.  e.g. if diffusion=0.0001, try diffusion=0.01.
       * Increase hmin to prevent extremely small triangles near the
-        level-set interface.  2× to 5× the current value.
-      * Ensure boundaryLabels contains ONLY Neumann/free boundaries.
-        Dirichlet labels in boundaryLabels cause the shape derivative
-        to try to move fixed edges, which MMG cannot handle.
+        level-set boundary.  2× to 5× the current value.
+      * Ensure boundaryLabels contains ONLY design (movable) boundaries —
+        normally Neumann / Robin (load / mixed) boundaries.  Dirichlet
+        (physics-fixed) labels in boundaryLabels cause the shape derivative
+        to try to move fixed edges, which MMG cannot handle.  Label 10
+        (the label-10 material boundary) never belongs in either list.
       * The objective before the hang is usually still in rapid descent —
         fixing parameters is better than truncating iterations.
     - **U-shaped objective (down then up)**: the parameters are fundamentally
@@ -590,38 +758,49 @@ FIX_LOCAL_SYSTEM = (
       * v0 too large → reduce by factor of 5-10.
       * diffusion too small → increase by factor of 10-100.
       * Lagrange multiplier Afac poorly scaled → adjust to balance physics terms.
-      * Wrong boundary labels in fixedLabels/boundaryLabels → check against mesh.
+      * Wrong boundary design role in fixedLabels/boundaryLabels → check the
+        labels against the mesh and the boundary physical kinds (Dirichlet →
+        fixed, Neumann / Robin → design).
       * Initial level-set phi does not intersect the domain properly.
       * Missing boundary conditions causing rigid-body drift.
     """
     + DSX_LABEL_DIAGNOSIS
     + """
 
+    """
+    + DESIGN_DIRICHLET_PENALTY
+    + """
+
     You must NOT change:
     - **Extracted values** (marked ``"source": "extracted"`` in initial.json).
       Always check the actual ``source`` field per value — what is extracted
-      varies per problem.  Typically these are boundary kinds, physical
-      constants, field types, PDE structure, and dimension.  These are ground
-      truth from the problem statement.
+      varies per problem.  Typically these are the boundary physical kinds
+      (Dirichlet / Neumann / Robin), physical constants, field types, PDE
+      structure, and dimension.  These are ground truth from the problem
+      statement.  (The boundary DESIGN role — boundaryLabels / fixedLabels —
+      is designed and MAY be changed; the physical kind is not.)
     - **Values explicitly stated in the .tex files** (§1 Original Problem
       Description).  The .tex is the ultimate authority — if it states a
       boundary type or constant value, do NOT change it even if initial.json
       marks it as designed.
     - **Designed values** (marked ``*_source: "designed"``) MAY be changed:
       hmin, hmax, diffusion, v0, iterations, boundaryLabels, fixedLabels,
-      phi, show_weak_material, maxLineSearch.
+      phi, show_weak_material.
     - The mathematical formulation (PDE, objective, boundary conditions)
       unless the error is demonstrably a typo in the math.
     - Working code that is unrelated to the error.
 
 """
     + RULES_BLOCK
+    + PHI_TEMPLATES
     + """
     ## Output
-    
+
     Return exactly one JSON object:
-    {{"main": "<complete corrected main.py code>", "mesh": "<complete corrected mesh.txt content, or empty string if no change>", "rationale": "<one sentence explaining what was changed and why>"}}
-    
+    {{"main": "<complete corrected main.py code>", "mesh": "<complete corrected "
+    "mesh.txt content, or empty string if no change>", "rationale": "<one "
+    "sentence explaining what was changed and why>"}}
+
     No markdown fences.  No extra text outside the JSON.
 """
 )
@@ -651,12 +830,16 @@ FIX_REWRITE_SYSTEM = (
     
 """
     + RULES_BLOCK
+    + DESIGN_DIRICHLET_PENALTY
+    + PHI_TEMPLATES
     + """
     ## Output
-    
+
     Return exactly one JSON object:
-    {{"main": "<complete corrected main.py code>", "mesh": "<complete corrected mesh.txt content, or empty string if no change>", "rationale": "<one sentence explaining the key change from previous attempts>"}}
-    
+    {{"main": "<complete corrected main.py code>", "mesh": "<complete corrected "
+    "mesh.txt content, or empty string if no change>", "rationale": "<one "
+    "sentence explaining the key change from previous attempts>"}}
+
     No markdown fences.  No extra text outside the JSON.
 """
 )
@@ -664,37 +847,37 @@ FIX_REWRITE_SYSTEM = (
 FIX_LOCAL_USER = """\
     ## 1. Original Problem Description (IMMUTABLE — these .tex files are ground truth)
     {problem_description}
-    
+
     ## 2. Current Code
     ### main.py
     ```python
     {main_py}
     ```
-    
+
     ### mesh.txt
     ```
     {mesh_txt}
     ```
-    
+
     ## 3. Execution Result
     ```json
     {run_result_json}
     ```
-    
+
     ## 4. Numerical Output
     {objective_data}
-    
+
     {convergence_data}
-    
+
     ## 5. Generated FreeFEM Code (for reference — do NOT edit directly)
     {edp_code}
-    
+
     ## 6. Repair History (CRITICAL — study this to avoid repeating past mistakes)
     {reflection_history}
-    
+
     ## 7. AutoFreeFEM Documentation
     {doc_text}
-    
+
     ## 8. Analysis Artifacts (contains both extracted ground truth and designed defaults)
     {analysis_artifacts}
 
@@ -702,49 +885,203 @@ FIX_LOCAL_USER = """\
     - outer_iterations = {outer_iterations} (use for setup_optimization iterations=)
     - inner_iterations = {inner_iterations} (use for nonlinear solver maxiter if applicable)
 
+    {fix_direction}
+
+    {image_section}
+
     Fix the {coarse} / {fine} error.  Return JSON.
 """
 
 FIX_REWRITE_USER = """\
     ## 1. Original Problem Description (IMMUTABLE — these .tex files are ground truth)
     {problem_description}
-    
+
     ## 2. Current (Failing) Code
     ### main.py
     ```python
     {main_py}
     ```
-    
+
     ### mesh.txt
     ```
     {mesh_txt}
     ```
-    
+
     ## 3. Execution Result
     ```json
     {run_result_json}
     ```
-    
+
     ## 4. Numerical Output
     {objective_data}
-    
+
     {convergence_data}
-    
+
     ## 5. Repair History (CRITICAL — study this carefully to avoid repeating past mistakes)
     {reflection_history}
-    
+
     ## 6. AutoFreeFEM Documentation
     {doc_text}
-    
+
     ## 7. Analysis Artifacts (contains both extracted ground truth and designed defaults)
     {analysis_artifacts}
 
     ## 8. Iteration Budget
     - outer_iterations = {outer_iterations} (use for setup_optimization iterations=)
     - inner_iterations = {inner_iterations} (use for nonlinear solver maxiter if applicable)
-    
+
+    {fix_direction}
+
+    {image_section}
+
     Completely regenerate main.py and mesh.txt.  The current code failed
     repeatedly with {coarse} / {fine}.  Return JSON.
+"""
+
+# =========================================================================
+# Parallel-reflection probe directions + synthesis
+# =========================================================================
+
+# One fix direction per parallel probe candidate.  Each candidate's user
+# prompt gets exactly ONE of these — the diversity of the probe round
+# comes from the directions, so the candidates do not collapse into eight
+# copies of the same repair.
+FIX_DIRECTIONS = (
+    "## Fix Direction (probe candidate)\n"
+    "Explore ONLY numerical stabilisation: adjust v0 (smaller by 5-100x), "
+    "diffusion (larger by 10-100x), and hmin/hmax so the level-set "
+    "evolution stops degenerating the mesh.  Do NOT touch phi, labels or "
+    "the objective."
+    "\n",
+    "## Fix Direction (probe candidate)\n"
+    "Explore ONLY the initial level set: replace phi with a DIFFERENT "
+    "family from the PHI TEMPLATE LIBRARY above (e.g. a solid trunk shape "
+    "instead of the checkerboard, or a shape with a hole) that still "
+    "covers the fixed load/sink segments.  Do NOT touch the numerical "
+    "parameters."
+    "\n",
+    "## Fix Direction (probe candidate)\n"
+    "Explore ONLY boundary labels and their roles: check boundaryLabels / "
+    "fixedLabels against mesh.txt — every label number must exist in the "
+    "mesh, Dirichlet edges must be in fixedLabels (never in "
+    "boundaryLabels), label 10 never in either list, and the physical "
+    "kind (Dirichlet/Neumann/Robin) must match the .tex ground truth.  "
+    "Do NOT touch phi or the objective."
+    "\n",
+    "## Fix Direction (probe candidate)\n"
+    "Explore ONLY the objective functional and the weak form: compare "
+    "every term's SIGN and constants against the .tex formulation — a "
+    "sign error (minimising instead of maximising, load with the wrong "
+    "sign, adjoint load from the wrong partial derivative) makes the "
+    "optimiser remove material.  Do NOT touch phi or the labels."
+    "\n",
+    "## Fix Direction (probe candidate)\n"
+    "Explore a COMBINATION of numerical parameters AND a new initial "
+    "level set: stabilise v0/diffusion/hmin/hmax AND replace phi with a "
+    "different PHI TEMPLATE LIBRARY family that covers the fixed "
+    "load/sink segments.  Do NOT touch labels or the objective."
+    "\n",
+    "## Fix Direction (probe candidate)\n"
+    "Explore ONLY the single most suspicious line: make the MINIMAL "
+    "conservative change that most plausibly fixes the reported failure, "
+    "and nothing else.  Change exactly one thing."
+    "\n",
+    "## Fix Direction (probe candidate)\n"
+    "Explore ONLY the discretisation and the mesh: hmin/hmax sizing "
+    "against the real domain, the mesh.txt resolution (int n), and the "
+    "field degrees (P1/P2) so features are resolvable without "
+    "over-refinement.  Do NOT touch phi, labels or the objective."
+    "\n",
+    "## Fix Direction (probe candidate)\n"
+    "Explore ONLY the code structure: missing imports, undeclared "
+    "constants, missing boundary conditions (rigid-body drift), field "
+    "declarations, the Lagrangian state/test ordering, and the "
+    "setup_optimization argument list.  Do NOT touch phi, labels or the "
+    "objective."
+    "\n",
+)
+
+FIX_SYNTHESIS_SYSTEM = (
+    """\
+    You are the SYNTHESISER of a parallel reflection round.  Up to
+    {n_candidates} independent fix candidates were generated for the same
+    failure, each exploring ONE fix direction, and each was tested with a
+    SHORT probe run ({probe_min}-{probe_max} epochs — fewer than the
+    formal run).  You receive every candidate's code, rationale and probe
+    evidence, and must synthesise ONE next-step main.py + mesh.txt for
+    the FORMAL run.
+
+    ## Synthesis rules
+
+    1. Weigh the candidates by their PROBE EVIDENCE, in this order:
+       - FreeFEM return code (0 = ran through),
+       - epochs completed vs the probe budget (a candidate that survived
+         its whole budget is stronger than one that crashed at epoch 3),
+       - final objective value (lower is better for a minimisation),
+       - whether MinTh.vtu (the final design) was produced,
+       - the design image (connected, physically sensible solid region).
+    2. Prefer the BODY of the best-evidenced candidate; mix in successful
+       ELEMENTS of other candidates (e.g. the phi of candidate A with the
+       numerical parameters of candidate B) when the evidence suggests
+       both worked.
+    3. iterations= must be {formal_iterations} — the probe budgets are
+       probe-only artefacts and MUST NOT be copied into the formal code.
+    4. If ALL candidates failed hard (Python crash, no .edp), synthesise
+       the two most promising directions into one code instead.
+    5. Keep the changes conservative: do not re-derive physics that the
+       probe evidence shows working; do not mix in elements of candidates
+       whose probe run failed early.
+    """
+    + RULES_BLOCK
+    + """
+    ## Output
+
+    Return exactly one JSON object:
+    {{"main": "<complete main.py code>",
+     "mesh": "<complete mesh.txt content, or empty string if no change>",
+     "rationale": "<one sentence on which candidates were combined and why>"}}
+    No markdown fences.  No extra text outside the JSON.
+"""
+)
+
+FIX_SYNTHESIS_USER = """\
+    ## 1. Original Problem Description (IMMUTABLE — these .tex files are ground truth)
+    {problem_description}
+
+    ## 2. Current Code (before this reflection round)
+    ### main.py
+    ```python
+    {main_py}
+    ```
+
+    ### mesh.txt
+    ```
+    {mesh_txt}
+    ```
+
+    ## 3. Failure Diagnosis
+    - coarse = {coarse}
+    - fine = {fine}
+    - action = {action}
+
+    ## 4. Probe Candidates (each with its direction, code, and probe evidence)
+    {candidates_report}
+
+    ## 5. Repair History (study this to avoid repeating past mistakes)
+    {reflection_history}
+
+    ## 6. AutoFreeFEM Documentation
+    {doc_text}
+
+    ## 7. Analysis Artifacts (contains both extracted ground truth and designed defaults)
+    {analysis_artifacts}
+
+    ## 8. Formal Iteration Budget
+    - outer_iterations = {formal_iterations} (use for setup_optimization iterations=)
+
+    {image_section}
+
+    Synthesise the next-step code for the formal run.  Return JSON.
 """
 
 # =========================================================================
@@ -777,6 +1114,7 @@ CLASSIFY_FINE_USER = """\
     {edp_code}
 
     Coarse category: {coarse}
+    {image_section}
 
     Diagnose the specific sub-category.
 """
@@ -810,17 +1148,16 @@ CLASSIFY_FINE_WRONG_USER = """\
     {context_text}
 
     Coarse category: {coarse}
+    {image_section}
 
-    Diagnose the specific sub-category.  CRITICAL: if the context above
-    contains a "MinTh.vtu Render Summary" section, do NOT select
-    "no_minth_vtu" — the VTU file exists and was rendered.
+    Diagnose the specific sub-category.
 """
 
 CLASSIFY_FINE_OTHER_USER = """\
     Problem: {problem_name}
-    
+
     Full working directory contents:
     {context_text}
-    
+    {image_section}
     The error does not fit standard categories.  Provide a one-sentence diagnosis.
 """

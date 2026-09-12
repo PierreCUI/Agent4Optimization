@@ -1,0 +1,12 @@
+Loaded: 729 rows
+Dropped failed runs (rc != 0): 0
+Dropped zero-time rows: 0
+Kept: 729 rows
+
+Effect table: C:\Users\98215\OneDrive\Desktop\Agent4FreeFem\batches\run_heatSinkConvection\batch_correlation.csv
+
+Impact ranking per metric (Morris mu*, % of metric mean per decade; per P-order for p_degree):
+  avg_time_per_epoch_s: hmax=72.2%  p_degree=35.2%  hmin=8.9%  diffusion=5.6%  v0=3.5%  mesh_n=1.9%
+  ff_max_memory_mb    : hmax=12.5%  p_degree=8.0%  mesh_n=2.9%  hmin=1.9%  v0=1.0%  diffusion=0.9%
+  ff_avg_memory_mb    : hmax=20.9%  p_degree=13.6%  hmin=5.0%  v0=1.6%  mesh_n=1.2%  diffusion=0.5%
+Heatmap: C:\Users\98215\OneDrive\Desktop\Agent4FreeFem\batches\run_heatSinkConvection\batch_heatmap.png

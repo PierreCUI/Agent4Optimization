@@ -5,6 +5,13 @@ from .API import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, CodeAgent, CodeWriter
 
 class DeepSeekCodeWriter(CodeWriter):
     def __init__(self, model_name):
+        if not DEEPSEEK_API_KEY:
+            # Without this guard the OpenAI SDK silently resolves
+            # OPENAI_API_KEY instead and the run dies later with a 401
+            # that looks like a DeepSeek outage.
+            raise RuntimeError(
+                "DEEPSEEK_API_KEY is not set — export it before building the DeepSeek agent."
+            )
         super().__init__()
         self.model_name = model_name
         model_kwargs = {
@@ -27,9 +34,22 @@ class DeepSeekCodeAgentV4Pro(CodeAgent):
 
 
 class DeepSeekCodeAgentV4Flash(CodeAgent):
-    MODEL_NAME = "deepseek-v4-flash"
+    # v4.1 flash interface
+    MODEL_NAME = "deepseek-flash"
 
     def __init__(self):
         super().__init__()
         self.model_name = DeepSeekCodeAgentV4Flash.MODEL_NAME
+        self.writer = DeepSeekCodeWriter(self.model_name)
+
+
+class DeepSeekCodeAgentV4FlashVision(CodeAgent):
+    # Vision-capable variant of the flash model: accepts image inputs
+    # via CodeWriter.invoke_multimodal (used by the reflection loop with
+    # the iteration-label composite image).
+    MODEL_NAME = "deepseek-v4-flash-vision-exp"
+
+    def __init__(self):
+        super().__init__()
+        self.model_name = DeepSeekCodeAgentV4FlashVision.MODEL_NAME
         self.writer = DeepSeekCodeWriter(self.model_name)

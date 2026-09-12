@@ -1,8 +1,10 @@
 """
 Run AutoFreeFEM Python code on the host system.
 
-If autofreefem is missing an ``include/*.idp`` file, this module downloads
-it from the upstream GitLab repository before retrying.
+The ``include/*.idp`` files AutoFreeFEM needs are shipped locally in
+Execution/ (e.g. ``gradientIdentification.idp``, ``inout.idp``) and are
+copied into the autofreefem package's include directory before every
+run — nothing is downloaded from the upstream GitLab repository.
 """
 
 import os
@@ -10,22 +12,20 @@ import re
 import shutil
 import subprocess
 import sys
-import urllib.request
+import time
 from pathlib import Path
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from configs import AUTOFREEFEM_MAX_RETRIES, AUTOFREEFEM_TIMEOUT, GITLAB_RAW_URL
+from configs import AUTOFREEFEM_MAX_RETRIES, AUTOFREEFEM_TIMEOUT  # noqa: E402
+
+_LOCAL_IDP_DIR = Path(__file__).resolve().parent  # Execution/
 
 
-def _fetch_missing_idp(stderr: str, python_exe: str) -> bool:
-    m = re.search(r"autofreefem[\\/]include[\\/]([^\s']+\.idp)", stderr)
-    if not m:
-        return False
-    filename = m.group(1)
-    url = f"{GITLAB_RAW_URL}/{filename}"
+def _autofreefem_include_dir(python_exe: str):
+    """Return the autofreefem package include directory, or None."""
     r = subprocess.run(
         [
             python_exe,
@@ -34,18 +34,47 @@ def _fetch_missing_idp(stderr: str, python_exe: str) -> bool:
         ],
         capture_output=True,
         text=True,
+        timeout=60,
     )
     if r.returncode != 0 or not r.stdout.strip():
-        print(f"  [fetch] cannot locate autofreefem include dir (rc={r.returncode})")
+        return None
+    return Path(r.stdout.strip())
+
+
+def _install_local_idp(python_exe: str) -> None:
+    """Copy the .idp files shipped in Execution/ into the autofreefem
+    include dir, overwriting any previously downloaded copies."""
+    inc = _autofreefem_include_dir(python_exe)
+    if inc is None:
+        print("  [idp] cannot locate autofreefem include dir — skipping")
+        return
+    for src in _LOCAL_IDP_DIR.glob("*.idp"):
+        shutil.copy2(src, inc / src.name)
+        print(f"  [idp] {src.name} -> autofreefem include dir")
+
+
+def _fetch_missing_idp(stderr: str, python_exe: str) -> bool:
+    """Provide a missing .idp from the local Execution/ directory.
+
+    AutoFreeFEM errors name the include file it could not find; the file
+    is copied from Execution/ — no upstream download.
+    """
+    m = re.search(r"autofreefem[\\/]include[\\/]([^\s']+\.idp)", stderr)
+    if not m:
         return False
-    dst = Path(r.stdout.strip()) / filename
-    print(f"  [fetch] {filename} <- {url}")
-    try:
-        urllib.request.urlretrieve(url, dst)
-        return dst.exists()
-    except Exception as e:
-        print(f"  [fetch] FAILED: {e}")
+    filename = m.group(1)
+    src = _LOCAL_IDP_DIR / filename
+    if not src.exists():
+        print(f"  [fetch] {filename} not found in Execution/ — giving up")
         return False
+    inc = _autofreefem_include_dir(python_exe)
+    if inc is None:
+        print("  [fetch] cannot locate autofreefem include dir — giving up")
+        return False
+    dst = inc / filename
+    shutil.copy2(src, dst)
+    print(f"  [fetch] {filename} <- Execution/")
+    return dst.exists()
 
 
 def run_autofreefem(main_py: Path, workdir: Path = None, python_exe: str = None) -> dict:
@@ -78,20 +107,40 @@ def run_autofreefem(main_py: Path, workdir: Path = None, python_exe: str = None)
         except OSError:
             pass
 
+    # Local .idp overrides — install the include files shipped in
+    # Execution/ before running, so the generated .edp scripts find them.
+    _install_local_idp(python_exe)
+
+    # Cumulative budget: AUTOFREEFEM_TIMEOUT applies PER ATTEMPT for an
+    # individual run, but the retry loop as a whole must not take
+    # AUTOFREEFEM_MAX_RETRIES × TIMEOUT — pass the REMAINING budget as
+    # the per-attempt timeout so a retry cannot overrun the total.
+    t_start = time.time()
     for _ in range(AUTOFREEFEM_MAX_RETRIES):
+        remaining = AUTOFREEFEM_TIMEOUT - (time.time() - t_start)
+        if remaining <= 0:
+            return {
+                "return_code": "-1",
+                "stdout": "",
+                "stderr": f"TIMEOUT: total retry budget ({AUTOFREEFEM_TIMEOUT}s) exhausted",
+            }
         try:
             r = subprocess.run(
                 [python_exe, str(main_py.resolve())],
                 cwd=workdir,
                 capture_output=True,
                 text=True,
-                timeout=AUTOFREEFEM_TIMEOUT,
+                # Non-UTF-8 locales decode subprocess output with the
+                # ANSI codec (cp1252 here): autofreefem / main.py print
+                # Greek and arrow characters — never crash on them.
+                errors="replace",
+                timeout=remaining,
             )
         except subprocess.TimeoutExpired:
             return {
                 "return_code": "-1",
                 "stdout": "",
-                "stderr": f"TIMEOUT after {AUTOFREEFEM_TIMEOUT} seconds",
+                "stderr": f"TIMEOUT after {AUTOFREEFEM_TIMEOUT} seconds (retry budget)",
             }
         if r.returncode == 0:
             break

@@ -31,8 +31,8 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from configs import MAX_FILE_CHARS
-from utils import parser_json
+from configs import MAX_FILE_CHARS  # noqa: E402
+from utils import parser_json  # noqa: E402
 
 # ======================================================================
 # detection — does any input file contain mesh-related content?
@@ -52,11 +52,14 @@ _MESH_CODE_PATTERNS = [
 ]
 
 # Heuristic patterns that suggest a *geometric description* (not code).
+# Cartesian products appear as "[a,b]x[c,d]", "×", "\times" (LaTeX),
+# or the word "times" — all must match so an explicit domain rectangle
+# is never misclassified as "absent".
 _GEOMETRY_DESCRIPTION_PATTERNS = [
     r"(?:rectangle|rectangular)\s+(?:domain|region).*?(?:\d)",
     r"(?:square|circular|annular|L-shaped)\s+(?:domain|region)",
     r"domain\s+(?:is|:).*?(?:rectangle|square|circle|disc)",
-    r"\[-?\d+\.?\d*\s*,\s*-?\d+\.?\d*\]\s*[x×]\s*\[-?\d+\.?\d*\s*,\s*-?\d+\.?\d*\]",
+    r"\[-?\d+\.?\d*\s*,\s*-?\d+\.?\d*\]\s*(?:x|×|\\times|times)\s*\[-?\d+\.?\d*\s*,\s*-?\d+\.?\d*\]",
 ]
 
 
@@ -85,30 +88,22 @@ def detect_mesh_source(input_files: dict) -> dict:
     dict with keys:
       category:   "code" | "description" | "absent"
       files:      list of filenames that contain mesh content
-      raw_content: concatenated relevant content (or empty string)
     """
     code_files = []
     desc_files = []
-    raw_parts = []
 
     for fname, content in input_files.items():
         if _scan_for_mesh_code(content):
             code_files.append(fname)
-            raw_parts.append(content)
         elif _scan_for_geometry_description(content):
             desc_files.append(fname)
-            raw_parts.append(content)
 
     if code_files:
-        return {"category": "code", "files": code_files, "raw_content": "\n\n".join(raw_parts)}
+        return {"category": "code", "files": code_files}
     elif desc_files:
-        return {
-            "category": "description",
-            "files": desc_files,
-            "raw_content": "\n\n".join(raw_parts),
-        }
+        return {"category": "description", "files": desc_files}
     else:
-        return {"category": "absent", "files": [], "raw_content": ""}
+        return {"category": "absent", "files": []}
 
 
 # ======================================================================
@@ -221,9 +216,9 @@ _DESIGN_SYSTEM = """\
     
     - DESIGN a reasonable mesh from the problem context.
     - Use your knowledge of continuum mechanics:
-      * Cantilever beam → rectangle [0,2]x[0,1], left edge fixed (label 4),
+      * Cantilever beam → rectangle [0,2]x[0,1], left edge clamped (label 4),
         right edge loaded (label 2).
-      * Bridge → long rectangle [0,4]x[0,1], both ends fixed (labels 2,4),
+      * Bridge → long rectangle [0,4]x[0,1], both ends clamped (labels 2,4),
         load on top/bottom (label 1 or 3).
       * Thermal fin → rectangle with appropriate aspect ratio.
       * Fluid-structure → channel with obstacle.
@@ -250,6 +245,22 @@ _DESIGN_SYSTEM = """\
     - Every border MUST have a label.
     - Labels MUST be integer literals, not variables (unless the original code
       already uses variables — then preserve them).
+    - The label-10 boundary (material boundary — holes / the solid-void
+      boundary of the level set inside the domain) MUST use label 10:
+      the material boundary label is ALWAYS 10 (a FreeFEM requirement).
+      If the problem needs a pre-cut hole, assign its border `label=10`
+      by hand.  (Holes carved by the level-set function during
+      optimisation are labelled 10 automatically and need no mesh-side
+      handling.)  The label-10 boundary is NOT a non-10 boundary — it
+      must not be confused with the labelled non-10 edges (label 1..4
+      etc.).
+    - Multi-domain meshes (problems with two or more computational
+      domains): interface edges — the shared boundaries BETWEEN two
+      computational domains — are non-10 boundaries and need their own
+      mesh labels, distinct from the other non-10 boundary labels and
+      from label 10.  Add them only when the problem actually has
+      multiple computational domains; single-domain problems have no
+      interfaces.
     - The final line must produce a mesh variable named `Th`.
     
     ## Output rules
@@ -349,7 +360,7 @@ if __name__ == "__main__":
 
         if "_error" in result:
             print(f"  [{case_name}] ERROR: {result['_error']}")
-            summary_rows.append((case_name, "ERROR", "", "", "", ""))
+            summary_rows.append((case_name, "ERROR", "", "", "", "", ""))
             continue
 
         ex = result.get("extracted", {})
@@ -358,7 +369,9 @@ if __name__ == "__main__":
         cat = ex.get("category", "?")
         src = ds.get("mesh_code_source", "?")
         dim = ds.get("dimension", "?")
-        labels = ", ".join(str(l) for l in ds.get("labels_used", []))
+        # `or []` guards None from a malformed LLM response — iterating
+        # None would abort the demo runner.
+        labels = ", ".join(str(l) for l in (ds.get("labels_used") or []))
         domain = ds.get("domain_description", "")[:60]
         syntax_ok = "OK" if not ex.get("has_syntax_errors") else "FIXED"
 

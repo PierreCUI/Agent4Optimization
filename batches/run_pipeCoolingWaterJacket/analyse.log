@@ -1,0 +1,12 @@
+Loaded: 729 rows
+Dropped failed runs (rc != 0): 180
+Dropped zero-time rows: 0
+Kept: 549 rows
+
+Effect table: C:\Users\98215\OneDrive\Desktop\Agent4FreeFem\batches\run_pipeCoolingWaterJacket\batch_correlation.csv
+
+Impact ranking per metric (Morris mu*, % of metric mean per decade; per P-order for p_degree):
+  avg_time_per_epoch_s: hmin=41.0%  p_degree=37.8%  v0=17.0%  diffusion=16.4%  mesh_n=5.5%  hmax=4.8%
+  ff_max_memory_mb    : p_degree=40.2%  hmin=32.9%  v0=14.4%  diffusion=12.9%  mesh_n=6.2%  hmax=5.3%
+  ff_avg_memory_mb    : p_degree=29.5%  hmin=23.8%  v0=8.7%  diffusion=8.2%  mesh_n=6.1%  hmax=2.0%
+Heatmap: C:\Users\98215\OneDrive\Desktop\Agent4FreeFem\batches\run_pipeCoolingWaterJacket\batch_heatmap.png

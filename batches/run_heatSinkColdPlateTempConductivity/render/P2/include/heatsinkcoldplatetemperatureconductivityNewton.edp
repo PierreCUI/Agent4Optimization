@@ -1,0 +1,5 @@
+varf heatsinkcoldplatetemperatureconductivityNewton([incu],[deltau]) = 
+    int1d(Th, 3.00000000000000)(h*deltau*incu) 
+ + int2d(Th)((1.00000000000000*(phi<0) + 0.000130000000000000*(1-(phi<0)))*k0*(beta*(dx(deltau)*dx(u) + dy(deltau)*dy(u))*incu - (beta*(uamb - u) - 1)*(dx(deltau)*dx(incu) + dy(deltau)*dy(incu))))
+    + on(4,incu = 0)
+ ;

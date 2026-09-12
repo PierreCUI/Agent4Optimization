@@ -1,0 +1,401 @@
+{
+ "extracted": {
+  "problem_type": "shape_optimization",
+  "problem_name": "heatSinkWaterWall",
+  "dimension": 2,
+  "domain_name": "D",
+  "mesh_variable": "Th",
+  "mesh_file": "mesh.txt",
+  "mesh_labels_used": [
+   "1",
+   "2",
+   "3",
+   "4"
+  ],
+  "boundaries": [
+   {
+    "name": "\\Gamma_H",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "central segment of the bottom edge through which hot flue gas injects heat by convection (hot-fluid side)",
+    "mesh_label": "2"
+   },
+   {
+    "name": "\\Gamma_a",
+    "kind": "Neumann",
+    "design_role": "fixed",
+    "description": "adiabatic remainder of the bottom edge outside the hot-gas footprint",
+    "mesh_label": "1"
+   },
+   {
+    "name": "\\Gamma_p",
+    "kind": "Dirichlet",
+    "design_role": "fixed",
+    "description": "isothermal water-wall (cooling-pipe) heat sink at prescribed temperature u_C, the zero of the temperature scale",
+    "mesh_label": "4"
+   },
+   {
+    "name": "\\Gamma_c",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "duct edges exchanging heat with ambient air (left and right edges)",
+    "mesh_label": "3"
+   }
+  ],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": 0,
+    "dirichlet_labels": [
+     "\\Gamma_p"
+    ]
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "\\delta u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity (aluminium)",
+    "unit": "W/(K m)"
+   },
+   {
+    "name": "k_{air}",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity (air)",
+    "unit": "W/(K m)"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient (air/ambient side)",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_{amb}",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient air temperature",
+    "unit": "K"
+   },
+   {
+    "name": "h_H",
+    "latex": "h_H",
+    "value": 25,
+    "description": "convective heat transfer coefficient (hot-fluid side)",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_H",
+    "latex": "u_H",
+    "value": 338,
+    "description": "hot-fluid (flue gas) temperature",
+    "unit": "K"
+   },
+   {
+    "name": "u_C",
+    "latex": "u_C",
+    "value": 0,
+    "description": "water-wall temperature",
+    "unit": "K"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "formula": "h_H \\left( u_H - u_{amb} \\right) = 25 \\times 40 = 10^{3}"
+   },
+   {
+    "name": "\\phi_0",
+    "latex": "\\phi_0(x,y)",
+    "formula": "\\min\\left( \\left| y - 0.9 \\right| - 0.1 ,\\ \\max\\left( \\left| y - 0.1 \\right| - 0.1 ,\\ \\left| x - 0.5 \\right| - 0.25 \\right),\\ \\left| x - 0.5 \\right| - 0.1 \\right)"
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": 0.00013
+  },
+  "objective": {
+   "name": "J",
+   "description": "material cost plus heat-flux-weighted gas-side surface-temperature integral; minimizing keeps the gas-side surface cold at fixed material cost, maximizing heat recovered from the flue gas",
+   "terms": [
+    "\\int_{D} \\ell \\chi \\,dx",
+    "\\int_{\\Gamma_H} q_b u \\,ds_x"
+   ]
+  },
+  "state_equation": {
+   "description": "linear heat-conduction problem with Robin convection on \\Gamma_H and \\Gamma_c and Dirichlet u = u_C on \\Gamma_p",
+   "weak_form_lhs": "\\int_{D} k \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} h_H u \\delta u \\,ds_x + \\int_{\\Gamma_c} h u \\delta u \\,ds_x",
+   "weak_form_rhs": "\\int_{\\Gamma_H} h_H u_{H} \\delta u \\,ds_x + \\int_{\\Gamma_c} h u_{amb} \\delta u \\,ds_x",
+   "is_nonlinear": false
+  },
+  "adjoint_equation": {
+   "description": "adjoint problem with homogeneous Dirichlet condition \\tilde u = 0 on \\Gamma_p and adjoint load from the gas-side surface-temperature integral in the objective",
+   "weak_form_lhs": "\\int_{D} k \\chi \\left( \\nabla \\delta u \\cdot \\nabla \\tilde u \\right) \\,dx + \\int_{\\Gamma_H} h_H \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_c} h \\delta u \\tilde u \\,ds_x",
+   "weak_form_rhs": "- \\int_{\\Gamma_H} q_b \\delta u \\,ds_x"
+  },
+  "shape_derivative": {
+   "volume_expression": "\\int_{D} \\left( \\operatorname{div} \\mathbf V \\left( \\nabla u \\cdot \\nabla \\tilde u \\right) - \\left( \\nabla \\tilde u \\cdot \\left( \\nabla u \\cdot \\nabla \\mathbf V \\right) \\right) - \\left( \\nabla u \\cdot \\left( \\nabla \\tilde u \\cdot \\nabla \\mathbf V \\right) \\right) \\right) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf V \\,dx",
+   "boundary_expression": "\\int_{\\Gamma_c} \\kappa h \\left( u - u_{amb} \\right) \\tilde u \\left( \\mathbf V \\cdot \\mathbf n \\right) \\,ds_x"
+  },
+  "optimization_params": {
+   "level_set_initial": "\\phi_0(x,y) = \\min\\left( \\left| y - 0.9 \\right| - 0.1 ,\\ \\max\\left( \\left| y - 0.1 \\right| - 0.1 ,\\ \\left| x - 0.5 \\right| - 0.25 \\right),\\ \\left| x - 0.5 \\right| - 0.1 \\right) (I-BEAM without holes)"
+  }
+ },
+ "designed": {
+  "problem_type": "shape_optimization",
+  "problem_type_source": "extracted",
+  "problem_name": "heatSinkWaterWall",
+  "problem_name_source": "extracted",
+  "dimension": 2,
+  "dimension_source": "extracted",
+  "domain_name": "D",
+  "domain_name_source": "extracted",
+  "mesh_variable": "Th",
+  "mesh_variable_source": "extracted",
+  "mesh_file": "mesh.txt",
+  "mesh_file_source": "extracted",
+  "objective_name": "J",
+  "objective_name_source": "extracted",
+  "objective_description": "material cost plus heat-flux-weighted gas-side surface-temperature integral; minimizing keeps the gas-side surface cold at fixed material cost, maximizing heat recovered from the flue gas",
+  "objective_description_source": "extracted",
+  "objective_terms": [
+   "\\int_{D} \\ell \\chi \\,dx",
+   "\\int_{\\Gamma_H} q_b u \\,ds_x"
+  ],
+  "objective_terms_source": "extracted",
+  "state_description": "linear heat-conduction problem with Robin convection on \\Gamma_H and \\Gamma_c and Dirichlet u = u_C on \\Gamma_p",
+  "state_description_source": "extracted",
+  "state_weak_lhs": "\\int_{D} k \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} h_H u \\delta u \\,ds_x + \\int_{\\Gamma_c} h u \\delta u \\,ds_x",
+  "state_weak_lhs_source": "extracted",
+  "state_weak_rhs": "\\int_{\\Gamma_H} h_H u_{H} \\delta u \\,ds_x + \\int_{\\Gamma_c} h u_{amb} \\delta u \\,ds_x",
+  "state_weak_rhs_source": "extracted",
+  "state_is_nonlinear": false,
+  "state_is_nonlinear_source": "extracted",
+  "adjoint_description": "adjoint problem with homogeneous Dirichlet condition \\tilde u = 0 on \\Gamma_p and adjoint load from the gas-side surface-temperature integral in the objective",
+  "adjoint_description_source": "extracted",
+  "adjoint_weak_lhs": "\\int_{D} k \\chi \\left( \\nabla \\delta u \\cdot \\nabla \\tilde u \\right) \\,dx + \\int_{\\Gamma_H} h_H \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_c} h \\delta u \\tilde u \\,ds_x",
+  "adjoint_weak_lhs_source": "extracted",
+  "adjoint_weak_rhs": "- \\int_{\\Gamma_H} q_b \\delta u \\,ds_x",
+  "adjoint_weak_rhs_source": "extracted",
+  "shape_derivative_volume": "\\int_{D} \\left( \\operatorname{div} \\mathbf V \\left( \\nabla u \\cdot \\nabla \\tilde u \\right) - \\left( \\nabla \\tilde u \\cdot \\left( \\nabla u \\cdot \\nabla \\mathbf V \\right) \\right) - \\left( \\nabla u \\cdot \\left( \\nabla \\tilde u \\cdot \\nabla \\mathbf V \\right) \\right) \\right) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf V \\,dx",
+  "shape_derivative_boundary": "\\int_{\\Gamma_c} \\kappa h \\left( u - u_{amb} \\right) \\tilde u \\left( \\mathbf V \\cdot \\mathbf n \\right) \\,ds_x",
+  "shape_derivative_source": "extracted",
+  "boundaries": [
+   {
+    "name": "\\Gamma_H",
+    "label": "2",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "central segment of the bottom edge through which hot flue gas injects heat by convection (hot-fluid side)",
+    "source": "extracted"
+   },
+   {
+    "name": "\\Gamma_a",
+    "label": "1",
+    "kind": "Neumann",
+    "design_role": "fixed",
+    "description": "adiabatic remainder of the bottom edge outside the hot-gas footprint (zero-load Neumann, i.e. perfectly insulated)",
+    "source": "extracted"
+   },
+   {
+    "name": "\\Gamma_p",
+    "label": "4",
+    "kind": "Dirichlet",
+    "design_role": "fixed",
+    "description": "isothermal water-wall (cooling-pipe) heat sink at prescribed temperature u_C, the zero of the temperature scale",
+    "source": "extracted"
+   },
+   {
+    "name": "\\Gamma_c",
+    "label": "3",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "duct edges exchanging heat with ambient air (left and right edges)",
+    "source": "extracted"
+   }
+  ],
+  "interfaces": [],
+  "interfaces_source": "designed",
+  "interfaces_rationale": "Single-domain problem: the whole duct is one computational domain D, so there is no material interface between two computational domains. The only internal boundary is the solid/void (level-set) boundary, which carries mesh label 10 and is handled implicitly by the level-set function, not as a multi-domain interface.",
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": 0,
+    "dirichlet_labels": [
+     "4"
+    ],
+    "source": "extracted",
+    "rationale": "Two-dimensional steady heat-conduction temperature field; the LaTeX Dirichlet boundary name \\Gamma_p is reconciled with the mesh label 4 (isothermal water wall). P2 and unit K are preserved from the extracted spec."
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "\\delta u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "source": "extracted"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity (aluminium)",
+    "unit": "W/(K m)",
+    "source": "extracted"
+   },
+   {
+    "name": "k_{air}",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity (air)",
+    "unit": "W/(K m)",
+    "source": "extracted"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient (air/ambient side)",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_{amb}",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient air temperature",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "h_H",
+    "latex": "h_H",
+    "value": 25,
+    "description": "convective heat transfer coefficient (hot-fluid side)",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_H",
+    "latex": "u_H",
+    "value": 338,
+    "description": "hot-fluid (flue gas) temperature",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "u_C",
+    "latex": "u_C",
+    "value": 0,
+    "description": "water-wall temperature",
+    "unit": "K",
+    "source": "extracted"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "formula": "h_H \\left( u_H - u_{amb} \\right) = 25 \\times 40 = 10^{3}",
+    "source": "extracted"
+   },
+   {
+    "name": "\\phi_0",
+    "latex": "\\phi_0(x,y)",
+    "formula": "\\min\\left( \\left| y - 0.9 \\right| - 0.1 ,\\ \\max\\left( \\left| y - 0.1 \\right| - 0.1 ,\\ \\left| x - 0.5 \\right| - 0.25 \\right),\\ \\left| x - 0.5 \\right| - 0.1 \\right)",
+    "source": "extracted"
+   },
+   {
+    "name": "\\mathbf n",
+    "latex": "\\mathbf n",
+    "formula": "\\mathbf n = \\dfrac{\\nabla \\phi}{\\left| \\nabla \\phi \\right|}",
+    "source": "designed",
+    "rationale": "Outward unit normal of the level-set interface; needed both for the interface advection and for the (V . n) factor in the boundary term of the shape derivative."
+   },
+   {
+    "name": "\\kappa",
+    "latex": "\\kappa",
+    "formula": "\\kappa = \\nabla \\cdot \\mathbf n = \\nabla \\cdot \\left( \\dfrac{\\nabla \\phi}{\\left| \\nabla \\phi \\right|} \\right)",
+    "source": "designed",
+    "rationale": "Curvature of the movable ambient-air boundary \\Gamma_c; it appears explicitly in the extracted boundary part of the shape derivative, so it must be available as an evaluable expression."
+   },
+   {
+    "name": "k(\\phi)",
+    "latex": "k(\\phi)",
+    "formula": "k(\\phi) = k_{air} + \\left( k_0 - k_{air} \\right) H(\\phi)",
+    "source": "designed",
+    "rationale": "Effective conductivity of the two-phase (solid aluminium / air void) medium obtained by interpolating the two conductivities through the level-set Heaviside; reproduces the k\\chi factor used in the state, adjoint and shape-derivative forms."
+   },
+   {
+    "name": "\\mathbf q",
+    "latex": "\\mathbf q",
+    "formula": "\\mathbf q = - k \\chi \\nabla u",
+    "source": "designed",
+    "rationale": "Fourier heat-flux density, the standard derived quantity of the thermal problem; useful for post-processing the recovered heat flux."
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": 0.00013,
+   "source": "extracted",
+   "rationale": "chi is the material indicator (1 in solid aluminium, chi_weak in air); the weak value is kept as extracted (it is the regularised void fraction of the level-set formulation)."
+  },
+  "optimization_config": {
+   "mesh_file": "mesh.txt",
+   "hmin": 0.01,
+   "hmax": 0.1,
+   "diffusion": 0.0001,
+   "v0": 0.001,
+   "iterations": 30,
+   "level_set_initial": "\\phi_0(x,y) = \\min\\left( \\left| y - 0.9 \\right| - 0.1 ,\\ \\max\\left( \\left| y - 0.1 \\right| - 0.1 ,\\ \\left| x - 0.5 \\right| - 0.25 \\right),\\ \\left| x - 0.5 \\right| - 0.1 \\right)",
+   "boundary_labels": [
+    "3"
+   ],
+   "fixed_labels": [
+    "1",
+    "2",
+    "4"
+   ],
+   "extra_params": {
+    "ell": null,
+    "q_b": 1000.0,
+    "chi_weak": 0.00013,
+    "robin_labels": [
+     "2",
+     "3"
+    ],
+    "dirichlet_labels": [
+     "4"
+    ],
+    "note": "ell is the Lagrange multiplier that trades the material-cost term against the heat-recovery term of J; it is deliberately left undesigned because the pipeline calibrates it in the Afac-calibration step."
+   },
+   "source": "designed",
+   "rationale": "The extracted spec fixes the geometry convention (unit-square duct, I-beam initial layout given by phi_0) but supplies no numerical optimisation settings, so they are designed here: hmin/hmax resolve the level set at 1/100-1/10 of the unit-square domain; diffusion 1e-4 regularises the Hamilton-Jacobi update; v0 = 1e-3 moves the solid/void interface by about 5% of the domain over 30 iterations, small enough to keep the linearised shape derivative valid; 30 iterations lie in the recommended 20-50 range. boundary_labels/fixed_labels follow the extracted design roles: only the ambient-air Robin edge \\Gamma_c (label 3) is movable, whereas the adiabatic bottom remainder (1), the hot-gas footprint (2) and the isothermal water wall (4) are prescribed by the device layout and frozen. The solid/void boundary (mesh label 10) is never listed: it is carried implicitly by the level-set function."
+  }
+ }
+}

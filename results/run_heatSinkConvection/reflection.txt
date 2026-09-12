@@ -1,0 +1,22 @@
+======================================================================
+REFLECTION LOG — run_heatSinkConvection
+Started: 2026-09-10 01:41:46
+======================================================================
+
+--- Iteration 1 [01:46:14] ---
+Coarse:  wrong_result
+Fine:    physics_violation
+Action:  local_fix
+Fix:     Reduced v0 from 0.005 to 0.0005 (10x), increased diffusion from 0.0001 to 0.01 (100x), and raised hmin/hmax from 0.01/0.1 to 0.02/0.2 to prevent the severe mesh degeneration (negative triangle areas) that crashed the optimization at iteration 2 after the first overly aggressive advection step.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['5', '8']
+
+--- Iteration 2 [01:53:10] ---
+Coarse:  wrong_result
+Fine:    pathological_objective
+Action:  local_fix
+Fix:     The optimization crashed at iteration 2 with a mesh-degeneration error (MMG negative triangle area after advection) because the shape-evolution parameters were still too aggressive; I reduced v0 by 10x (0.0005→0.00005), increased diffusion by 10x (0.01→0.1), and raised hmin to 0.05 to smooth the velocity field and prevent triangle collapse, preserving the extracted boundary design roles and all physical constants.
+Outcome: MinTh.vtu generated ✓ — Python rc=0, 2 .edp, FreeFEM rcs=['0', '8']
+
+======================================================================
+FINAL STATUS: pass (2 iteration(s))
+======================================================================

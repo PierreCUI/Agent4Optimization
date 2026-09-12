@@ -1,5 +1,0 @@
-int n = 30;
-
-mesh Th = square(4*n,n, [4*x,y]);
-
-savemesh(Th,"Mesh1.mesh");

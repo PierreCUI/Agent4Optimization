@@ -1,0 +1,47 @@
+\documentclass[preview]{standalone}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{bm}
+\let\oldcdot\cdot
+\usepackage{breqn}
+\let\cdot\oldcdot
+\begin{document}
+Let $\phi(x)$ be the level-set function and
+ \begin{align*}\raisebox{\depth}{$\chi$}(x) &= \begin{cases} 1 & \mbox{if}\quad \phi(x) < 0 \\ k_{air}/k_0 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases},\end{align*}
+where the weak-material contrast is the physically motivated ratio of the thermal conductivity of air to that of aluminium, $k_{air}/k_0 = 0.026/200 \approx 1.3 \times 10^{-4}$ (numerically $1.3 \times 10^{-4}$, the value taken by the characteristic function).
+The design domain is the normalized unit square $D = [0,1] \times [0,1]$ — the cross-section of the conducting wall of a flue-gas heat-recovery duct, scaled to unit size for benchmark comparison.  The bottom edge faces the flue gas: low-temperature exhaust gas at $u_{H} = 338$ K sweeps the central segment $\Gamma_H$ of the bottom edge, of length $0.4$, and injects heat by convection through a Robin condition with heat transfer coefficient $h_{H} = 25$ W/(m$^{2}$ K) — the design-dependent convection setup of Iga et al., representative of the gas side of a condensing heat-recovery exchanger; the rest of the bottom edge $\Gamma_a$ is adiabatic.  The bottom edge is a fixed boundary (the gas-side footprint is prescribed).  The three remaining edges form $\Gamma_c$, where the duct exchanges heat with ambient air at $u_{amb} = 298$ K through a Robin condition with effective convective heat transfer coefficient $h = 25$ W/(m$^{2}$ K).  As in the flux-driven benchmark, the heat absorbed through $\Gamma_H$ is the response of the design: the colder the sink keeps the gas-side surface, the more heat it absorbs.  The equivalent surface heat flux $q_b = h_{H} \left( u_{H} - u_{amb}\right) = 25 \times 40 = 10^{3}$ W/m$^{2}$ equals, by construction, the heat flux $q = 10^{3}$ W/m$^{2}$ of the Neumann-loaded convection benchmark — this problem is the same heat sink with the load boundary replaced by the Robin condition.
+The Lagrangian of the convectively-heated heat sink problem is
+\begin{dmath*}
+\mathcal L(\left[ u\right],\left[ \delta u\right]) = J(u) +  \int_{D} k \raisebox{\depth}{$\chi$} \left(  \nabla u  \cdot  \nabla \delta u  \right) \,dx + \int_{\Gamma_H} h_H \left( u - u_{H}\right) \delta u \,ds_x + \int_{\Gamma_c} h \left( u - u_{amb}\right) \delta u \,ds_x ,
+\end{dmath*}
+with
+\begin{align*}
+J(u) &=  \int_{D} \ell \raisebox{\depth}{$\chi$} \,dx + \int_{\Gamma_H} q_b u \,ds_x ,
+ \end{align*}
+where the heated-surface temperature integral $\int_{\Gamma_H} u \,ds_x$ is weighted by $q_b = h_H \left( u_H - u_{amb}\right)$, the heat flux the heated side would absorb if the surface reached ambient temperature; minimizing $J$ keeps the heated surface cold at fixed material cost, i.e. it maximizes the heat absorbed from the hot fluid.  The Lagrange multiplier $\ell$ weights the material cost; it is a balance parameter of the optimisation, calibrated by the pipeline (a geometric scan locating the knee of the volume-fraction curve), not part of the problem statement.  There is no Dirichlet condition: the temperature is fixed implicitly by the ambient air through the Robin condition.
+The state $\left[ u\right] \in \mathbb P_{2}(D)$ is the solution of the linear problem
+\begin{dmath*}
+\int_{D} k \raisebox{\depth}{$\chi$} \left(  \nabla u  \cdot  \nabla \delta u  \right) \,dx + \int_{\Gamma_H} h_H u \delta u \,ds_x + \int_{\Gamma_c} h u \delta u \,ds_x = \int_{\Gamma_H} h_H u_{H} \delta u \,ds_x + \int_{\Gamma_c} h u_{amb} \delta u \,ds_x \qquad \forall\; {\delta u\in \mathbb P_{2}(D)} .
+\end{dmath*}
+The adjoint state $\left[ \tilde u\right]$ to the direct state $\left[ u\right]$ is the solution of
+\begin{dmath*}
+\int_{D} k \raisebox{\depth}{$\chi$} \left(  \nabla \delta u  \cdot  \nabla \tilde u  \right) \,dx + \int_{\Gamma_H} h_H \delta u \tilde u \,ds_x + \int_{\Gamma_c} h \delta u \tilde u \,ds_x = - \int_{\Gamma_H} q_b \delta u \,ds_x \qquad \forall\; {\delta u\in \mathbb P_{2}(D)} ,
+\end{dmath*}
+where the adjoint load $- \int_{\Gamma_H} q_b \delta u \,ds_x$ comes from the partial derivative $\partial_{u} J(\delta u) = \int_{\Gamma_H} q_b \delta u \,ds_x$ of the heated-surface temperature integral in the objective.
+In order to compute the shape derivative, we consider a shape perturbation $\mathbf x = T_t(\mathbf X) = \mathbf X + t \mathbf  V(\mathbf X)$ with a suitable velocity field $\mathbf V$, vanishing on the fixed bottom edge.  The perturbed Lagrangian $\mathcal G$ using the Lagrangian state $\left[ u\right]^{L}$ is given by
+\begin{dmath*}
+\mathcal G(t,\left[ u\right]^{L},\left[ \delta u\right]^{L}) = \int_{D} \ell \raisebox{\depth}{$\chi$}  \operatorname{det}\mathbf F( t )  \,dx + \int_{\Gamma_H} q_b u^{L} \,ds_x +  \int_{D} k \raisebox{\depth}{$\chi$}  \operatorname{det}\mathbf F( t )  \left( \left(  \nabla u^{L} \cdot  \mathbf F^{-1}(t) \right) \cdot \left(  \nabla \delta u^{L} \cdot  \mathbf F^{-1}(t) \right) \right) \,dx + \int_{\Gamma_H} h_H \left( u^{L} - u_{H}\right) \delta u^{L} \,ds_x + \int_{\Gamma_c} h \left( u^{L} - u_{amb}\right) \delta u^{L} \,J_{s}(t) \,ds_x ,
+\end{dmath*}
+where $\mathbf F(t) = \mathbf I + t \nabla \mathbf V$ is the deformation gradient and $J_{s}(t)$ the boundary Jacobian of the moving Robin boundary $\Gamma_c$; the fixed heated side $\Gamma_H$ carries no Jacobian because $\mathbf V$ vanishes there.
+For the direct state $\left[ u\right]$ and the adjoint state $\left[ \tilde u\right]$, the volume expression of the shape derivative, including the curvature term on the moving Robin boundary, is given by
+\begin{dmath*}
+DJ(\Omega)(\mathbf V) = \int_{D} \left(\operatorname{div} {\mathbf V} \left(  \nabla u  \cdot  \nabla \tilde u  \right) - \left(  \nabla \tilde u  \cdot \left(  \nabla u  \cdot  \nabla {\mathbf V}  \right) \right) - \left(  \nabla u  \cdot \left(  \nabla \tilde u  \cdot  \nabla {\mathbf V}  \right) \right)\right) k \raisebox{\depth}{$\chi$} \,dx + \int_{D} \ell \raisebox{\depth}{$\chi$} \operatorname{div} {\mathbf V} \,dx + \int_{\Gamma_c} \kappa h \left( u - u_{amb}\right) \tilde u \left(\mathbf V \cdot \mathbf n\right) \,ds_x ,
+\end{dmath*}
+where $\kappa$ is the curvature of $\Gamma_c$ and $\mathbf n$ its outward unit normal; the heated side $\Gamma_H$, being fixed, contributes no shape-derivative term.  The Robin boundary $\Gamma_c$ is a design boundary — its shape is optimised — while the bottom edge ($\Gamma_H$ together with $\Gamma_a$) is a fixed boundary whose position is prescribed by the heated-side layout.
+The initial design is the FULL solid square with a circular hole of radius $0.1$ cut out of its centre — the simplest seed that covers the gas-side footprint and all three cooled edges while giving the optimiser one enclosed interface to work from,
+\begin{align*}
+\phi_0(x,y) = 0.1 - \sqrt{\left( x - 0.5 \right)^{2} + \left( y - 0.5 \right)^{2}} .
+\end{align*}
+\end{document}

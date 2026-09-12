@@ -1,0 +1,12 @@
+Loaded: 729 rows
+Dropped failed runs (rc != 0): 0
+Dropped zero-time rows: 0
+Kept: 729 rows
+
+Effect table: C:\Users\98215\OneDrive\Desktop\Agent4FreeFem\batches\run_pipeChilledJacketRadiation\batch_correlation.csv
+
+Impact ranking per metric (Morris mu*, % of metric mean per decade; per P-order for p_degree):
+  avg_time_per_epoch_s: p_degree=58.7%  hmin=26.3%  mesh_n=4.8%  v0=3.6%  hmax=2.9%  diffusion=2.6%
+  ff_max_memory_mb    : p_degree=24.7%  hmin=12.3%  mesh_n=5.3%  hmax=3.1%  diffusion=2.3%  v0=1.9%
+  ff_avg_memory_mb    : p_degree=20.9%  hmin=8.6%  mesh_n=2.8%  hmax=0.8%  v0=0.8%  diffusion=0.7%
+Heatmap: C:\Users\98215\OneDrive\Desktop\Agent4FreeFem\batches\run_pipeChilledJacketRadiation\batch_heatmap.png

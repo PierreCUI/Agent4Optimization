@@ -1,0 +1,420 @@
+{
+ "extracted": {
+  "problem_type": "shape_optimization",
+  "problem_name": "Chilled-jacket pipe with surface radiation",
+  "dimension": 2,
+  "domain_name": "D",
+  "mesh_variable": "Th",
+  "mesh_file": "mesh.txt",
+  "mesh_labels_used": [
+   "2",
+   "3"
+  ],
+  "boundaries": [
+   {
+    "name": "\\Gamma_o",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "outer pipe casing surface exchanging heat with the warm environment through convection and surface radiation",
+    "mesh_label": "3"
+   },
+   {
+    "name": "\\Gamma_i",
+    "kind": "Dirichlet",
+    "design_role": "design",
+    "description": "inner tube wall held at the refrigerant temperature u_C (constant-temperature condition imposed as a penalty Robin condition)",
+    "mesh_label": "2"
+   }
+  ],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": 268,
+    "dirichlet_labels": [
+     "\\Gamma_i"
+    ]
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "delta_u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity (aluminium)",
+    "unit": "W/(K m)"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity (air)",
+    "unit": "W/(K m)"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient (environment)",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature",
+    "unit": "K"
+   },
+   {
+    "name": "u_C",
+    "latex": "u_C",
+    "value": 268,
+    "description": "refrigerant temperature (inner wall)",
+    "unit": "K"
+   },
+   {
+    "name": "pen",
+    "latex": "\\operatorname{pen}",
+    "value": 1000000000000000,
+    "description": "Dirichlet penalty coefficient (penalty Robin)",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "epsilon",
+    "latex": "\\varepsilon",
+    "value": 0.8,
+    "description": "surface emissivity (oxidised aluminium)",
+    "unit": "-"
+   },
+   {
+    "name": "sigma",
+    "latex": "\\sigma",
+    "value": 5.67e-08,
+    "description": "Stefan-Boltzmann constant",
+    "unit": "W/(m^2 K^4)"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "value": 750,
+    "description": "casing temperature weight (q_b = h (u_amb - u_C))",
+    "unit": "W/m^2"
+   },
+   {
+    "name": "R",
+    "latex": "R",
+    "value": 0.5,
+    "description": "outer radius of the pipe cross-section",
+    "unit": "m"
+   },
+   {
+    "name": "r0",
+    "latex": "r_0",
+    "value": 0.1,
+    "description": "initial inner radius",
+    "unit": "m"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "J",
+    "latex": "J(u)",
+    "formula": "J(u) = \\int_{D} \\ell \\chi \\,dx + \\int_{\\Gamma_o} q_b u \\,ds_x"
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": "1",
+   "weak_value": "k_{air}/k_0"
+  },
+  "objective": {
+   "name": "J",
+   "description": "Weighted material cost plus a weighted integral of the outer-casing temperature; minimising J keeps the casing cold, i.e. it maximises the heat absorbed from the environment through the outer boundary Gamma_o.",
+   "terms": [
+    "\\int_{D} \\ell \\chi \\,dx",
+    "\\int_{\\Gamma_o} q_b u \\,ds_x"
+   ]
+  },
+  "state_equation": {
+   "description": "Non-linear state problem for u in P2(D); the u^4 radiation term makes it non-linear.",
+   "weak_form_lhs": "\\int_{D} k \\chi (\\nabla u \\cdot \\nabla \\delta u) \\,dx + \\int_{\\Gamma_i} \\operatorname{pen} u \\delta u \\,ds_x + \\int_{\\Gamma_o} h u \\delta u \\,ds_x + \\int_{\\Gamma_o} \\varepsilon \\sigma u^{4} \\delta u \\,ds_x",
+   "weak_form_rhs": "\\int_{\\Gamma_i} \\operatorname{pen} u_{C} \\delta u \\,ds_x + \\int_{\\Gamma_o} h u_{amb} \\delta u \\,ds_x + \\int_{\\Gamma_o} \\varepsilon \\sigma u_{amb}^{4} \\delta u \\,ds_x",
+   "is_nonlinear": true
+  },
+  "newton_linearisation": {
+   "description": "The state is updated as u <- u - \\hat u; the radiation term is linearised as \\partial_u [\\varepsilon \\sigma (u^{4} - u_{amb}^{4})] \\hat u = 4 \\varepsilon \\sigma u^{3} \\hat u.",
+   "weak_form": "\\int_{D} k \\chi (\\nabla \\hat u \\cdot \\nabla \\delta u) \\,dx + \\int_{\\Gamma_i} \\operatorname{pen} \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_o} h \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_o} 4 \\varepsilon \\sigma u^{3} \\hat u \\delta u \\,ds_x = \\int_{D} k \\chi (\\nabla u \\cdot \\nabla \\delta u) \\,dx + \\int_{\\Gamma_i} \\operatorname{pen} (u - u_C) \\delta u \\,ds_x + \\int_{\\Gamma_o} (h (u - u_{amb}) + \\varepsilon \\sigma (u^{4} - u_{amb}^{4})) \\delta u \\,ds_x"
+  },
+  "adjoint_equation": {
+   "description": "Adjoint state \\tilde u; the adjoint operator is the linearisation of the state operator at u (self-adjoint for the symmetric conduction-convection-radiation operator). The adjoint load comes from \\partial_u J(\\delta u) = \\int_{\\Gamma_o} q_b \\delta u \\,ds_x.",
+   "weak_form_lhs": "\\int_{D} k \\chi (\\nabla \\delta u \\cdot \\nabla \\tilde u) \\,dx + \\int_{\\Gamma_i} \\operatorname{pen} \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_o} h \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_o} 4 \\varepsilon \\sigma u^{3} \\delta u \\tilde u \\,ds_x",
+   "weak_form_rhs": "- \\int_{\\Gamma_o} q_b \\delta u \\,ds_x"
+  },
+  "shape_derivative": {
+   "volume_expression": "\\int_{D} (\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf V \\,dx",
+   "boundary_expression": "\\int_{\\Gamma_i} \\kappa \\operatorname{pen} (u - u_{C}) \\tilde u (\\mathbf V \\cdot \\mathbf n) \\,ds_x"
+  },
+  "optimization_params": {
+   "level_set_initial": "rotationally symmetric seed covering both the cooling wall and the casing, a ring of evenly spaced holes on the mid-radius circle",
+   "boundary_labels": [
+    "2"
+   ],
+   "fixed_labels": [
+    "3"
+   ]
+  }
+ },
+ "designed": {
+  "problem_type": "shape_optimization",
+  "problem_type_source": "extracted",
+  "problem_name": "run_pipeChilledJacketRadiation",
+  "problem_name_source": "designed",
+  "problem_name_rationale": "Use the run identifier given in the prompt; the extracted descriptive title is 'Chilled-jacket pipe with surface radiation'.",
+  "dimension": 2,
+  "dimension_source": "extracted",
+  "domain_name": "D",
+  "domain_name_source": "extracted",
+  "mesh_variable": "Th",
+  "mesh_variable_source": "extracted",
+  "mesh_file": "mesh.txt",
+  "mesh_file_source": "extracted",
+  "objective_name": "J",
+  "objective_name_source": "extracted",
+  "objective_description": "Weighted material cost plus a weighted integral of the outer-casing temperature; minimising J keeps the casing cold, i.e. it maximises the heat absorbed from the environment through the outer boundary Gamma_o.",
+  "objective_description_source": "extracted",
+  "objective_terms": [
+   "\\int_{D} \\ell \\chi \\,dx",
+   "\\int_{\\Gamma_o} q_b u \\,ds_x"
+  ],
+  "objective_terms_source": "extracted",
+  "state_description": "Non-linear state problem for u in P2(D); the u^4 radiation term makes it non-linear.",
+  "state_description_source": "extracted",
+  "state_weak_lhs": "\\int_{D} k \\chi (\\nabla u \\cdot \\nabla \\delta u) \\,dx + \\int_{\\Gamma_i} \\operatorname{pen} u \\delta u \\,ds_x + \\int_{\\Gamma_o} h u \\delta u \\,ds_x + \\int_{\\Gamma_o} \\varepsilon \\sigma u^{4} \\delta u \\,ds_x",
+  "state_weak_lhs_source": "extracted",
+  "state_weak_rhs": "\\int_{\\Gamma_i} \\operatorname{pen} u_{C} \\delta u \\,ds_x + \\int_{\\Gamma_o} h u_{amb} \\delta u \\,ds_x + \\int_{\\Gamma_o} \\varepsilon \\sigma u_{amb}^{4} \\delta u \\,ds_x",
+  "state_weak_rhs_source": "extracted",
+  "state_is_nonlinear": true,
+  "state_is_nonlinear_source": "extracted",
+  "newton_description": "The state is updated as u <- u - \\hat u; the radiation term is linearised as \\partial_u [\\varepsilon \\sigma (u^{4} - u_{amb}^{4})] \\hat u = 4 \\varepsilon \\sigma u^{3} \\hat u.",
+  "newton_weak_form": "\\int_{D} k \\chi (\\nabla \\hat u \\cdot \\nabla \\delta u) \\,dx + \\int_{\\Gamma_i} \\operatorname{pen} \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_o} h \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_o} 4 \\varepsilon \\sigma u^{3} \\hat u \\delta u \\,ds_x = \\int_{D} k \\chi (\\nabla u \\cdot \\nabla \\delta u) \\,dx + \\int_{\\Gamma_i} \\operatorname{pen} (u - u_C) \\delta u \\,ds_x + \\int_{\\Gamma_o} (h (u - u_{amb}) + \\varepsilon \\sigma (u^{4} - u_{amb}^{4})) \\delta u \\,ds_x",
+  "newton_source": "extracted",
+  "adjoint_description": "Adjoint state \\tilde u; the adjoint operator is the linearisation of the state operator at u (self-adjoint for the symmetric conduction-convection-radiation operator). The adjoint load comes from \\partial_u J(\\delta u) = \\int_{\\Gamma_o} q_b \\delta u \\,ds_x.",
+  "adjoint_description_source": "extracted",
+  "adjoint_weak_lhs": "\\int_{D} k \\chi (\\nabla \\delta u \\cdot \\nabla \\tilde u) \\,dx + \\int_{\\Gamma_i} \\operatorname{pen} \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_o} h \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_o} 4 \\varepsilon \\sigma u^{3} \\delta u \\tilde u \\,ds_x",
+  "adjoint_weak_lhs_source": "extracted",
+  "adjoint_weak_rhs": "- \\int_{\\Gamma_o} q_b \\delta u \\,ds_x",
+  "adjoint_weak_rhs_source": "extracted",
+  "shape_derivative_volume": "\\int_{D} (\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf V \\,dx",
+  "shape_derivative_boundary": "\\int_{\\Gamma_i} \\kappa \\operatorname{pen} (u - u_{C}) \\tilde u (\\mathbf V \\cdot \\mathbf n) \\,ds_x",
+  "shape_derivative_source": "extracted",
+  "boundaries": [
+   {
+    "name": "\\Gamma_o",
+    "label": "3",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "outer pipe casing surface exchanging heat with the warm environment through convection and surface radiation",
+    "source": "extracted"
+   },
+   {
+    "name": "\\Gamma_i",
+    "label": "2",
+    "kind": "Dirichlet",
+    "design_role": "design",
+    "description": "inner tube wall held at the refrigerant temperature u_C (constant-temperature condition imposed as a penalty Robin condition)",
+    "source": "extracted"
+   }
+  ],
+  "interfaces": [],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": 268,
+    "dirichlet_labels": [
+     "2"
+    ],
+    "source": "designed",
+    "rationale": "Dirichlet label reconciled from LaTeX boundary name \\Gamma_i to mesh label 2; all other field attributes are from the extracted spec."
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "delta_u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "source": "extracted"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity (aluminium)",
+    "unit": "W/(K m)",
+    "source": "extracted"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity (air)",
+    "unit": "W/(K m)",
+    "source": "extracted"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient (environment)",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "u_C",
+    "latex": "u_C",
+    "value": 268,
+    "description": "refrigerant temperature (inner wall)",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "pen",
+    "latex": "\\operatorname{pen}",
+    "value": 1000000000000000,
+    "description": "Dirichlet penalty coefficient (penalty Robin)",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "epsilon",
+    "latex": "\\varepsilon",
+    "value": 0.8,
+    "description": "surface emissivity (oxidised aluminium)",
+    "unit": "-",
+    "source": "extracted"
+   },
+   {
+    "name": "sigma",
+    "latex": "\\sigma",
+    "value": 5.67e-08,
+    "description": "Stefan-Boltzmann constant",
+    "unit": "W/(m^2 K^4)",
+    "source": "extracted"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "value": 750,
+    "description": "casing temperature weight (q_b = h (u_amb - u_C))",
+    "unit": "W/m^2",
+    "source": "extracted"
+   },
+   {
+    "name": "R",
+    "latex": "R",
+    "value": 0.5,
+    "description": "outer radius of the pipe cross-section",
+    "unit": "m",
+    "source": "extracted"
+   },
+   {
+    "name": "r0",
+    "latex": "r_0",
+    "value": 0.1,
+    "description": "initial inner radius",
+    "unit": "m",
+    "source": "extracted"
+   },
+   {
+    "name": "k",
+    "latex": "k",
+    "value": 200,
+    "description": "thermal conductivity of the solid conductor used in the state weak form (equal to k_0)",
+    "unit": "W/(m K)",
+    "source": "designed",
+    "rationale": "The state weak form uses symbol k; set it equal to the extracted solid conductivity k_0."
+   }
+  ],
+  "expressions": [
+   {
+    "name": "J",
+    "latex": "J(u)",
+    "formula": "J(u) = \\int_{D} \\ell \\chi \\,dx + \\int_{\\Gamma_o} q_b u \\,ds_x",
+    "source": "extracted"
+   },
+   {
+    "name": "q_flux",
+    "latex": "\\mathbf q",
+    "formula": "\\mathbf q = - k \\chi \\nabla u",
+    "source": "designed",
+    "rationale": "Derived heat flux for thermal post-processing."
+   },
+   {
+    "name": "q_rad",
+    "latex": "q_{rad}",
+    "formula": "q_{rad} = \\varepsilon \\sigma (u^4 - u_{amb}^4)",
+    "source": "designed",
+    "rationale": "Surface radiation heat flux at the outer casing."
+   },
+   {
+    "name": "q_conv",
+    "latex": "q_{conv}",
+    "formula": "q_{conv} = h (u - u_{amb})",
+    "source": "designed",
+    "rationale": "Convective heat flux at the outer casing."
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": "1",
+   "weak_value": "k_{air}/k_0",
+   "source": "extracted"
+  },
+  "optimization_config": {
+   "mesh_file": "mesh.txt",
+   "hmin": 0.005,
+   "hmax": 0.05,
+   "diffusion": 0.0001,
+   "v0": 0.01,
+   "iterations": 30,
+   "level_set_initial": "\\phi_0(\\mathbf{x}) = \\min\\left( r - r_0,\\; R - r,\\; -\\min_{k=1}^{N} \\left( r_{\\mathrm{hole}} - \\sqrt{(x_0 - r_m\\cos\\theta_k)^2 + (x_1 - r_m\\sin\\theta_k)^2} \\right) \\right),\\; r = \\sqrt{x_0^2+x_1^2},\\; N=8,\\; r_m=(r_0+R)/2,\\; r_{\\mathrm{hole}}=0.05",
+   "boundary_labels": [
+    "2"
+   ],
+   "fixed_labels": [
+    "3"
+   ],
+   "extra_params": {
+    "N_holes": 8,
+    "r_hole": 0.05
+   },
+   "source": "designed",
+   "rationale": "hmin/hmax, diffusion, v0 and iterations are designed from the 0.5 m domain scale; level_set_initial is a signed-distance seed for an annular solid with a ring of eight holes at the mid-radius; boundary_labels and fixed_labels preserve the extracted design roles of the non-10 boundaries; ell/Afac is left for pipeline calibration."
+  }
+ }
+}

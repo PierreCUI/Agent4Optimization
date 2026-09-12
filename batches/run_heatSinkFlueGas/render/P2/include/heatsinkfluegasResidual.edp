@@ -1,0 +1,5 @@
+varf heatsinkfluegasResidual([incu],[deltau]) = 
+    -int1d(Th, 3.00000000000000)(h*(uamb - u)*deltau) 
+ - int1d(Th, 2.00000000000000)(hH*(uH - u)*deltau) 
+ + int2d(Th)((1.00000000000000*(phi<0) + 0.000130000000000000*(1-(phi<0)))*k0*(dx(deltau)*dx(u) + dy(deltau)*dy(u)))
+ ;

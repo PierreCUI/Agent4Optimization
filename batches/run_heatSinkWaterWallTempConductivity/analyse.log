@@ -1,0 +1,12 @@
+Loaded: 729 rows
+Dropped failed runs (rc != 0): 3
+Dropped zero-time rows: 0
+Kept: 726 rows
+
+Effect table: C:\Users\98215\OneDrive\Desktop\Agent4FreeFem\batches\run_heatSinkWaterWallTempConductivity\batch_correlation.csv
+
+Impact ranking per metric (Morris mu*, % of metric mean per decade; per P-order for p_degree):
+  avg_time_per_epoch_s: hmax=65.3%  diffusion=15.1%  hmin=14.6%  v0=13.2%  mesh_n=4.1%  p_degree=0.1%
+  ff_max_memory_mb    : hmax=11.1%  hmin=3.0%  diffusion=1.9%  mesh_n=1.5%  p_degree=1.0%  v0=0.6%
+  ff_avg_memory_mb    : hmax=11.5%  hmin=7.3%  mesh_n=3.0%  v0=2.1%  diffusion=1.9%  p_degree=0.2%
+Heatmap: C:\Users\98215\OneDrive\Desktop\Agent4FreeFem\batches\run_heatSinkWaterWallTempConductivity\batch_heatmap.png

@@ -1,0 +1,368 @@
+{
+ "extracted": {
+  "problem_type": "shape_optimization",
+  "problem_name": "run_pipeCoolingWaterJacket",
+  "dimension": 2,
+  "domain_name": "D",
+  "mesh_variable": "Th",
+  "mesh_file": "mesh.txt",
+  "mesh_labels_used": [
+   "2",
+   "3"
+  ],
+  "boundaries": [
+   {
+    "name": "\\Gamma_o",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "outer pipe casing exchanging heat with warm environment via convection",
+    "mesh_label": "3"
+   },
+   {
+    "name": "\\Gamma_i",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "inner tube wall swept by cooling water via convection; shape optimised",
+    "mesh_label": "2"
+   }
+  ],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K"
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "\\delta u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity (aluminium)",
+    "unit": "W/(K m)"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity (air)",
+    "unit": "W/(K m)"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient (environment)",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature",
+    "unit": "K"
+   },
+   {
+    "name": "h_C",
+    "latex": "h_C",
+    "value": 1000,
+    "description": "convective heat transfer coefficient (cooling-water side)",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_C",
+    "latex": "u_C",
+    "value": 283,
+    "description": "cooling-water temperature",
+    "unit": "K"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "value": 15000,
+    "description": "casing temperature weight / prescribed outer-surface flux",
+    "unit": "W/m^2"
+   },
+   {
+    "name": "R",
+    "latex": "R",
+    "value": 0.5,
+    "description": "outer radius of the pipe cross-section",
+    "unit": "m"
+   },
+   {
+    "name": "r_0",
+    "latex": "r_0",
+    "value": 0.1,
+    "description": "initial inner radius",
+    "unit": "m"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "formula": "h_C (u_{amb} - u_C)"
+   },
+   {
+    "name": "deformation_gradient",
+    "latex": "\\mathbf F(t)",
+    "formula": "\\mathbf I + t \\nabla \\mathbf V"
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": 0.00013
+  },
+  "objective": {
+   "name": "J",
+   "description": "Minimising J keeps the casing cold, i.e. maximises heat absorbed from the environment through \\Gamma_o and delivered to the cooling water.",
+   "terms": [
+    "\\int_{D} \\ell \\chi \\,dx",
+    "\\int_{\\Gamma_o} q_b u \\,ds_x"
+   ]
+  },
+  "state_equation": {
+   "description": "Linear convection-diffusion problem for the temperature u.",
+   "weak_form_lhs": "\\int_{D} k \\chi (\\nabla u \\cdot \\nabla \\delta u) \\,dx + \\int_{\\Gamma_i} h_C u \\delta u \\,ds_x + \\int_{\\Gamma_o} h u \\delta u \\,ds_x",
+   "weak_form_rhs": "\\int_{\\Gamma_i} h_C u_C \\delta u \\,ds_x + \\int_{\\Gamma_o} h u_{amb} \\delta u \\,ds_x",
+   "is_nonlinear": false
+  },
+  "adjoint_equation": {
+   "description": "Adjoint problem for the adjoint temperature \\tilde u.",
+   "weak_form_lhs": "\\int_{D} k \\chi (\\nabla \\delta u \\cdot \\nabla \\tilde u) \\,dx + \\int_{\\Gamma_i} h_C \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_o} h \\delta u \\tilde u \\,ds_x",
+   "weak_form_rhs": "- \\int_{\\Gamma_o} q_b \\delta u \\,ds_x"
+  },
+  "shape_derivative": {
+   "volume_expression": "\\int_{D} (\\operatorname{div} \\mathbf{V} (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf{V})) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf{V}))) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf{V} \\,dx",
+   "boundary_expression": "\\int_{\\Gamma_i} \\kappa h_C (u - u_C) \\tilde u (\\mathbf{V} \\cdot \\mathbf{n}) \\,ds_x"
+  },
+  "optimization_params": {
+   "boundary_labels": [
+    "2"
+   ],
+   "fixed_labels": [
+    "3"
+   ]
+  }
+ },
+ "designed": {
+  "problem_type": "shape_optimization",
+  "problem_type_source": "extracted",
+  "problem_name": "run_pipeCoolingWaterJacket",
+  "problem_name_source": "extracted",
+  "dimension": 2,
+  "dimension_source": "extracted",
+  "domain_name": "D",
+  "domain_name_source": "extracted",
+  "mesh_variable": "Th",
+  "mesh_variable_source": "extracted",
+  "mesh_file": "mesh.txt",
+  "mesh_file_source": "extracted",
+  "objective_name": "J",
+  "objective_name_source": "extracted",
+  "objective_description": "Minimising J keeps the casing cold, i.e. maximises heat absorbed from the environment through \\Gamma_o and delivered to the cooling water.",
+  "objective_description_source": "extracted",
+  "objective_terms": [
+   "\\int_{D} \\ell \\chi \\,dx",
+   "\\int_{\\Gamma_o} q_b u \\,ds_x"
+  ],
+  "objective_terms_source": "extracted",
+  "state_description": "Linear convection-diffusion problem for the temperature u.",
+  "state_description_source": "extracted",
+  "state_weak_lhs": "\\int_{D} k \\chi (\\nabla u \\cdot \\nabla \\delta u) \\,dx + \\int_{\\Gamma_i} h_C u \\delta u \\,ds_x + \\int_{\\Gamma_o} h u \\delta u \\,ds_x",
+  "state_weak_lhs_source": "extracted",
+  "state_weak_rhs": "\\int_{\\Gamma_i} h_C u_C \\delta u \\,ds_x + \\int_{\\Gamma_o} h u_{amb} \\delta u \\,ds_x",
+  "state_weak_rhs_source": "extracted",
+  "state_is_nonlinear": false,
+  "state_is_nonlinear_source": "extracted",
+  "adjoint_description": "Adjoint problem for the adjoint temperature \\tilde u.",
+  "adjoint_description_source": "extracted",
+  "adjoint_weak_lhs": "\\int_{D} k \\chi (\\nabla \\delta u \\cdot \\nabla \\tilde u) \\,dx + \\int_{\\Gamma_i} h_C \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_o} h \\delta u \\tilde u \\,ds_x",
+  "adjoint_weak_lhs_source": "extracted",
+  "adjoint_weak_rhs": "- \\int_{\\Gamma_o} q_b \\delta u \\,ds_x",
+  "adjoint_weak_rhs_source": "extracted",
+  "shape_derivative_volume": "\\int_{D} (\\operatorname{div} \\mathbf{V} (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf{V})) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf{V}))) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf{V} \\,dx",
+  "shape_derivative_volume_source": "extracted",
+  "shape_derivative_boundary": "\\int_{\\Gamma_i} \\kappa h_C (u - u_C) \\tilde u (\\mathbf{V} \\cdot \\mathbf{n}) \\,ds_x",
+  "shape_derivative_boundary_source": "extracted",
+  "shape_derivative_source": "extracted",
+  "boundaries": [
+   {
+    "name": "\\Gamma_o",
+    "label": "3",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "outer pipe casing exchanging heat with warm environment via convection",
+    "source": "extracted"
+   },
+   {
+    "name": "\\Gamma_i",
+    "label": "2",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "inner tube wall swept by cooling water via convection; shape optimised",
+    "source": "extracted"
+   }
+  ],
+  "interfaces": [],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": null,
+    "dirichlet_labels": [],
+    "source": "extracted"
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "\\delta u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "source": "extracted"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity (aluminium)",
+    "unit": "W/(K m)",
+    "source": "extracted"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity (air)",
+    "unit": "W/(K m)",
+    "source": "extracted"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient (environment)",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "h_C",
+    "latex": "h_C",
+    "value": 1000,
+    "description": "convective heat transfer coefficient (cooling-water side)",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_C",
+    "latex": "u_C",
+    "value": 283,
+    "description": "cooling-water temperature",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "value": 15000,
+    "description": "casing temperature weight / prescribed outer-surface flux",
+    "unit": "W/m^2",
+    "source": "extracted"
+   },
+   {
+    "name": "R",
+    "latex": "R",
+    "value": 0.5,
+    "description": "outer radius of the pipe cross-section",
+    "unit": "m",
+    "source": "extracted"
+   },
+   {
+    "name": "r_0",
+    "latex": "r_0",
+    "value": 0.1,
+    "description": "initial inner radius",
+    "unit": "m",
+    "source": "extracted"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "formula": "h_C (u_{amb} - u_C)",
+    "source": "extracted"
+   },
+   {
+    "name": "deformation_gradient",
+    "latex": "\\mathbf F(t)",
+    "formula": "\\mathbf I + t \\nabla \\mathbf V",
+    "source": "extracted"
+   },
+   {
+    "name": "k",
+    "latex": "k",
+    "formula": "k_0 \\chi + k_{air} (1 - \\chi)",
+    "source": "designed",
+    "rationale": "Effective thermal conductivity interpolating between solid aluminium and air; in the weak form k\\chi reduces to k_0 in the solid because \\chi^2=\\chi and (1-\\chi)\\chi=0."
+   },
+   {
+    "name": "heat_flux",
+    "latex": "\\mathbf{q}",
+    "formula": "-k \\nabla u",
+    "source": "designed",
+    "rationale": "Fourier heat flux, standard derived quantity for thermal problems."
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": 0.00013,
+   "source": "extracted"
+  },
+  "optimization_config": {
+   "mesh_file": "mesh.txt",
+   "hmin": 0.005,
+   "hmax": 0.05,
+   "diffusion": 0.0001,
+   "v0": 0.005,
+   "iterations": 30,
+   "level_set_initial": "\\sqrt{x^2 + y^2} - r_0",
+   "boundary_labels": [
+    "2"
+   ],
+   "fixed_labels": [
+    "3"
+   ],
+   "extra_params": {},
+   "source": "designed",
+   "rationale": "Mesh file from extracted spec. hmin/hmax chosen around 1/200 and 1/20 of the 1 m pipe cross-section to resolve the inner cooling channel without excessive cost. diffusion=1e-4 and v0=5e-3 are standard level-set regularisation and velocity scales. 30 iterations balance runtime and convergence. Initial level set is the signed distance to the initial inner radius r_0. boundary_labels/fixed_labels preserve extracted design roles (Gamma_i label 2 design, Gamma_o label 3 fixed)."
+  }
+ }
+}

@@ -1,0 +1,12 @@
+varf heatsinkcoldplateAdjoint([adju],[deltau]) = 
+    int1d(Th, 2.00000000000000)(q*deltau) 
+ + int1d(Th, 3.00000000000000)(h*deltau*adju) 
+ + int2d(Th)((1.00000000000000*(phi<0) + 0.000130000000000000*(1-(phi<0)))*k0*(dx(deltau)*dx(adju) + dy(deltau)*dy(adju)))
+    + on(4,adju = 0);
+
+   matrix adjointMatrix = heatsinkcoldplateAdjoint(Vhu, Vhu);
+   set(adjointMatrix, solver=sparsesolver);
+   real[int] adjointrhs = heatsinkcoldplateAdjoint(0,Vhu);
+   real[int] adjointsol = adjointMatrix^-1 * adjointrhs;
+   adjointsol = -adjointsol; 
+   [adju[]] = adjointsol; 

@@ -39,7 +39,7 @@ class Info:
         # ── reflection ─────────────────────────────────────────────
         self.reflection_attempts: int = 0
         self.reflection_history: list[dict] = []  # per-iteration records
-        self.reflection_status: str = "not_run"  # pass|give_up_max|give_up_loop
+        self.reflection_status: str = "not_run"  # pass|give_up|give_up_max
 
         # ── results path ─────────────────────────────────────────────
         self.results_dir: Path = Path("results") / problem_name
@@ -47,13 +47,20 @@ class Info:
     # convenience --------------------------------------------------------
 
     def save_json(self, filename: str, data) -> None:
-        """Save *data* as JSON inside ``results_dir``."""
-        self.results_dir.mkdir(parents=True, exist_ok=True)
-        with open(self.results_dir / filename, "w", encoding="utf-8") as f:
+        """Save *data* as JSON inside ``results_dir``.
+
+        *filename* may contain a nested relative path (e.g. collected
+        input files under ``subdir/file.dat``) — the parent directory is
+        created so a subdirectory demo never crashes the pipeline.
+        """
+        out_path = self.results_dir / filename
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
     def save_text(self, filename: str, text: str) -> None:
-        """Save *text* inside ``results_dir``."""
-        self.results_dir.mkdir(parents=True, exist_ok=True)
-        with open(self.results_dir / filename, "w", encoding="utf-8") as f:
+        """Save *text* inside ``results_dir`` (nested paths supported)."""
+        out_path = self.results_dir / filename
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
             f.write(text)

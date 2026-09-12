@@ -1,9 +1,0 @@
-varf thermoelastic30cNewton([incT, incux, incuy],[deltaT, deltaux, deltauy]) = 
-    int1d(Th, 2.00000000000000)(beta*(deltaux*incux + deltauy*incuy)) 
- + int1d(Th, 4.00000000000000)(beta*(deltaux*incux + deltauy*incuy)) 
- + int2d(Th)((k0*(phi<0) + 0.001*k0*(1-(phi<0)))*(dx(deltaT)*dx(incT) + dy(deltaT)*dy(incT))) 
- + int2d(Th)(0.5*(E0*(phi<0) + 0.001*E0*(1-(phi<0)))*((2.0*nu - 1)*(dy(deltaux) + dx(deltauy))*(dy(incux) + dx(incuy)) - 2.0*(nu*(dx(incux) + dy(incuy)) - (2.0*nu - 1)*dx(incux))*dx(deltaux) - 2.0*(nu*(dx(incux) + dy(incuy)) - (2.0*nu - 1)*dy(incuy))*dy(deltauy))/((nu + 1.0)*(2.0*nu - 1))) 
- + int2d(Th)((E0*(phi<0) + 0.001*E0*(1-(phi<0)))*(alphaT*(phi<0) + 0.001*alphaT*(1-(phi<0)))*(dx(deltaux) + dy(deltauy))*incT/((nu + 1.0)*(2.0*nu - 1)))
-    + on(1,incT = 0)
-    + on(3,incT = 0)
- ;

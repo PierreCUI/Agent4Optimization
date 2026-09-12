@@ -1,0 +1,312 @@
+{
+ "extracted": {
+  "problem_type": "shape_optimization",
+  "problem_name": "heat_sink_convection",
+  "dimension": 2,
+  "domain_name": "D",
+  "mesh_variable": "Th",
+  "mesh_file": "mesh.txt",
+  "mesh_labels_used": [
+   "1",
+   "2",
+   "3"
+  ],
+  "boundaries": [
+   {
+    "name": "\\Gamma_q",
+    "kind": "Neumann",
+    "design_role": "fixed",
+    "description": "heat flux segment on bottom edge"
+   },
+   {
+    "name": "\\Gamma_a",
+    "kind": "Neumann",
+    "design_role": "fixed",
+    "description": "adiabatic portion of bottom edge"
+   },
+   {
+    "name": "\\Gamma_c",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "convective boundary on remaining three edges"
+   }
+  ],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K"
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "delta_u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity of aluminium",
+    "unit": "W/(K m)"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity of air",
+    "unit": "W/(K m)"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature",
+    "unit": "K"
+   },
+   {
+    "name": "q",
+    "latex": "q",
+    "value": 1000,
+    "description": "heat flux",
+    "unit": "W/m^2"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "initial_level_set",
+    "latex": "\\phi_0",
+    "formula": "0.1 - \\sqrt{\\left( x - 0.5 \\right)^{2} + \\left( y - 0.5 \\right)^{2}}"
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": 0.00013
+  },
+  "objective": {
+   "name": "J",
+   "description": "sum of material cost and temperature integral over heat flux boundary",
+   "terms": [
+    "\\int_{D} \\ell \\chi \\,dx",
+    "\\int_{\\Gamma_q} q u \\,ds_x"
+   ]
+  },
+  "state_equation": {
+   "description": "linear heat conduction with Robin convection and prescribed heat flux",
+   "weak_form_lhs": "- \\int_{\\Gamma_q} q \\delta u \\,ds_x + \\int_{D} k \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_c} h u \\delta u \\,ds_x",
+   "weak_form_rhs": "\\int_{\\Gamma_c} h u_{amb} \\delta u \\,ds_x",
+   "is_nonlinear": false
+  },
+  "adjoint_equation": {
+   "description": "adjoint equation for the state u",
+   "weak_form_lhs": "\\int_{\\Gamma_q} q \\delta u \\,ds_x + \\int_{D} k \\chi \\left( \\nabla \\delta u \\cdot \\nabla \\tilde u \\right) \\,dx + \\int_{\\Gamma_c} h \\delta u \\tilde u \\,ds_x",
+   "weak_form_rhs": "0"
+  },
+  "shape_derivative": {
+   "volume_expression": "\\int_{D} \\left(\\operatorname{div} \\mathbf V \\left( \\nabla u \\cdot \\nabla \\tilde u \\right) - \\left( \\nabla \\tilde u \\cdot \\left( \\nabla u \\cdot \\nabla \\mathbf V \\right) \\right) - \\left( \\nabla u \\cdot \\left( \\nabla \\tilde u \\cdot \\nabla \\mathbf V \\right) \\right)\\right) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf V \\,dx",
+   "boundary_expression": "\\int_{\\Gamma_c} \\kappa h \\left( u - u_{amb} \\right) \\tilde u \\left( \\mathbf V \\cdot \\mathbf n \\right) \\,ds_x"
+  },
+  "optimization_params": {
+   "level_set_initial": "0.1 - \\sqrt{\\left( x - 0.5 \\right)^{2} + \\left( y - 0.5 \\right)^{2}}"
+  }
+ },
+ "designed": {
+  "problem_type": "shape_optimization",
+  "problem_type_source": "extracted",
+  "problem_name": "heat_sink_convection",
+  "problem_name_source": "extracted",
+  "dimension": 2,
+  "dimension_source": "extracted",
+  "domain_name": "D",
+  "domain_name_source": "extracted",
+  "mesh_variable": "Th",
+  "mesh_variable_source": "extracted",
+  "mesh_file": "mesh.txt",
+  "mesh_file_source": "extracted",
+  "mesh_labels_used": [
+   "1",
+   "2",
+   "3"
+  ],
+  "mesh_labels_used_source": "extracted",
+  "objective_name": "J",
+  "objective_name_source": "extracted",
+  "objective_description": "sum of material cost and temperature integral over heat flux boundary",
+  "objective_description_source": "extracted",
+  "objective_terms": [
+   "\\int_{D} \\ell \\chi \\,dx",
+   "\\int_{\\Gamma_q} q u \\,ds_x"
+  ],
+  "objective_terms_source": "extracted",
+  "state_description": "linear heat conduction with Robin convection and prescribed heat flux",
+  "state_description_source": "extracted",
+  "state_weak_lhs": "- \\int_{\\Gamma_q} q \\delta u \\,ds_x + \\int_{D} k \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_c} h u \\delta u \\,ds_x",
+  "state_weak_lhs_source": "extracted",
+  "state_weak_rhs": "\\int_{\\Gamma_c} h u_{amb} \\delta u \\,ds_x",
+  "state_weak_rhs_source": "extracted",
+  "state_is_nonlinear": false,
+  "state_is_nonlinear_source": "extracted",
+  "newton_description": null,
+  "newton_weak_form": null,
+  "newton_source": "not_applicable",
+  "adjoint_description": "adjoint equation for the state u",
+  "adjoint_description_source": "extracted",
+  "adjoint_weak_lhs": "\\int_{\\Gamma_q} q \\delta u \\,ds_x + \\int_{D} k \\chi \\left( \\nabla \\delta u \\cdot \\nabla \\tilde u \\right) \\,dx + \\int_{\\Gamma_c} h \\delta u \\tilde u \\,ds_x",
+  "adjoint_weak_lhs_source": "extracted",
+  "adjoint_weak_rhs": "0",
+  "adjoint_weak_rhs_source": "extracted",
+  "shape_derivative_volume": "\\int_{D} \\left(\\operatorname{div} \\mathbf V \\left( \\nabla u \\cdot \\nabla \\tilde u \\right) - \\left( \\nabla \\tilde u \\cdot \\left( \\nabla u \\cdot \\nabla \\mathbf V \\right) \\right) - \\left( \\nabla u \\cdot \\left( \\nabla \\tilde u \\cdot \\nabla \\mathbf V \\right) \\right)\\right) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf V \\,dx",
+  "shape_derivative_boundary": "\\int_{\\Gamma_c} \\kappa h \\left( u - u_{amb} \\right) \\tilde u \\left( \\mathbf V \\cdot \\mathbf n \\right) \\,ds_x",
+  "shape_derivative_source": "extracted",
+  "boundaries": [
+   {
+    "name": "\\Gamma_q",
+    "label": "1",
+    "kind": "Neumann",
+    "design_role": "fixed",
+    "description": "heat flux segment on bottom edge",
+    "source": "extracted",
+    "rationale": "Label designed as 1 based on mesh_labels_used [1,2,3] and natural ordering of boundary segments."
+   },
+   {
+    "name": "\\Gamma_a",
+    "label": "2",
+    "kind": "Neumann",
+    "design_role": "fixed",
+    "description": "adiabatic portion of bottom edge",
+    "source": "extracted",
+    "rationale": "Label designed as 2 based on mesh_labels_used [1,2,3] and natural ordering."
+   },
+   {
+    "name": "\\Gamma_c",
+    "label": "3",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "convective boundary on remaining three edges",
+    "source": "extracted",
+    "rationale": "Label designed as 3 based on mesh_labels_used [1,2,3]; this label groups the remaining three edges."
+   }
+  ],
+  "interfaces": [],
+  "interfaces_source": "not_applicable",
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": null,
+    "dirichlet_labels": [],
+    "source": "extracted",
+    "rationale": "dirichlet_value and dirichlet_labels are empty because all boundaries are Neumann or Robin; fe_space P2 preserved from extraction."
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "delta_u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "source": "extracted"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity of aluminium",
+    "unit": "W/(K m)",
+    "source": "extracted"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity of air",
+    "unit": "W/(K m)",
+    "source": "extracted"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "q",
+    "latex": "q",
+    "value": 1000,
+    "description": "heat flux",
+    "unit": "W/m^2",
+    "source": "extracted"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "initial_level_set",
+    "latex": "\\phi_0",
+    "formula": "0.1 - \\sqrt{\\left( x - 0.5 \\right)^{2} + \\left( y - 0.5 \\right)^{2}}",
+    "source": "extracted"
+   },
+   {
+    "name": "k",
+    "latex": "k",
+    "formula": "k_0",
+    "source": "designed",
+    "rationale": "The extracted state weak form uses k; we define k = k_0 as the solid thermal conductivity to complete the model. The provided k_air is retained for reference but not used in the extracted weak form."
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": 0.00013,
+   "source": "extracted",
+   "rationale": "weak_value taken from extracted spec; represents regularized characteristic function."
+  },
+  "optimization_config": {
+   "mesh_file": "mesh.txt",
+   "hmin": 0.01,
+   "hmax": 0.1,
+   "diffusion": 0.0001,
+   "v0": 0.01,
+   "iterations": 30,
+   "level_set_initial": "0.1 - \\sqrt{\\left( x - 0.5 \\right)^{2} + \\left( y - 0.5 \\right)^{2}}",
+   "boundary_labels": [
+    "3"
+   ],
+   "fixed_labels": [
+    "1",
+    "2"
+   ],
+   "extra_params": {},
+   "source": "designed",
+   "rationale": "hmin/hmax chosen as 1/100 and 1/10 of unit domain; diffusion 1e-4; v0 0.01; 30 iterations. boundary_labels from design role of \u0393_c (label 3); fixed_labels from \u0393_q (label 1) and \u0393_a (label 2). level_set_initial from extracted initial_level_set."
+  }
+ }
+}

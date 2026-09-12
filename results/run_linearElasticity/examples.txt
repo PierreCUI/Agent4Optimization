@@ -1,5 +1,0 @@
-run_linearElasticity
-run_linearElasticity_Targetmesh
-run_linearElasticity_Target
-run_linearElasticity_TargetKragtraeger
-run_linearElasticityBridge

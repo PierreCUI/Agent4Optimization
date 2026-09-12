@@ -1,0 +1,366 @@
+{
+ "extracted": {
+  "problem_type": "shape_optimization",
+  "problem_name": "heatSinkFlueGasRadiation",
+  "dimension": 2,
+  "domain_name": "D",
+  "mesh_variable": "Th",
+  "mesh_file": "mesh.txt",
+  "mesh_labels_used": [
+   "1",
+   "2",
+   "3"
+  ],
+  "boundaries": [
+   {
+    "name": "\\Gamma_H",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "heated gas-side boundary; convective heating combined with absorbed gas radiation"
+   },
+   {
+    "name": "\\Gamma_c",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "cooling edges exchanging heat with ambient air; their shape is optimised"
+   }
+  ],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K"
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "delta_u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity (aluminium)",
+    "unit": "W/(m K)"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity (air)",
+    "unit": "W/(m K)"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "effective convective heat transfer coefficient (air side)",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature",
+    "unit": "K"
+   },
+   {
+    "name": "h_H",
+    "latex": "h_H",
+    "value": 25,
+    "description": "convective heat transfer coefficient (flue-gas side)",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_H",
+    "latex": "u_H",
+    "value": 338,
+    "description": "flue-gas temperature",
+    "unit": "K"
+   },
+   {
+    "name": "epsilon_g",
+    "latex": "\\varepsilon_g",
+    "value": 0.9,
+    "description": "effective emissivity of the gas-filled duct and oxidised wall",
+    "unit": "-"
+   },
+   {
+    "name": "sigma",
+    "latex": "\\sigma",
+    "value": 5.67e-08,
+    "description": "Stefan-Boltzmann constant",
+    "unit": "W/(m^2 K^4)"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "value": 1000,
+    "description": "heated-surface temperature weight",
+    "unit": "W/(m^2)"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "chi",
+    "latex": "\\chi",
+    "formula": "\\chi(x) = 1 \\text{ if } \\phi(x) < 0, \\quad k_{air}/k_0 \\text{ if } \\phi(x) \\ge 0"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "formula": "q_b = h_H \\left( u_H - u_{amb} \\right)"
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": 0.00013
+  },
+  "objective": {
+   "name": "J",
+   "description": "Minimise the gas-side surface temperature at fixed material cost; the heated-surface temperature integral is weighted by q_b, keeping the heated surface cold.",
+   "terms": [
+    "\\int_{D} \\ell \\chi \\,dx",
+    "\\int_{\\Gamma_H} q_b u \\,ds_x"
+   ]
+  },
+  "state_equation": {
+   "description": "Non-linear steady heat conduction with convection on the cooling edges and a non-linear radiation term on the heated gas-side boundary; the u^4 dependence makes the problem non-linear. No Dirichlet condition (temperature fixed implicitly by ambient air through the Robin condition).",
+   "weak_form_lhs": "\\int_{D} k \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} h_H u \\delta u \\,ds_x + \\int_{\\Gamma_H} \\varepsilon_g \\sigma u^{4} \\delta u \\,ds_x + \\int_{\\Gamma_c} h u \\delta u \\,ds_x",
+   "weak_form_rhs": "\\int_{\\Gamma_H} h_H u_{H} \\delta u \\,ds_x + \\int_{\\Gamma_H} \\varepsilon_g \\sigma u_{H}^{4} \\delta u \\,ds_x + \\int_{\\Gamma_c} h u_{amb} \\delta u \\,ds_x",
+   "is_nonlinear": true
+  },
+  "newton_linearisation": {
+   "description": "Newton update u <- u - \u00fb; the radiation term is linearised as \\partial_u [\\varepsilon_g \\sigma (u^4 - u_H^4)] \u00fb = 4 \\varepsilon_g \\sigma u^3 \u00fb.",
+   "weak_form": "\\int_{D} k \\chi \\left( \\nabla \\hat u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} h_H \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_H} 4 \\varepsilon_g \\sigma u^{3} \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_c} h \\hat u \\delta u \\,ds_x = \\int_{D} k \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} \\left( h_H \\left( u - u_H \\right) + \\varepsilon_g \\sigma \\left( u^{4} - u_{H}^{4} \\right) \\right) \\delta u \\,ds_x + \\int_{\\Gamma_c} h \\left( u - u_{amb} \\right) \\delta u \\,ds_x"
+  },
+  "adjoint_equation": {
+   "description": "Adjoint state [\\tilde u] to the direct state [u]; the adjoint operator is the linearisation of the state operator at u (self-adjoint for the symmetric conduction-convection-radiation operator), with adjoint load coming from \\partial_u J(\\delta u) = \\int_{\\Gamma_H} q_b \\delta u \\,ds_x.",
+   "weak_form_lhs": "\\int_{D} k \\chi \\left( \\nabla \\delta u \\cdot \\nabla \\tilde u \\right) \\,dx + \\int_{\\Gamma_H} h_H \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_H} 4 \\varepsilon_g \\sigma u^{3} \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_c} h \\delta u \\tilde u \\,ds_x",
+   "weak_form_rhs": "- \\int_{\\Gamma_H} q_b \\delta u \\,ds_x"
+  },
+  "shape_derivative": {
+   "volume_expression": "\\int_{D} \\left( \\operatorname{div} \\mathbf V \\left( \\nabla u \\cdot \\nabla \\tilde u \\right) - \\left( \\nabla \\tilde u \\cdot \\left( \\nabla u \\cdot \\nabla \\mathbf V \\right) \\right) - \\left( \\nabla u \\cdot \\left( \\nabla \\tilde u \\cdot \\nabla \\mathbf V \\right) \\right) \\right) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf V \\,dx",
+   "boundary_expression": "\\int_{\\Gamma_c} \\kappa h \\left( u - u_{amb} \\right) \\tilde u \\left( \\mathbf V \\cdot \\mathbf n \\right) \\,ds_x"
+  },
+  "optimization_params": {
+   "level_set_initial": "full solid unit square with a circular hole of radius 0.1 cut out of its centre"
+  }
+ },
+ "designed": {
+  "problem_type": "shape_optimization",
+  "problem_type_source": "extracted",
+  "problem_name": "heatSinkFlueGasRadiation",
+  "problem_name_source": "extracted",
+  "dimension": 2,
+  "dimension_source": "extracted",
+  "domain_name": "D",
+  "domain_name_source": "extracted",
+  "mesh_variable": "Th",
+  "mesh_variable_source": "extracted",
+  "mesh_file": "mesh.txt",
+  "mesh_file_source": "extracted",
+  "objective_name": "J",
+  "objective_name_source": "extracted",
+  "objective_description": "Minimise the gas-side surface temperature at fixed material cost; the heated-surface temperature integral is weighted by q_b, keeping the heated surface cold.",
+  "objective_description_source": "extracted",
+  "objective_terms": [
+   "\\int_{D} \\ell \\chi \\,dx",
+   "\\int_{\\Gamma_H} q_b u \\,ds_x"
+  ],
+  "objective_terms_source": "extracted",
+  "state_description": "Non-linear steady heat conduction with convection on the cooling edges and a non-linear radiation term on the heated gas-side boundary; the u^4 dependence makes the problem non-linear. No Dirichlet condition (temperature fixed implicitly by ambient air through the Robin condition).",
+  "state_description_source": "extracted",
+  "state_weak_lhs": "\\int_{D} k \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} h_H u \\delta u \\,ds_x + \\int_{\\Gamma_H} \\varepsilon_g \\sigma u^{4} \\delta u \\,ds_x + \\int_{\\Gamma_c} h u \\delta u \\,ds_x",
+  "state_weak_lhs_source": "extracted",
+  "state_weak_rhs": "\\int_{\\Gamma_H} h_H u_{H} \\delta u \\,ds_x + \\int_{\\Gamma_H} \\varepsilon_g \\sigma u_{H}^{4} \\delta u \\,ds_x + \\int_{\\Gamma_c} h u_{amb} \\delta u \\,ds_x",
+  "state_weak_rhs_source": "extracted",
+  "state_is_nonlinear": true,
+  "state_is_nonlinear_source": "extracted",
+  "newton_description": "Newton update u <- u - \u00fb; the radiation term is linearised as \\partial_u [\\varepsilon_g \\sigma (u^4 - u_H^4)] \u00fb = 4 \\varepsilon_g \\sigma u^3 \u00fb.",
+  "newton_weak_form": "\\int_{D} k \\chi \\left( \\nabla \\hat u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} h_H \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_H} 4 \\varepsilon_g \\sigma u^{3} \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_c} h \\hat u \\delta u \\,ds_x = \\int_{D} k \\chi \\left( \\nabla u \\cdot \\nabla \\delta u \\right) \\,dx + \\int_{\\Gamma_H} \\left( h_H \\left( u - u_H \\right) + \\varepsilon_g \\sigma \\left( u^{4} - u_{H}^{4} \\right) \\right) \\delta u \\,ds_x + \\int_{\\Gamma_c} h \\left( u - u_{amb} \\right) \\delta u \\,ds_x",
+  "newton_source": "extracted",
+  "adjoint_description": "Adjoint state [\\tilde u] to the direct state [u]; the adjoint operator is the linearisation of the state operator at u (self-adjoint for the symmetric conduction-convection-radiation operator), with adjoint load coming from \\partial_u J(\\delta u) = \\int_{\\Gamma_H} q_b \\delta u \\,ds_x.",
+  "adjoint_description_source": "extracted",
+  "adjoint_weak_lhs": "\\int_{D} k \\chi \\left( \\nabla \\delta u \\cdot \\nabla \\tilde u \\right) \\,dx + \\int_{\\Gamma_H} h_H \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_H} 4 \\varepsilon_g \\sigma u^{3} \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_c} h \\delta u \\tilde u \\,ds_x",
+  "adjoint_weak_lhs_source": "extracted",
+  "adjoint_weak_rhs": "- \\int_{\\Gamma_H} q_b \\delta u \\,ds_x",
+  "adjoint_weak_rhs_source": "extracted",
+  "shape_derivative_volume": "\\int_{D} \\left( \\operatorname{div} \\mathbf V \\left( \\nabla u \\cdot \\nabla \\tilde u \\right) - \\left( \\nabla \\tilde u \\cdot \\left( \\nabla u \\cdot \\nabla \\mathbf V \\right) \\right) - \\left( \\nabla u \\cdot \\left( \\nabla \\tilde u \\cdot \\nabla \\mathbf V \\right) \\right) \\right) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf V \\,dx",
+  "shape_derivative_boundary": "\\int_{\\Gamma_c} \\kappa h \\left( u - u_{amb} \\right) \\tilde u \\left( \\mathbf V \\cdot \\mathbf n \\right) \\,ds_x",
+  "shape_derivative_source": "extracted",
+  "boundaries": [
+   {
+    "name": "\\Gamma_H",
+    "label": "1",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "heated gas-side boundary; convective heating combined with absorbed gas radiation",
+    "source": "designed",
+    "rationale": "Label 1 assigned to the heated gas-side boundary (bottom edge) based on mesh_labels_used and typical heat sink layout; kind and design_role preserved from extracted spec."
+   },
+   {
+    "name": "\\Gamma_c",
+    "label": "2",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "cooling edges exchanging heat with ambient air; their shape is optimised",
+    "source": "designed",
+    "rationale": "Label 2 assigned to one of the cooling edges (left edge) based on mesh_labels_used; kind and design_role preserved from extracted spec."
+   },
+   {
+    "name": "\\Gamma_c",
+    "label": "3",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "cooling edges exchanging heat with ambient air; their shape is optimised",
+    "source": "designed",
+    "rationale": "Label 3 assigned to the other cooling edge (right edge) based on mesh_labels_used; kind and design_role preserved from extracted spec."
+   }
+  ],
+  "interfaces": [],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": null,
+    "dirichlet_labels": [],
+    "source": "designed",
+    "rationale": "Field u extracted from spec; dirichlet_value and dirichlet_labels are designed as empty because no Dirichlet condition is given (temperature fixed implicitly via Robin conditions)."
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "delta_u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "source": "extracted"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity (aluminium)",
+    "unit": "W/(m K)",
+    "source": "extracted"
+   },
+   {
+    "name": "k_air",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity (air)",
+    "unit": "W/(m K)",
+    "source": "extracted"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "effective convective heat transfer coefficient (air side)",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_amb",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "h_H",
+    "latex": "h_H",
+    "value": 25,
+    "description": "convective heat transfer coefficient (flue-gas side)",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_H",
+    "latex": "u_H",
+    "value": 338,
+    "description": "flue-gas temperature",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "epsilon_g",
+    "latex": "\\varepsilon_g",
+    "value": 0.9,
+    "description": "effective emissivity of the gas-filled duct and oxidised wall",
+    "unit": "-",
+    "source": "extracted"
+   },
+   {
+    "name": "sigma",
+    "latex": "\\sigma",
+    "value": 5.67e-08,
+    "description": "Stefan-Boltzmann constant",
+    "unit": "W/(m^2 K^4)",
+    "source": "extracted"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "value": 1000,
+    "description": "heated-surface temperature weight",
+    "unit": "W/(m^2)",
+    "source": "extracted"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "chi",
+    "latex": "\\chi",
+    "formula": "\\chi(x) = 1 \\text{ if } \\phi(x) < 0, \\quad k_{air}/k_0 \\text{ if } \\phi(x) \\ge 0",
+    "source": "extracted"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "formula": "q_b = h_H \\left( u_H - u_{amb} \\right)",
+    "source": "extracted"
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": 0.00013,
+   "source": "extracted"
+  },
+  "optimization_config": {
+   "mesh_file": "mesh.txt",
+   "hmin": 0.01,
+   "hmax": 0.1,
+   "diffusion": 0.0001,
+   "v0": 0.001,
+   "iterations": 30,
+   "level_set_initial": "max( -min(x, 1-x, y, 1-y), 0.01 - ((x-0.5)^2 + (y-0.5)^2) )",
+   "boundary_labels": [
+    "2",
+    "3"
+   ],
+   "fixed_labels": [
+    "1"
+   ],
+   "extra_params": {},
+   "source": "designed",
+   "rationale": "Standard parameters for level-set shape optimization on a unit square: hmin=0.01, hmax=0.1 (1% and 10% of domain size), diffusion=1e-4 to regularize the level set, v0=1e-3 initial velocity, 30 iterations. boundary_labels and fixed_labels reflect the design roles: cooling edges (labels 2,3) are movable; heated gas-side boundary (label 1) is fixed. The level-set initial formula encodes a full solid square with a circular hole of radius 0.1 at the center."
+  }
+ }
+}

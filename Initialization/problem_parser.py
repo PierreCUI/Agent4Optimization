@@ -23,22 +23,46 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from configs import MAX_FILE_CHARS
-from utils import loader_safe_file, parser_json
+from configs import MAX_FILE_CHARS  # noqa: E402
+from utils import loader_safe_file, parser_json  # noqa: E402
 
 # ======================================================================
 # helpers
 # ======================================================================
 
 
+# Artifacts produced by a previous pipeline/tool run on the same folder.
+# They are NOT problem inputs — feeding them back to the LLM would let a
+# previous generation supervise the next one.  ``mesh.txt`` is DELIBERATELY
+# absent: a demo's mesh.txt is an INPUT (the reference mesh the problem is
+# defined on) and is collected — the mesh handler copies it verbatim when
+# its syntax is valid.
+_ARTIFACT_NAMES = {
+    "initial.json",
+    "mesh.json",
+    "run_result.json",
+    "reflection.txt",
+    "main.py",
+    "brief.txt",  # human-readable summary only — never an LLM input
+}
+
+
 def collect_input_files(problem_dir: Path) -> dict:
-    """Return ``{filename: content}`` for every **non-.py** file in *problem_dir*."""
+    """Return ``{filename: content}`` for every **input** file in *problem_dir*.
+
+    Excluded: ``.py`` files, ``brief.txt`` (human-readable summary only),
+    and pipeline artifacts written by earlier runs (initial.json, mesh.json,
+    run_result.json, reflection.txt).  ``mesh.txt`` is collected — the
+    problem's reference mesh.
+    """
     problem_dir = Path(problem_dir)
     if not problem_dir.exists() or not problem_dir.is_dir():
         return {}
     files = {}
     for p in sorted(problem_dir.rglob("*")):
         if not p.is_file() or p.suffix == ".py":
+            continue
+        if p.name in _ARTIFACT_NAMES:
             continue
         content = loader_safe_file(p)
         if content:
@@ -70,6 +94,8 @@ _EXTRACT_SYSTEM = """\
     - domain_name: e.g. "D", "Omega"
     - mesh_variable: e.g. "Th"
     - mesh_file: the filename of the mesh file (e.g. "mesh.txt")
+    - domains: OPTIONAL array — multi-domain problems ONLY.  Each element:
+      name, mesh_variable.  Omit entirely for single-domain problems.
     
     ### mesh_labels_used
     Array of all label strings that appear in the mesh file.
@@ -78,15 +104,57 @@ _EXTRACT_SYSTEM = """\
     ### boundaries (LOGICAL boundaries from the LaTeX, NOT raw mesh segments)
     Each boundary:
       name:         LaTeX name (e.g. "\\Gamma_N", "\\Gamma_4")
-      kind:         "Dirichlet" or "Neumann"
+      kind:         "Dirichlet" | "Neumann" | "Robin" — the PHYSICAL boundary
+                    condition only:
+                    * "Dirichlet": the field value is prescribed
+                      (physics-fixed boundary).
+                    * "Neumann": a flux / load is prescribed (load boundary).
+                      A zero load is a FREE boundary (adiabatic in thermal
+                      problems, traction-free in solid mechanics) — still
+                      "Neumann".
+                    * "Robin": a linear combination of the field and its flux
+                      (mixed boundary).
+                    The physical kind is INDEPENDENT of the design role
+                    (design = movable vs fixed = frozen) — extract only the
+                    physical kind here, do not infer one from the other.
+      design_role:  "design" (movable) or "fixed" (frozen) — ONLY if the
+                    text explicitly states whether the boundary may move
+                    (e.g. "the bottom edge is a fixed boundary" or "its
+                    shape is optimised").  Otherwise OMIT (the design phase
+                    decides).
       description:  short English phrase (e.g. "loaded boundary")
       mesh_label:   string — ONLY if the LaTeX/text explicitly states which
                     mesh label this boundary corresponds to.  Otherwise OMIT.
-    
+
     CRITICAL: extract LOGICAL boundaries like Gamma_N, Gamma_D from the LaTeX
     mathematics, NOT the C01/C02/... geometric segments from mesh.txt.
-    The mesh segments are implementation details — ignore them.
-    
+    The mesh segments are implementation details — ignore them.  Also
+    ignore the label-10 boundary (holes / the solid-void boundary of the
+    level set inside the domain): it is not a logical non-10 boundary and
+    carries no physical kind.
+
+    ### interfaces (multi-domain problems ONLY — omit entirely for
+    single-domain problems)
+    An interface is the shared boundary of two or more distinct
+    computational domains (wherever it lies — inside the domain or on the
+    outer boundary).  Each interface:
+      name:          e.g. "\\Gamma_I"
+      domains:       the two (or more) computational domains it separates
+      physical:      "value_continuity" — the field value is continuous
+                     across the interface (e.g. T1 = T2 in diffusion), OR
+                     "flux_continuity" — the normal flux is continuous
+                     across the interface (e.g. k1 grad(T1)·n = k2
+                     grad(T2)·n in diffusion).
+                     These are continuity conditions BETWEEN domains —
+                     NOT Dirichlet/Neumann/Robin external conditions.
+      design_role:   "design" (movable) or "fixed" (frozen) — ONLY if the
+                     text explicitly states whether the interface may
+                     move.  Otherwise OMIT (the design phase decides).
+      description:   short English phrase
+    Do NOT confuse an interface (shared boundary between two computational
+    domains) with the label-10 boundary (the solid/void boundary of the
+    level set within ONE domain, mesh label 10).
+
     ### fields (state/primal unknowns)
     Each: name, latex, type ("scalar"|"vector"), fe_space ("P1"|"P2"),
           unit (SI string), dirichlet_value, dirichlet_labels [string]
@@ -98,6 +166,10 @@ _EXTRACT_SYSTEM = """\
     Each: name, latex, value (number), description, unit.
     ONLY include constants whose numerical VALUE is explicitly given
     (in a parameter table or inline).  Omit if only the symbol is named.
+    The Lagrange multiplier (ell / Afac) is NOT a problem constant: it
+    is the balance parameter of the optimisation, calibrated by the
+    pipeline's Afac-calibration step.  NEVER include it in constants,
+    even if a value happens to be mentioned.
     
     ### expressions
     Each: name, latex, formula (mathematical notation).
@@ -222,7 +294,10 @@ _DESIGN_SYSTEM = """\
       shape_derivative_volume, shape_derivative_boundary, shape_derivative_source
     
     Array fields (each element has source [+ rationale]):
-      boundaries: array of objects with keys — name, label, kind, description, source, rationale?
+      boundaries: array of objects with keys — name, label, kind, design_role?,
+                  description, source, rationale?
+      interfaces: array of objects (multi-domain problems ONLY) with keys —
+                  name, domains, physical, design_role, label, source, rationale?
       fields:    array of objects with keys — name, latex, type, fe_space, unit,
                  dirichlet_value, dirichlet_labels, source, rationale?
       test_functions: array of objects with keys — name, latex, type, fe_space, source, rationale?
@@ -241,9 +316,52 @@ _DESIGN_SYSTEM = """\
     
     - **boundaries**: the extracted spec may list LaTeX names without mesh_label.
       RECONCILE them with mesh_labels_used by geometric reasoning.
-      E.g. "left edge fixed" → label 4 if mesh shows left edge as label 4.
+      E.g. "left edge clamped" → label 4 if mesh shows left edge as label 4.
       Every boundary MUST get a concrete label string.
       Mark designed label assignments source="designed".
+
+    - **design role vs physical kind — two INDEPENDENT aspects of every
+      NON-10 boundary; do not confuse them**:
+      * The extracted ``kind`` is the PHYSICAL condition (Dirichlet / Neumann
+        / Robin; a zero-load Neumann is a free boundary — adiabatic in
+        thermal problems, traction-free in mechanics).  Preserve it.
+      * The DESIGN role (design = movable, fixed = frozen) is decided here
+        and feeds ``optimization_config.boundary_labels`` / ``fixed_labels``:
+        if the extracted boundary carries an explicit ``design_role``,
+        PRESERVE it (it is extracted ground truth — e.g. a load boundary
+        whose position is prescribed by the device layout is FIXED even
+        though it is physically Neumann).  Only boundaries WITHOUT an
+        explicit design_role get the convention: Dirichlet (physics-fixed)
+        boundaries are normally FIXED; Neumann / Robin (load / mixed)
+        boundaries are normally DESIGN.  If unsure, treat the boundary as
+        fixed.
+      * The label-10 boundary (holes / the solid-void boundary of the
+        level set inside the domain, mesh label 10) is design by default
+        and carries NO physical kind — never list it among the non-10
+        boundaries.
+
+    - **multi-domain problems and interfaces**:
+      * Most problems are single-domain.  If the problem involves TWO OR
+        MORE materials / regions each occupying its own computational
+        domain, keep the extracted ``domains`` array and design one
+        computational domain per material / region.
+      * An interface is the shared boundary of two computational domains
+        (wherever it lies — inside the domain or on the outer boundary).
+        Design BOTH of its independent aspects:
+        - design_role: "design" (movable) or "fixed" (frozen), decided per
+          problem — an interface is NOT design by default (unlike the
+          internal material boundary, label 10).  If unsure, treat it as
+          fixed.
+        - physical: exactly one of "value_continuity" (e.g. T1 = T2 in
+          diffusion) or "flux_continuity" (e.g. k1 grad(T1)·n = k2
+          grad(T2)·n in diffusion).  These are continuity conditions
+          BETWEEN domains — NOT Dirichlet/Neumann/Robin conditions
+          (non-10 boundaries only).  Preserve an extracted physical;
+          design it only if the text does not state it.
+      * Every interface must also get a concrete mesh ``label``.
+      * Do NOT confuse interfaces with the label-10 boundary (the
+        single-domain solid/void boundary of the level set): they are
+        different objects with different rules.
     
     - **fields**: default fe_space "P2" for vectors (elasticity), "P1" for
       scalars (diffusion/thermal).  Default unit "meter" for displacement,
@@ -254,8 +372,11 @@ _DESIGN_SYSTEM = """\
       - Structural steel: E=200e9 Pa, nu=0.3
       - Thermal: k0=1 W/(m*K), alpha=0.01 1/K^2
       - Load magnitude: scale to problem dimensions
-      - Lagrange multiplier ell: 0.1-100, scale to balance physics terms
       Mark ALL designed constants source="designed".
+      NEVER design a Lagrange multiplier (ell / Afac): it is the balance
+      parameter of the optimisation, calibrated by the pipeline's
+      Afac-calibration step — the coder estimates an initial value and
+      the reflection loop calibrates it.
     
     - **expressions**: include standard derived quantities (strain, stress,
       Lame parameters) even if not extracted.  Mark designed ones.
@@ -273,7 +394,11 @@ _DESIGN_SYSTEM = """\
       - v0: 1e-3 to 1e-2
       - iterations: 20-50
       - level_set_initial: a sensible signed-distance expression for the geometry
-      - boundary_labels/fixed_labels: align with boundary design
+      - boundary_labels/fixed_labels: the DESIGN roles of the non-10
+        boundaries — boundary_labels = design (movable) boundaries
+        (Neumann / Robin), fixed_labels = fixed (frozen) boundaries
+        (Dirichlet).  The label-10 boundary never appears in either
+        list.
       Mark source="designed" with rationale.
     
     ## Output
@@ -389,18 +514,28 @@ if __name__ == "__main__":
         ex = result.get("extracted", {})
         ds = result.get("designed", {})
 
-        # collect summary data
+        # collect summary data — `or []` guards None/object values from a
+        # malformed LLM response so the demo runner never aborts.
         pt = ds.get("problem_type", "?")
         dim = ds.get("dimension", "?")
+        constants = ds.get("constants") or []
 
-        ex_n = sum(1 for c in ds.get("constants", []) if c.get("source") == "extracted")
-        de_n = sum(1 for c in ds.get("constants", []) if c.get("source") == "designed")
+        # Guard non-iterable constants right at the summary level
+        ex_n = de_n = 0
+        if isinstance(constants, list):
+            ex_n = sum(1 for c in constants if isinstance(c, dict) and c.get("source") == "extracted")
+            de_n = sum(1 for c in constants if isinstance(c, dict) and c.get("source") == "designed")
 
         nl = "nonlinear" if ds.get("state_is_nonlinear") else "linear"
         adj = "yes" if (ds.get("adjoint_description") or ds.get("adjoint_weak_lhs")) else "no"
         sd = "yes" if ds.get("shape_derivative_volume") else "no"
-        opt_src = ds.get("optimization_config", {}).get("source", "?")
-        fields = ", ".join(f.get("name", "?") for f in ds.get("fields", []))
+        opt_src = ds.get("optimization_config", {}).get("source", "?") if isinstance(ds.get("optimization_config"), dict) else "?"
+        fields_list = ds.get("fields") or []
+        if not isinstance(fields_list, list):
+            fields_list = []
+        fields = ", ".join(
+            f.get("name", "?") for f in fields_list if isinstance(f, dict)
+        )
 
         summary_rows.append((case_name, pt, dim, ex_n, de_n, nl, opt_src, fields))
 

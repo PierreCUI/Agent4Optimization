@@ -1,5 +1,0 @@
-varf lineardiffusionResidual([incu],[deltau]) = 
-    -int2d(Th)(f*deltau) 
- + int2d(Th)((1.00000000000000*(phi<0) + 0.100000000000000*(1-(phi<0)))*lambda*(dx(deltau)*dx(u) + dy(deltau)*dy(u)))
-    + on(3,incu = 0)
- ;

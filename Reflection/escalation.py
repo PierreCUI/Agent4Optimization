@@ -1,13 +1,16 @@
 """
 Escalation controller for the Reflection module.
 
-Pure hard logic — no LLM calls.  Decides whether to continue with
-local_fix, escalate to rewrite, or give up entirely.
+Pure hard logic — no LLM calls.  Decides whether to continue with a
+local_fix or escalate to a rewrite.
 
 Decision is based on:
-- Total iteration count vs MAX_REFLECTION_TIMES.
 - Consecutive identical (coarse, fine) errors vs STALE_THRESHOLD.
-- Total rewrite count vs MAX_REWRITES.
+- Total occurrences of the current coarse category (oscillation between
+  different categories also counts).
+
+Giving up is decided ONLY by the caller's loop cap (MAX_REFLECTION_TIMES)
+— this function never returns "give_up".
 """
 
 
@@ -16,7 +19,6 @@ def decide(
     coarse: str,
     fine: str,
     stale_threshold: int = 5,
-    max_rewrites: int = 5,
 ) -> str:
     """
     Decide the fix strategy for the current error.
@@ -26,45 +28,60 @@ def decide(
             {coarse, fine, action, fix_rationale, outcome}.
         coarse: Current coarse category.
         fine: Current fine sub-category.
-        stale_threshold: Consecutive same-error count before rewrite
+        stale_threshold: Same-error count before rewrite
             (REFLECTION_STALE_THRESHOLD).
-        max_rewrites: Max total rewrites before giving up
-            (REFLECTION_MAX_REWRITES).
 
     Returns:
-        "local_fix" | "rewrite" | "give_up"
+        "local_fix" | "rewrite"
 
     Note: the total-iteration cap is enforced by the caller's loop,
     not by this function.
     """
-    # --- count consecutive identical errors (same coarse + fine) ---
+    # --- count identical errors (same coarse + fine) ---
     same_count = 0
-    same_coarse_count = 0
     for h in reversed(reflection_history):
         if h.get("coarse") == coarse and h.get("fine") == fine:
             same_count += 1
         else:
             break
-    for h in reversed(reflection_history):
-        if h.get("coarse") == coarse:
-            same_coarse_count += 1
-        else:
-            break
+
+    # Total occurrences of the current coarse category across the WHOLE
+    # history — catches both consecutive repeats (exactly the old
+    # consecutive counter) AND oscillation between DIFFERENT coarse
+    # categories (freefem_error ↔ autofreefem_error), where consecutive
+    # counters never reach the threshold and the loop burns all
+    # MAX_REFLECTION_TIMES on local_fix without ever rewriting.
+    #
+    # Records whose fix DELIVERED a design (MinTh.vtu generated) are
+    # progress, not staleness — a chain of DISTINCT bugs fixed one by one
+    # must not escalate to a rewrite just because they share a coarse
+    # category.  The SAME fine error recurring after a delivered design is
+    # NOT progress: the fix did not hold, and that is exactly the
+    # persistence this counter exists to catch.  (Both counters therefore
+    # treat a delivered record the same way — it counts when the error is
+    # the current one, and never when it is a different one — so the
+    # consecutive and the total counter agree on every record class.)
+    # "FreeFEM OK but no MinTh.vtu" is never progress either: the
+    # optimization ran but the design was never delivered.
+    same_coarse_count = 0
+    for h in reflection_history:
+        if h.get("coarse") != coarse:
+            continue
+        outcome = str(h.get("outcome", ""))
+        if "MinTh.vtu generated" in outcome and h.get("fine") != fine:
+            continue
+        same_coarse_count += 1
 
     # Include current error in the counts
     same_count += 1
     same_coarse_count += 1
 
     # --- stale threshold triggers rewrite ---
-    # Also trigger if stuck on the same coarse category with
-    # alternating fine labels for too long (oscillation blind spot).
-    stale = same_count >= stale_threshold or same_coarse_count >= stale_threshold * 2
-    if stale:
-        rewrites = sum(1 for h in reflection_history if h.get("action") == "rewrite")
-        if rewrites < max_rewrites:
-            return "rewrite"
-        else:
-            return "give_up"
+    # Giving up is the caller's loop cap (MAX_REFLECTION_TIMES) alone;
+    # a stale error always escalates to rewrite.
+    drift = max(same_count, same_coarse_count)
+    if drift >= stale_threshold:
+        return "rewrite"
 
     # --- default: continue with local (conservative) fix ---
     return "local_fix"

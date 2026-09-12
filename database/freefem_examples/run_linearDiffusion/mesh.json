@@ -19,6 +19,6 @@
       "3"
     ],
     "dimension": 2,
-    "domain_description": "Unit square [0,1]^2 with bottom, right, top and most of the left boundary labeled 1, and a middle segment of the left boundary (y in [0.4,0.6]) labeled 3."
+    "domain_description": "Unit square [0,1]x[0,1] whose boundary is labeled 1 except for a small segment on the left edge between y=0.4 and y=0.6, which is labeled 3."
   }
 }

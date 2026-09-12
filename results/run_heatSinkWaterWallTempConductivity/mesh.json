@@ -1,0 +1,28 @@
+{
+ "extracted": {
+  "category": "code",
+  "mesh_code": "real L = 1.0;    // normalized design-domain width\nreal H = 1.0;    // normalized design-domain height\nreal lq = 0.2;   // half-length of the load segment (load = central 40% of the bottom edge)\nborder C01(t=0, L/2-lq){x=t; y=0; label=1;}         // bottom edge, adiabatic left\nborder C02(t=0, 2*lq){x=L/2-lq+t; y=0; label=2;}    // bottom edge, load segment\nborder C03(t=0, L/2-lq){x=L/2+lq+t; y=0; label=1;}  // bottom edge, adiabatic right\nborder C04(t=0, H){x=L; y=t; label=3;}              // right edge, air convection\nborder C05(t=0, L){x=L-t; y=H; label=4;}            // top edge, cooling-pipe wall (isothermal)\nborder C06(t=0, H){x=0; y=H-t; label=3;}            // left edge, air convection\nint n = 50;\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
+  "geometry_description": "The design domain is the normalized unit square - the cross-section of the conducting wall of a flue-gas heat-recovery duct scaled to unit size for benchmark comparison. Low-temperature exhaust gas at u_H = 338 K sweeps the central forty percent of the bottom edge; the remaining bottom edge is adiabatic. The top edge - opposite the gas side - is a water wall held at the prescribed reference temperature of zero kelvin. The left and right edges exchange heat with ambient air at u_amb = 298 K. The initial design is an I-beam without holes: a full-width top flange (thickness 0.2) lying along the water wall, a bottom flange (length 0.5, thickness 0.2) under the gas-side footprint, and a web of width 0.2 running the full height between them.",
+  "labels_found": [
+   "1",
+   "2",
+   "3",
+   "4"
+  ],
+  "has_syntax_errors": false,
+  "syntax_error_details": ""
+ },
+ "designed": {
+  "mesh_code": "real L = 1.0;    // normalized design-domain width\nreal H = 1.0;    // normalized design-domain height\nreal lq = 0.2;   // half-length of the load segment (load = central 40% of the bottom edge)\nborder C01(t=0, L/2-lq){x=t; y=0; label=1;}         // bottom edge, adiabatic left\nborder C02(t=0, 2*lq){x=L/2-lq+t; y=0; label=2;}    // bottom edge, load segment\nborder C03(t=0, L/2-lq){x=L/2+lq+t; y=0; label=1;}  // bottom edge, adiabatic right\nborder C04(t=0, H){x=L; y=t; label=3;}              // right edge, air convection\nborder C05(t=0, L){x=L-t; y=H; label=4;}            // top edge, cooling-pipe wall (isothermal)\nborder C06(t=0, H){x=0; y=H-t; label=3;}            // left edge, air convection\nint n = 50;\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
+  "mesh_code_source": "extracted",
+  "mesh_code_rationale": "",
+  "labels_used": [
+   "1",
+   "2",
+   "3",
+   "4"
+  ],
+  "dimension": 2,
+  "domain_description": "Unit square [0,1]x[0,1] cross-section of a flue-gas heat-recovery duct wall. The bottom edge carries the gas-side convective load on its central 40% (label 2) and is adiabatic elsewhere (label 1). The top edge (label 4) is the isothermal water wall (Dirichlet u=0). The left and right edges (label 3) exchange heat by air convection (Robin)."
+ }
+}

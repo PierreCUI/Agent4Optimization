@@ -1,0 +1,24 @@
+\documentclass[preview]{standalone}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{bm}
+\let\oldcdot\cdot
+\usepackage{breqn}
+\let\cdot\oldcdot
+\begin{document}
+\begin{spacing}{1.2}
+\begin{tabular}{cccl}
+\toprule
+thermal conductivity (aluminium) & $k_0$ & 200 & $\frac{W}{K m}$ \
+thermal conductivity (air) & $k_{air}$ & 0.026 & $\frac{W}{K m}$ \
+convective heat transfer coefficient (environment) & $h$ & 25 & $\frac{W}{m^2 K}$ \
+ambient temperature & $u_{amb}$ & 298 & $K$ \
+steam temperature (inner wall) & $u_H$ & 373 & $K$ \
+Dirichlet penalty coefficient & $\operatorname{pen}$ & $10^{15}$ & $\frac{W}{m^2 K}$ \
+outer-surface temperature weight & $q_b$ & 1875 & $\frac{W}{m^2}$ \
+\bottomrule
+\end{tabular}
+\end{spacing}
+\end{document}

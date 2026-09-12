@@ -1,0 +1,23 @@
+\documentclass[preview]{standalone}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{bm}
+\let\oldcdot\cdot
+\usepackage{breqn}
+\let\cdot\oldcdot
+\begin{document}
+\begin{spacing}{1.2}
+\begin{tabular}{cccl}
+\toprule
+Lagrange multiplier & $\ell$ & 5.00e+03 & $\frac{W K}{m^3}$ \\ 
+ambient temperature & $u_{amb}$ & 298 & $K$ \\ 
+convective heat transfer coefficient (air side) & $h$ & 25 & $\frac{W}{K m^2}$ \\ 
+convective heat transfer coefficient (flue-gas side) & $h_{H}$ & 25 & $\frac{W}{K m^2}$ \\ 
+flue-gas temperature & $u_{H}$ & 338 & $K$ \\ 
+thermal conductivity (aluminium) & $k_{0}$ & 200 & $\frac{W}{K m}$ \\ 
+\bottomrule
+\end{tabular}
+\end{spacing}
+\end{document}

@@ -5,6 +5,12 @@ from .API import GEMINI_API_KEY, CodeAgent, CodeWriter
 
 class GeminiCodeWriter(CodeWriter):
     def __init__(self, model_name):
+        if not GEMINI_API_KEY:
+            # Fail fast with the provider's name instead of a confusing
+            # key resolution error at request time.
+            raise RuntimeError(
+                "GEMINI_API_KEY is not set — export it before building the Gemini agent."
+            )
         super().__init__()
         self.model_name = model_name
         model_kwargs = {
@@ -16,19 +22,10 @@ class GeminiCodeWriter(CodeWriter):
         self._model = ChatGoogleGenerativeAI(**model_kwargs)
 
 
-class GeminiCodeAgent36Flash(CodeAgent):
-    MODEL_NAME = "gemini-3.6-flash"
+class GeminiCodeAgent37Flash(CodeAgent):
+    MODEL_NAME = "gemini-3.7-flash"
 
     def __init__(self):
         super().__init__()
-        self.model_name = GeminiCodeAgent36Flash.MODEL_NAME
-        self.writer = GeminiCodeWriter(self.model_name)
-
-
-class GeminiCodeAgent35Flash(CodeAgent):
-    MODEL_NAME = "gemini-3.5-flash"
-
-    def __init__(self):
-        super().__init__()
-        self.model_name = GeminiCodeAgent35Flash.MODEL_NAME
+        self.model_name = GeminiCodeAgent37Flash.MODEL_NAME
         self.writer = GeminiCodeWriter(self.model_name)

@@ -1,0 +1,23 @@
+\documentclass[preview]{standalone}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{bm}
+\let\oldcdot\cdot
+\usepackage{breqn}
+\let\cdot\oldcdot
+\begin{document}
+\begin{spacing}{1.2}
+\begin{tabular}{cccl}
+\toprule
+thermal conductivity (aluminium) & $k_0$ & 200 & $\frac{W}{K m}$ \\
+thermal conductivity (air) & $k_{air}$ & 0.026 & $\frac{W}{K m}$ \\
+convective heat transfer coefficient (air side) & $h$ & 25 & $\frac{W}{m^2 K}$ \\
+ambient air temperature & $u_{amb}$ & 298 & $K$ \\
+convective heat transfer coefficient (flue-gas side) & $h_H$ & 25 & $\frac{W}{m^2 K}$ \\
+flue-gas temperature & $u_H$ & 338 & $K$ \\
+\bottomrule
+\end{tabular}
+\end{spacing}
+\end{document}

@@ -1,57 +1,53 @@
 {
   "extracted": {
     "problem_type": "topology_optimization",
-    "problem_name": "Linear Elasticity Bridge",
+    "problem_name": "run_linearElasticityBridge",
     "dimension": 2,
     "domain_name": "D",
     "mesh_variable": "Th",
     "mesh_file": "meshelasticBridge.txt",
-    "mesh_labels_used": [],
+    "mesh_labels_used": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
     "boundaries": [
       {
         "name": "\\Gamma_2",
         "kind": "Dirichlet",
-        "description": "fixed boundary"
+        "description": "boundary where the displacement is fixed to zero",
+        "mesh_label": "2"
       },
       {
         "name": "\\Gamma_4",
         "kind": "Dirichlet",
-        "description": "fixed boundary"
+        "description": "boundary where the displacement is fixed to zero",
+        "mesh_label": "4"
       },
       {
         "name": "\\partial D",
         "kind": "Neumann",
-        "description": "loaded boundary"
+        "description": "boundary with applied surface load f e_y"
       }
     ],
     "fields": [
       {
         "name": "u",
-        "latex": "\\mathbf u",
+        "latex": "\\mathbf{u}",
         "type": "vector",
         "fe_space": "P2",
-        "dirichlet_value": 0,
+        "dirichlet_value": "0.",
         "dirichlet_labels": [
-          "\\Gamma_2",
-          "\\Gamma_4"
-        ]
-      },
-      {
-        "name": "u_tilde",
-        "latex": "\\tilde{\\mathbf u}",
-        "type": "vector",
-        "fe_space": "P2",
-        "dirichlet_value": 0,
-        "dirichlet_labels": [
-          "\\Gamma_2",
-          "\\Gamma_4"
+          "2",
+          "4"
         ]
       }
     ],
     "test_functions": [
       {
         "name": "v",
-        "latex": "\\mathbf v",
+        "latex": "\\mathbf{v}",
         "type": "vector",
         "fe_space": "P2"
       }
@@ -67,7 +63,8 @@
         "name": "mu",
         "latex": "\\mu",
         "value": 8,
-        "description": "Poisson's ratio"
+        "description": "Poisson's ratio",
+        "unit": "-"
       },
       {
         "name": "lambda",
@@ -88,74 +85,67 @@
       {
         "name": "strain",
         "latex": "\\pmb\\varepsilon(\\mathbf u)",
-        "formula": "\\pmb\\varepsilon(\\mathbf u) = \\frac{\\nabla \\mathbf u + \\nabla \\mathbf u^\\top}{2}"
+        "formula": "\\frac{\\nabla \\mathbf u + \\nabla \\mathbf u^{\\top}}{2}"
       },
       {
-        "name": "shape_perturbed_strain",
+        "name": "adjoint_source",
+        "latex": "\\partial_{(\\mathbf u,\\mathbf v)} J(\\mathbf u,\\mathbf v)",
+        "formula": "\\int_D 2\\chi \\left(\\lambda \\operatorname{div}(\\mathbf u)^2 \\operatorname{div} \\mathbf v \\operatorname{div}(\\mathbf u)^{-1} + \\mu\\left((\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf v)^\\top) + (\\pmb\\varepsilon(\\mathbf v):\\pmb\\varepsilon(\\mathbf u)^\\top)\\right)\\right)\\,dx"
+      },
+      {
+        "name": "perturbed_strain",
         "latex": "\\mathcal V(\\pmb\\varepsilon)",
-        "formula": "\\mathcal V(\\pmb\\varepsilon) = \\frac{(\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)) + ((\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)))^\\top}{2}"
-      },
-      {
-        "name": "perturbed_objective",
-        "latex": "\\mathcal V(J)",
-        "formula": "\\mathcal V(J) = \\int_D \\ell \\chi \\det \\mathbf F(t) \\,dx + \\int_D \\chi \\det \\mathbf F(t) \\left(\\lambda \\operatorname{tr}(\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t))^{2} + 2\\mu(\\mathcal V(\\pmb\\varepsilon):\\mathcal V(\\pmb\\varepsilon)^\\top)\\right)\\,dx"
+        "formula": "\\frac{(\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)) + ((\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)))^\\top}{2}"
       },
       {
         "name": "time_derivative_strain",
         "latex": "\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u)",
-        "formula": "\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u) = -\\frac{(\\nabla \\mathbf u \\cdot \\nabla \\mathbf V) + ((\\nabla \\mathbf u \\cdot \\nabla \\mathbf V))^\\top}{2}"
+        "formula": "-\\frac{(\\nabla \\mathbf u \\cdot \\nabla \\mathbf V) + ((\\nabla \\mathbf u \\cdot \\nabla \\mathbf V))^\\top}{2}"
       },
       {
         "name": "time_derivative_objective",
         "latex": "\\partial_t J(\\mathbf V,\\mathbf u)",
-        "formula": "\\partial_t J(\\mathbf V,\\mathbf u) = \\int_D \\ell \\chi \\operatorname{div}\\mathbf V \\,dx + \\int_D \\chi \\left(\\operatorname{div}\\mathbf V \\left(\\lambda \\operatorname{div}(\\mathbf u)^2 + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf u)^\\top)\\right) + 2\\left(\\lambda \\operatorname{div}(\\mathbf u)^2 \\operatorname{tr}(-(\\nabla \\mathbf u \\cdot \\nabla \\mathbf V))\\operatorname{div}(\\mathbf u)^{-1} + \\mu\\left((\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u):\\pmb\\varepsilon(\\mathbf u)^\\top) + (\\pmb\\varepsilon(\\mathbf u):\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u)^\\top)\\right)\\right)\\right)\\,dx"
+        "formula": "\\int_D \\ell \\chi \\operatorname{div}\\mathbf V\\,dx + \\int_D \\chi \\left(\\operatorname{div}\\mathbf V \\left(\\lambda \\operatorname{div}(\\mathbf u)^2 + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf u)^\\top)\\right) + 2\\left(\\lambda \\operatorname{div}(\\mathbf u)^2 \\operatorname{tr}(-(\\nabla\\mathbf u \\cdot \\nabla\\mathbf V)) \\operatorname{div}(\\mathbf u)^{-1} + \\mu\\left((\\partial_t\\pmb\\varepsilon(\\mathbf V,\\mathbf u):\\pmb\\varepsilon(\\mathbf u)^\\top) + (\\pmb\\varepsilon(\\mathbf u):\\partial_t\\pmb\\varepsilon(\\mathbf V,\\mathbf u)^\\top)\\right)\\right)\\right)\\,dx"
       },
       {
-        "name": "adjoint_objective_derivative",
-        "latex": "\\partial_{(\\mathbf u,\\mathbf v)}J(\\mathbf u,\\mathbf v)",
-        "formula": "\\partial_{(\\mathbf u,\\mathbf v)}J(\\mathbf u,\\mathbf v) = \\int_D 2\\chi \\left(\\lambda \\operatorname{div}(\\mathbf u)^2 \\operatorname{div}\\mathbf v \\operatorname{div}(\\mathbf u)^{-1} + \\mu\\left((\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf v)^\\top) + (\\pmb\\varepsilon(\\mathbf v):\\pmb\\varepsilon(\\mathbf u)^\\top)\\right)\\right)\\,dx"
-      },
-      {
-        "name": "lagrangian",
-        "latex": "\\mathcal L([\\mathbf u],[\\mathbf v])",
-        "formula": "\\mathcal L([\\mathbf u],[\\mathbf v]) = J(\\mathbf u) - \\int_{\\partial D} f(\\mathbf e_y\\cdot\\mathbf v) \\,ds_x + \\int_D \\chi \\left(\\lambda \\operatorname{div}\\mathbf v \\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\nabla\\mathbf v)\\right)\\,dx"
+        "name": "perturbed_objective",
+        "latex": "\\mathcal V(J)",
+        "formula": "\\int_D \\ell \\chi \\operatorname{det}\\mathbf F(t)\\,dx + \\int_D \\chi \\operatorname{det}\\mathbf F(t)\\left(\\lambda \\operatorname{tr}((\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)))^2 + 2\\mu(\\mathcal V(\\pmb\\varepsilon):\\mathcal V(\\pmb\\varepsilon)^\\top)\\right)\\,dx"
       }
     ],
     "characteristic_function": {
-      "latex": "\\chi(x) = \\begin{cases} 1 & \\mathrm{if}\\ \\phi(x)<0 \\\\ 1/1000 & \\mathrm{if}\\ \\phi(x)\\ge0 \\end{cases}",
+      "latex": "\\chi(x) = \\begin{cases} 1 & \\text{if } \\phi(x) < 0 \\\\ 1/1000 & \\text{if } \\phi(x) \\ge 0 \\end{cases}",
       "strong_value": 1,
       "weak_value": 0.001
     },
     "objective": {
       "name": "J",
-      "description": "Objective functional of the linear elasticity bridge problem",
+      "description": "objective functional for the bridge problem: compliance plus volume penalization",
       "terms": [
         "\\int_D \\ell \\chi \\,dx",
-        "\\int_D \\chi(\\lambda \\operatorname{div}(\\mathbf u)^2 + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf u)^\\top))\\,dx"
+        "\\int_D \\chi \\left(\\lambda \\operatorname{div}(\\mathbf u)^2 + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf u)^\\top)\\right)\\,dx"
       ]
     },
     "state_equation": {
-      "description": "Linear elasticity state equation in weak form",
-      "weak_form_lhs": "\\int_D \\chi(\\lambda\\operatorname{div}\\mathbf v\\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\nabla\\mathbf v))\\,dx",
-      "weak_form_rhs": "\\int_{\\partial D} f(\\mathbf e_y\\cdot\\mathbf v)\\,ds_x",
+      "description": "linear elasticity state equation in weak form",
+      "weak_form_lhs": "\\int_D \\chi \\left(\\lambda \\operatorname{div} \\mathbf v \\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\nabla \\mathbf v)\\right)\\,dx",
+      "weak_form_rhs": "\\int_{\\partial D} f (\\mathbf e_y \\cdot \\mathbf v)\\,ds_x",
       "is_nonlinear": false
     },
     "adjoint_equation": {
-      "description": "Weak form of the adjoint equation for the adjoint state \\tilde{\\mathbf u}",
-      "weak_form_lhs": "\\int_D \\chi(\\lambda\\operatorname{div}\\tilde{\\mathbf u}\\,\\operatorname{tr}(\\partial_{(\\mathbf u,\\mathbf v)}\\pmb\\varepsilon(\\mathbf v)) + 2\\mu(\\partial_{(\\mathbf u,\\mathbf v)}\\pmb\\varepsilon(\\mathbf v):\\nabla\\tilde{\\mathbf u}))\\,dx",
-      "weak_form_rhs": "-\\partial_{(\\mathbf u,\\mathbf v)}J(\\mathbf u,\\mathbf v)"
+      "description": "adjoint state equation for the direct state \\mathbf u",
+      "weak_form_lhs": "\\partial_{(\\mathbf u,\\mathbf v)} J(\\mathbf u,\\mathbf v) + \\int_D \\chi \\left(\\lambda \\operatorname{div} \\tilde{\\mathbf u} \\operatorname{tr}(\\partial_{(\\mathbf u,\\mathbf v)}\\pmb\\varepsilon(\\mathbf v)) + 2\\mu(\\partial_{(\\mathbf u,\\mathbf v)}\\pmb\\varepsilon(\\mathbf v):\\nabla \\tilde{\\mathbf u})\\right)\\,dx",
+      "weak_form_rhs": "0"
     },
     "shape_derivative": {
-      "volume_expression": "\\partial_t J(\\mathbf V,\\mathbf u) + \\int_D \\chi \\left(\\lambda \\operatorname{div}\\tilde{\\mathbf u} \\operatorname{tr}(\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u)) + \\lambda \\operatorname{tr}(-(\\nabla \\tilde{\\mathbf u}\\cdot\\nabla \\mathbf V)) \\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu\\left((\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u):\\nabla\\tilde{\\mathbf u}) - (\\pmb\\varepsilon(\\mathbf u):(\\nabla\\tilde{\\mathbf u}\\cdot\\nabla\\mathbf V))\\right) + \\operatorname{div}\\mathbf V \\left(\\lambda \\operatorname{div}\\tilde{\\mathbf u} \\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\nabla\\tilde{\\mathbf u})\\right)\\right)\\,dx",
-      "boundary_expression": "-\\int_{\\partial D} f \\operatorname{div}\\mathbf V (\\mathbf e_y\\cdot\\tilde{\\mathbf u})\\,ds_x + \\int_{\\partial D} f (\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla\\mathbf V)) (\\mathbf e_y\\cdot\\tilde{\\mathbf u})\\,ds_x"
+      "volume_expression": "- \\left(\\int_{\\partial D} f \\operatorname{div} \\mathbf V (\\mathbf e_y \\cdot \\tilde{\\mathbf u})\\,ds_x - \\int_{\\partial D} f (\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla \\mathbf V))(\\mathbf e_y\\cdot\\tilde{\\mathbf u})\\,ds_x\\right) + \\partial_t J(\\mathbf V,\\mathbf u) + \\int_D \\chi \\left(\\lambda \\operatorname{div}\\tilde{\\mathbf u} \\operatorname{tr}(\\partial_t\\pmb\\varepsilon(\\mathbf V,\\mathbf u)) + \\lambda \\operatorname{tr}(-(\\nabla\\tilde{\\mathbf u}\\cdot\\nabla\\mathbf V)) \\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu\\left((\\partial_t\\pmb\\varepsilon(\\mathbf V,\\mathbf u):\\nabla\\tilde{\\mathbf u}) - (\\pmb\\varepsilon(\\mathbf u):((\\nabla\\tilde{\\mathbf u}\\cdot\\nabla\\mathbf V)))\\right) + \\operatorname{div}\\mathbf V\\left(\\lambda \\operatorname{div}\\tilde{\\mathbf u}\\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\nabla\\tilde{\\mathbf u})\\right)\\right)\\,dx"
     }
   },
   "designed": {
     "problem_type": "topology_optimization",
     "problem_type_source": "extracted",
     "problem_name": "run_linearElasticityBridge",
-    "problem_name_source": "designed",
-    "problem_name_rationale": "User supplied run name; the physical label 'Linear Elasticity Bridge' is preserved in the objective description.",
+    "problem_name_source": "extracted",
     "dimension": 2,
     "dimension_source": "extracted",
     "domain_name": "D",
@@ -166,107 +156,84 @@
     "mesh_file_source": "extracted",
     "objective_name": "J",
     "objective_name_source": "extracted",
-    "objective_description": "Objective functional of the linear elasticity bridge problem",
+    "objective_description": "Objective functional for the bridge problem: compliance plus volume penalization.",
     "objective_description_source": "extracted",
     "objective_terms": [
       "\\int_D \\ell \\chi \\,dx",
-      "\\int_D \\chi(\\lambda \\operatorname{div}(\\mathbf u)^2 + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf u)^\\top))\\,dx"
+      "\\int_D \\chi \\left(\\lambda \\operatorname{div}(\\mathbf u)^2 + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf u)^\\top)\\right)\\,dx"
     ],
     "objective_terms_source": "extracted",
-    "state_description": "Linear elasticity state equation in weak form",
+    "state_description": "Linear elasticity state equation in weak form.",
     "state_description_source": "extracted",
-    "state_weak_lhs": "\\int_D \\chi(\\lambda\\operatorname{div}\\mathbf v\\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\nabla\\mathbf v))\\,dx",
+    "state_weak_lhs": "\\int_D \\chi \\left(\\lambda \\operatorname{div} \\mathbf v \\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\nabla \\mathbf v)\\right)\\,dx",
     "state_weak_lhs_source": "extracted",
-    "state_weak_rhs": "\\int_{\\partial D} f(\\mathbf e_y\\cdot\\mathbf v)\\,ds_x",
+    "state_weak_rhs": "\\int_{\\partial D} f (\\mathbf e_y \\cdot \\mathbf v)\\,ds_x",
     "state_weak_rhs_source": "extracted",
     "state_is_nonlinear": false,
     "state_is_nonlinear_source": "extracted",
-    "newton_description": "Not required",
-    "newton_description_source": "designed",
-    "newton_description_rationale": "The state equation is linear, so Newton iteration is not needed.",
-    "newton_weak_form": null,
-    "newton_weak_form_source": "designed",
-    "newton_weak_form_rationale": "No Newton weak form is required for a linear problem.",
-    "newton_source": "designed",
-    "adjoint_description": "Weak form of the adjoint equation for the adjoint state \\tilde{\\mathbf u}",
+    "adjoint_description": "Adjoint state equation for the direct state \\mathbf u.",
     "adjoint_description_source": "extracted",
-    "adjoint_weak_lhs": "\\int_D \\chi\\left(\\lambda\\operatorname{div}\\tilde{\\mathbf u}\\,\\operatorname{div}\\mathbf v + 2\\mu(\\pmb\\varepsilon(\\tilde{\\mathbf u}):\\pmb\\varepsilon(\\mathbf v))\\right)\\,dx",
-    "adjoint_weak_lhs_source": "designed",
-    "adjoint_weak_lhs_rationale": "Equivalent symmetric adjoint bilinear form obtained from the linear state operator.",
-    "adjoint_weak_rhs": "-\\int_D 2\\chi\\left(\\lambda\\operatorname{div}\\mathbf u\\,\\operatorname{div}\\mathbf v + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf v))\\right)\\,dx",
-    "adjoint_weak_rhs_source": "designed",
-    "adjoint_weak_rhs_rationale": "Negative derivative of the objective with respect to u, simplified from the extracted adjoint objective derivative.",
-    "shape_derivative_volume": "\\partial_t J(\\mathbf V,\\mathbf u) + \\int_D \\chi \\left(\\lambda \\operatorname{div}\\tilde{\\mathbf u} \\operatorname{tr}(\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u)) + \\lambda \\operatorname{tr}(-(\\nabla \\tilde{\\mathbf u}\\cdot\\nabla \\mathbf V)) \\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu\\left((\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u):\\nabla\\tilde{\\mathbf u}) - (\\pmb\\varepsilon(\\mathbf u):(\\nabla\\tilde{\\mathbf u}\\cdot\\nabla\\mathbf V))\\right) + \\operatorname{div}\\mathbf V \\left(\\lambda \\operatorname{div}\\tilde{\\mathbf u} \\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\nabla\\tilde{\\mathbf u})\\right)\\right)\\,dx",
-    "shape_derivative_boundary": "-\\int_{\\partial D} f \\operatorname{div}\\mathbf V (\\mathbf e_y\\cdot\\tilde{\\mathbf u})\\,ds_x + \\int_{\\partial D} f (\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla\\mathbf V)) (\\mathbf e_y\\cdot\\tilde{\\mathbf u})\\,ds_x",
+    "adjoint_weak_lhs": "\\partial_{(\\mathbf u,\\mathbf v)} J(\\mathbf u,\\mathbf v) + \\int_D \\chi \\left(\\lambda \\operatorname{div} \\tilde{\\mathbf u} \\operatorname{tr}(\\partial_{(\\mathbf u,\\mathbf v)}\\pmb\\varepsilon(\\mathbf v)) + 2\\mu(\\partial_{(\\mathbf u,\\mathbf v)}\\pmb\\varepsilon(\\mathbf v):\\nabla \\tilde{\\mathbf u})\\right)\\,dx",
+    "adjoint_weak_lhs_source": "extracted",
+    "adjoint_weak_rhs": "0",
+    "adjoint_weak_rhs_source": "extracted",
+    "shape_derivative_volume": "\\partial_t J(\\mathbf V,\\mathbf u) + \\int_D \\chi \\left(\\lambda \\operatorname{div}\\tilde{\\mathbf u} \\operatorname{tr}(\\partial_t\\pmb\\varepsilon(\\mathbf V,\\mathbf u)) + \\lambda \\operatorname{tr}(-(\\nabla\\tilde{\\mathbf u}\\cdot\\nabla\\mathbf V)) \\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu\\left((\\partial_t\\pmb\\varepsilon(\\mathbf V,\\mathbf u):\\nabla\\tilde{\\mathbf u}) - (\\pmb\\varepsilon(\\mathbf u):((\\nabla\\tilde{\\mathbf u}\\cdot\\nabla\\mathbf V)))\\right) + \\operatorname{div}\\mathbf V\\left(\\lambda \\operatorname{div}\\tilde{\\mathbf u}\\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\nabla\\tilde{\\mathbf u})\\right)\\right)\\,dx",
+    "shape_derivative_volume_source": "extracted",
+    "shape_derivative_boundary": "- \\left(\\int_{\\partial D} f \\operatorname{div} \\mathbf V (\\mathbf e_y \\cdot \\tilde{\\mathbf u})\\,ds_x - \\int_{\\partial D} f (\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla \\mathbf V))(\\mathbf e_y\\cdot\\tilde{\\mathbf u})\\,ds_x\\right)",
+    "shape_derivative_boundary_source": "extracted",
     "shape_derivative_source": "extracted",
     "boundaries": [
       {
         "name": "\\Gamma_2",
         "label": "2",
         "kind": "Dirichlet",
-        "description": "Fixed boundary (right side support)",
-        "source": "designed",
-        "rationale": "Gamma_2 mapped to FreeFEM rectangle label 2 (right edge)."
+        "description": "Boundary where the displacement is fixed to zero.",
+        "source": "extracted"
       },
       {
         "name": "\\Gamma_4",
         "label": "4",
         "kind": "Dirichlet",
-        "description": "Fixed boundary (left side support)",
-        "source": "designed",
-        "rationale": "Gamma_4 mapped to FreeFEM rectangle label 4 (left edge)."
+        "description": "Boundary where the displacement is fixed to zero.",
+        "source": "extracted"
       },
       {
         "name": "\\partial D",
         "label": "3",
         "kind": "Neumann",
-        "description": "Loaded boundary: vertical traction f e_y applied on the top edge",
+        "description": "Boundary with applied surface load f e_y.",
         "source": "designed",
-        "rationale": "The loaded boundary is assigned to top edge label 3; f = -5 gives a downward bridge-deck load."
+        "rationale": "Labels 2 and 4 are the clamped supports; the loaded bridge top is assigned the remaining label 3."
       },
       {
         "name": "\\Gamma_1",
         "label": "1",
         "kind": "Neumann",
-        "description": "Free boundary (bottom edge), homogeneous natural condition",
+        "description": "Remaining free boundary with zero traction.",
         "source": "designed",
-        "rationale": "Completes the rectangular design domain with a zero-traction boundary."
+        "rationale": "Label 1 appears in mesh_labels_used and is neither fixed nor loaded."
       }
     ],
     "fields": [
       {
         "name": "u",
-        "latex": "\\mathbf u",
+        "latex": "\\mathbf{u}",
         "type": "vector",
         "fe_space": "P2",
         "unit": "meter",
-        "dirichlet_value": 0,
+        "dirichlet_value": "0.",
         "dirichlet_labels": [
           "2",
           "4"
         ],
         "source": "extracted",
-        "rationale": "Displacement field; Dirichlet labels are the designed mesh labels for Gamma_2 and Gamma_4."
-      },
-      {
-        "name": "u_tilde",
-        "latex": "\\tilde{\\mathbf u}",
-        "type": "vector",
-        "fe_space": "P2",
-        "unit": "dimensionless",
-        "dirichlet_value": 0,
-        "dirichlet_labels": [
-          "2",
-          "4"
-        ],
-        "source": "extracted",
-        "rationale": "Adjoint displacement; homogeneous Dirichlet condition on the same supports."
+        "rationale": "Displacement field for linear elasticity; standard unit is meter."
       }
     ],
     "test_functions": [
       {
         "name": "v",
-        "latex": "\\mathbf v",
+        "latex": "\\mathbf{v}",
         "type": "vector",
         "fe_space": "P2",
         "source": "extracted"
@@ -277,137 +244,104 @@
         "name": "ell",
         "latex": "\\ell",
         "value": 100,
-        "description": "Lagrange multiplier for volume penalisation in the objective",
-        "unit": "dimensionless",
-        "source": "extracted",
-        "rationale": "Extracted value retained; description clarified as volume penalty weight."
+        "description": "Lagrange multiplier for volume penalization.",
+        "unit": "N/m^2",
+        "source": "extracted"
       },
       {
         "name": "mu",
         "latex": "\\mu",
         "value": 8,
-        "description": "Second Lamé parameter (shear modulus)",
+        "description": "Lam\\'e shear modulus.",
         "unit": "N/m^2",
         "source": "extracted",
-        "rationale": "Extracted value retained; the original label 'Poisson's ratio' was corrected."
+        "rationale": "The original table called this Poisson's ratio, but the weak form identifies it as the Lam\\'e parameter mu."
       },
       {
         "name": "lambda",
         "latex": "\\lambda",
         "value": 1,
-        "description": "First Lamé parameter",
+        "description": "Lam\\'e parameter.",
         "unit": "N/m^2",
         "source": "extracted",
-        "rationale": "Extracted value retained; the original label 'Young's modulus' was corrected."
+        "rationale": "The original table called this Young's modulus, but the weak form identifies it as the Lam\\'e parameter lambda."
       },
       {
         "name": "f",
         "latex": "f",
         "value": -5,
-        "description": "Applied vertical surface traction on the loaded boundary (negative = downward)",
+        "description": "Applied surface load in the negative y-direction.",
         "unit": "N/m",
-        "source": "extracted",
-        "rationale": "Sign gives a downward bridge-deck load with e_y pointing upward."
-      },
-      {
-        "name": "youngs_modulus",
-        "latex": "E",
-        "value": 16.88888888888889,
-        "description": "Young's modulus derived from Lamé parameters",
-        "unit": "N/m^2",
-        "source": "designed",
-        "rationale": "Derived from E = mu(3 lambda + 2 mu)/(lambda + mu) with lambda = 1 and mu = 8."
-      },
-      {
-        "name": "nu",
-        "latex": "\\nu",
-        "value": 0.05555555555555555,
-        "description": "Poisson's ratio derived from Lamé parameters",
-        "unit": "dimensionless",
-        "source": "designed",
-        "rationale": "Derived from nu = lambda/(2(lambda + mu)) with lambda = 1 and mu = 8."
+        "source": "extracted"
       }
     ],
     "expressions": [
       {
         "name": "strain",
         "latex": "\\pmb\\varepsilon(\\mathbf u)",
-        "formula": "\\pmb\\varepsilon(\\mathbf u) = \\frac{\\nabla \\mathbf u + \\nabla \\mathbf u^\\top}{2}",
+        "formula": "\\frac{\\nabla \\mathbf u + \\nabla \\mathbf u^{\\top}}{2}",
         "source": "extracted"
       },
       {
-        "name": "shape_perturbed_strain",
+        "name": "adjoint_source",
+        "latex": "\\partial_{(\\mathbf u,\\mathbf v)} J(\\mathbf u,\\mathbf v)",
+        "formula": "\\int_D 2\\chi \\left(\\lambda \\operatorname{div}(\\mathbf u)^2 \\operatorname{div} \\mathbf v \\operatorname{div}(\\mathbf u)^{-1} + \\mu\\left((\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf v)^\\top) + (\\pmb\\varepsilon(\\mathbf v):\\pmb\\varepsilon(\\mathbf u)^\\top)\\right)\\right)\\,dx",
+        "source": "extracted"
+      },
+      {
+        "name": "perturbed_strain",
         "latex": "\\mathcal V(\\pmb\\varepsilon)",
-        "formula": "\\mathcal V(\\pmb\\varepsilon) = \\frac{(\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)) + ((\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)))^\\top}{2}",
-        "source": "extracted"
-      },
-      {
-        "name": "perturbed_objective",
-        "latex": "\\mathcal V(J)",
-        "formula": "\\mathcal V(J) = \\int_D \\ell \\chi \\det \\mathbf F(t) \\,dx + \\int_D \\chi \\det \\mathbf F(t) \\left(\\lambda \\operatorname{tr}(\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t))^{2} + 2\\mu(\\mathcal V(\\pmb\\varepsilon):\\mathcal V(\\pmb\\varepsilon)^\\top)\\right)\\,dx",
+        "formula": "\\frac{(\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)) + ((\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)))^\\top}{2}",
         "source": "extracted"
       },
       {
         "name": "time_derivative_strain",
         "latex": "\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u)",
-        "formula": "\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u) = -\\frac{(\\nabla \\mathbf u \\cdot \\nabla \\mathbf V) + ((\\nabla \\mathbf u \\cdot \\nabla \\mathbf V))^\\top}{2}",
+        "formula": "-\\frac{(\\nabla \\mathbf u \\cdot \\nabla \\mathbf V) + ((\\nabla \\mathbf u \\cdot \\nabla \\mathbf V))^\\top}{2}",
         "source": "extracted"
       },
       {
         "name": "time_derivative_objective",
         "latex": "\\partial_t J(\\mathbf V,\\mathbf u)",
-        "formula": "\\partial_t J(\\mathbf V,\\mathbf u) = \\int_D \\ell \\chi \\operatorname{div}\\mathbf V \\,dx + \\int_D \\chi \\left(\\operatorname{div}\\mathbf V \\left(\\lambda \\operatorname{div}(\\mathbf u)^2 + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf u)^\\top)\\right) + 2\\left(\\lambda \\operatorname{div}(\\mathbf u)^2 \\operatorname{tr}(-(\\nabla \\mathbf u \\cdot \\nabla \\mathbf V))\\operatorname{div}(\\mathbf u)^{-1} + \\mu\\left((\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u):\\pmb\\varepsilon(\\mathbf u)^\\top) + (\\pmb\\varepsilon(\\mathbf u):\\partial_t \\pmb\\varepsilon(\\mathbf V,\\mathbf u)^\\top)\\right)\\right)\\right)\\,dx",
+        "formula": "\\int_D \\ell \\chi \\operatorname{div}\\mathbf V\\,dx + \\int_D \\chi \\left(\\operatorname{div}\\mathbf V \\left(\\lambda \\operatorname{div}(\\mathbf u)^2 + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf u)^\\top)\\right) + 2\\left(\\lambda \\operatorname{div}(\\mathbf u)^2 \\operatorname{tr}(-(\\nabla\\mathbf u \\cdot \\nabla\\mathbf V)) \\operatorname{div}(\\mathbf u)^{-1} + \\mu\\left((\\partial_t\\pmb\\varepsilon(\\mathbf V,\\mathbf u):\\pmb\\varepsilon(\\mathbf u)^\\top) + (\\pmb\\varepsilon(\\mathbf u):\\partial_t\\pmb\\varepsilon(\\mathbf V,\\mathbf u)^\\top)\\right)\\right)\\right)\\,dx",
         "source": "extracted"
       },
       {
-        "name": "adjoint_objective_derivative",
-        "latex": "\\partial_{(\\mathbf u,\\mathbf v)}J(\\mathbf u,\\mathbf v)",
-        "formula": "\\partial_{(\\mathbf u,\\mathbf v)}J(\\mathbf u,\\mathbf v) = \\int_D 2\\chi \\left(\\lambda \\operatorname{div}(\\mathbf u)^2 \\operatorname{div}\\mathbf v \\operatorname{div}(\\mathbf u)^{-1} + \\mu\\left((\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf v)^\\top) + (\\pmb\\varepsilon(\\mathbf v):\\pmb\\varepsilon(\\mathbf u)^\\top)\\right)\\right)\\,dx",
+        "name": "perturbed_objective",
+        "latex": "\\mathcal V(J)",
+        "formula": "\\int_D \\ell \\chi \\operatorname{det}\\mathbf F(t)\\,dx + \\int_D \\chi \\operatorname{det}\\mathbf F(t)\\left(\\lambda \\operatorname{tr}((\\nabla \\mathbf u \\cdot \\mathbf F^{-1}(t)))^2 + 2\\mu(\\mathcal V(\\pmb\\varepsilon):\\mathcal V(\\pmb\\varepsilon)^\\top)\\right)\\,dx",
         "source": "extracted"
       },
       {
-        "name": "lagrangian",
-        "latex": "\\mathcal L([\\mathbf u],[\\mathbf v])",
-        "formula": "\\mathcal L([\\mathbf u],[\\mathbf v]) = J(\\mathbf u) - \\int_{\\partial D} f(\\mathbf e_y\\cdot\\mathbf v) \\,ds_x + \\int_D \\chi \\left(\\lambda \\operatorname{div}\\mathbf v \\operatorname{tr}(\\pmb\\varepsilon(\\mathbf u)) + 2\\mu(\\pmb\\varepsilon(\\mathbf u):\\nabla\\mathbf v)\\right)\\,dx",
-        "source": "extracted"
+        "name": "divergence",
+        "latex": "\\operatorname{div}\\mathbf u",
+        "formula": "\\operatorname{div}\\mathbf u",
+        "source": "designed",
+        "rationale": "Standard derived kinematic quantity used throughout the elasticity formulation."
       },
       {
         "name": "stress",
         "latex": "\\pmb\\sigma(\\mathbf u)",
-        "formula": "\\pmb\\sigma(\\mathbf u)=\\lambda\\operatorname{div}(\\mathbf u)\\,\\mathbf I+2\\mu\\pmb\\varepsilon(\\mathbf u)",
+        "formula": "\\pmb\\sigma(\\mathbf u)=\\chi\\left(\\lambda \\operatorname{div}\\mathbf u \\, \\mathbf I + 2\\mu\\pmb\\varepsilon(\\mathbf u)\\right)",
         "source": "designed",
-        "rationale": "Standard isotropic linear-elastic constitutive relation."
-      },
-      {
-        "name": "elastic_energy_density",
-        "latex": "W(\\mathbf u)",
-        "formula": "W(\\mathbf u)=\\frac{1}{2}\\lambda (\\operatorname{div}\\mathbf u)^2+\\mu(\\pmb\\varepsilon(\\mathbf u):\\pmb\\varepsilon(\\mathbf u))",
-        "source": "designed",
-        "rationale": "Standard strain energy density; the objective uses the non-half-weighted compliance-like form."
-      },
-      {
-        "name": "initial_level_set",
-        "latex": "\\phi_0(x,y)",
-        "formula": "\\phi_0(x,y)=\\max(|x-0.5|-0.45, |y-0.5|-0.1)",
-        "source": "designed",
-        "rationale": "Initialises a rectangular bridge deck across the design domain, attached to the left and right fixed supports."
+        "rationale": "Standard stress expression in terms of the Lam\\'e parameters and the characteristic function."
       }
     ],
     "characteristic_function": {
-      "latex": "\\chi(x) = \\begin{cases} 1 & \\mathrm{if}\\ \\phi(x)<0 \\\\ 1/1000 & \\mathrm{if}\\ \\phi(x)\\ge0 \\end{cases}",
+      "latex": "\\chi(x) = \\begin{cases} 1 & \\text{if } \\phi(x) < 0 \\\\ 1/1000 & \\text{if } \\phi(x) \\ge 0 \\end{cases}",
       "strong_value": 1,
       "weak_value": 0.001,
       "source": "extracted",
-      "rationale": "Weak material value 1/1000 prevents singular stiffness in void regions."
+      "rationale": "The weak value 1/1000 provides a small artificial stiffness in the void region."
     },
     "optimization_config": {
       "mesh_file": "meshelasticBridge.txt",
       "hmin": 0.001,
       "hmax": 0.05,
       "diffusion": 0.0001,
-      "v0": 0.001,
+      "v0": 0.01,
       "iterations": 30,
-      "level_set_initial": "phi(x,y) = max(|x-0.5|-0.45, |y-0.5|-0.1)",
+      "level_set_initial": "min(max(-x, x-1, 0.8-y), max(-x, x-0.15, -y, y-0.8)-0.01, max(x-0.85, 1-x, -y, y-0.8)-0.01)",
       "boundary_labels": [
         "1",
         "2",
@@ -416,15 +350,12 @@
       ],
       "fixed_labels": [
         "2",
+        "3",
         "4"
       ],
-      "extra_params": {
-        "load_boundary": "3",
-        "void_material": 0.001,
-        "filter_radius": 0.01
-      },
+      "extra_params": {},
       "source": "designed",
-      "rationale": "Level-set topology optimisation parameters for a unit bridge domain; labels follow the FreeFEM rectangle convention (1 bottom, 2 right, 3 top, 4 left). Boundaries 2 and 4 are fixed supports, and boundary 3 carries the downward deck load."
+      "rationale": "No optimization configuration was extracted. hmin/hmax are chosen for a unit-square bridge benchmark, diffusion is a standard level-set regularization, v0 sets a moderate advection speed, and 30 iterations balance computational cost and convergence. The initial level set is a bridge-like structure with a top deck and two vertical supports; fixed labels preserve the clamped supports and the loaded top edge."
     }
   }
 }

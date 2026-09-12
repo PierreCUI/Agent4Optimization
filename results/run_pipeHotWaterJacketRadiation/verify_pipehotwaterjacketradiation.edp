@@ -1,0 +1,139 @@
+verbosity = 0;
+load "iovtk"
+include "include/inout.idp"
+real sigma = 5.67000000000000E-8;
+real uamb = 298;
+real qb = 55000;
+real h = 25;
+real hH = 1000;
+real uH = 353;
+real varepsilon = 0.800000000000000;
+real k0 = 200;
+real ell = 4641590.00000000;
+// ###########################################
+// ###########################################
+// ###########################################
+real timeStart = clock();
+
+real R = 0.5;    // outer radius of the pipe cross-section (fixed, diameter 1 m)
+real r0 = 0.1;  // initial inner radius (the inner boundary is a design boundary)
+border C01(t=0, 2*pi){x=R*cos(t); y=R*sin(t); label=3;}   // outer circle, Robin environment (fixed)
+border C02(t=0, 2*pi){x=r0*cos(t); y=r0*sin(t); label=2;} // inner circle, heat source (design)
+int n = 100;
+mesh Th = buildmesh(C01(n) + C02(-n));
+func phi0 = max(max(max(0.07034 - sqrt((x-0.325)^2 + y^2), 0.07034 - sqrt((x-0.28146)^2 + (y-0.1625)^2), 0.07034 - sqrt((x-0.1625)^2 + (y-0.28146)^2)), max(0.07034 - sqrt(x^2 + (y-0.325)^2), 0.07034 - sqrt((x+0.1625)^2 + (y-0.28146)^2), 0.07034 - sqrt((x+0.28146)^2 + (y-0.1625)^2))), max(max(0.07034 - sqrt((x+0.325)^2 + y^2), 0.07034 - sqrt((x+0.28146)^2 + (y+0.1625)^2), 0.07034 - sqrt((x+0.1625)^2 + (y+0.28146)^2)), max(0.07034 - sqrt(x^2 + (y+0.325)^2), 0.07034 - sqrt((x-0.1625)^2 + (y+0.28146)^2), 0.07034 - sqrt((x-0.28146)^2 + (y+0.1625)^2))));
+{savemesh(Th, "tmp/Mesh1.mesh");
+fespace Vh1(Th, P1);
+Vh1 phi;
+phi = phi0;
+printsol("tmp/phi.sol", phi[]);
+int Res = system("mmg2d_O3 tmp/Mesh1.mesh -ls -sol tmp/phi.sol -hmin 0.25 -hmax 0.5 -hausd 0.001 -hgrad 1.3 -out tmp/newmesh.mesh -rmc -v -1");
+ }
+Th = readmesh("tmp/newmesh.mesh");
+fespace VhPhi(Th, P1);
+VhPhi phiTh;
+phiTh = phi0;
+func Vx = x * y + cos(4 * y);
+func Vy = sin(4 * x);
+func Vz = 0;
+real objective = 0;
+real objective0 = 0;
+real shapeDerivative = 0;
+{
+fespace Vh1(Th,P1);
+Vh1 phi, X0, X;
+phi = phi0;
+X0 = (phi<0); //characteristic function of the shape
+// FE spaces
+fespace Vhu(Th, P2);
+fespace Vhdeltau(Th, P2);
+// FE fields for u
+Vhu u = 0.;
+Vhu incu;
+// adjoint variables for u
+Vhu adju;
+// definition of the test functions
+Vhdeltau deltau;
+include "include/pipehotwaterjacketradiationNewton.edp"
+include "include/pipehotwaterjacketradiationResidual.edp"
+for (int i=0; i < 40; i++){
+cout << "	iteration = " << i << endl;
+   real timeBeforeAssamblyNewton = clock();
+   matrix A = pipehotwaterjacketradiationNewton(Vhu, Vhdeltau);
+   cout << "	Time for assambly = " << clock() - timeBeforeAssamblyNewton << endl; timeBeforeAssamblyNewton = clock();
+   set(A,solver=sparsesolver);
+   {ofstream file("u.txt");   file << u[]; }
+   real[int] rhs = pipehotwaterjacketradiationResidual(0,Vhdeltau);
+   real[int] sol = A^-1 * rhs;
+   cout << "	Time for solve = " << clock() - timeBeforeAssamblyNewton << endl;
+   // update state
+   [incu[]] = sol; 
+   real alphaLineSearch = 1.0;
+   u[] -= alphaLineSearch*incu[];
+   cout << "maximal increment: " << sol.linfty << "   maximal residuum: " << rhs.linfty << endl;
+   if ((rhs.linfty < 1e-6)*(sol.linfty < 1e-5) || (sol.linfty < 1e-8)){ 
+      cout << "CONVERGED after " << i << " steps!" << endl;
+   break;
+   };
+};
+include "include/pipehotwaterjacketradiationObjective.edp"
+objective0 = objective;
+// compute the adjoint and the shape derivative
+include "include/pipehotwaterjacketradiationAdjoint.edp"
+include "include/pipehotwaterjacketradiationShape.edp"
+fespace VhV(Th, [P1, P1]);
+VhV[shapeX, shapeY] = [0, 0];
+shapeX[] = pipehotwaterjacketradiationShape(0, VhV);
+VhV[VdiscreteX, VdiscreteY] = [Vx, Vy];
+shapeDerivative = VdiscreteX[]' * shapeX[];
+}
+mesh Thold = Th;
+ofstream fout("convergenceShapepipehotwaterjacketradiation.txt");
+fout << "t, numShape, taylorShape" << endl;
+for (int ii=0;ii<30;ii++){
+ real t = 0.1*2.^(-real(ii));
+ Th = movemesh(Thold,[x+t*Vx,y+t*Vy]);
+fespace Vh1(Th,P1);
+Vh1 phi, X0, X;
+phi[] = phiTh[];
+X0 = (phi<0); //characteristic function of the shape
+// FE spaces
+fespace Vhu(Th, P2);
+fespace Vhdeltau(Th, P2);
+// FE fields for u
+Vhu u = 0.;
+Vhu incu;
+// definition of the test functions
+Vhdeltau deltau;
+include "include/pipehotwaterjacketradiationNewton.edp"
+include "include/pipehotwaterjacketradiationResidual.edp"
+for (int i=0; i < 40; i++){
+cout << "	iteration = " << i << endl;
+   real timeBeforeAssamblyNewton = clock();
+   matrix A = pipehotwaterjacketradiationNewton(Vhu, Vhdeltau);
+   cout << "	Time for assambly = " << clock() - timeBeforeAssamblyNewton << endl; timeBeforeAssamblyNewton = clock();
+   set(A,solver=sparsesolver);
+   {ofstream file("u.txt");   file << u[]; }
+   real[int] rhs = pipehotwaterjacketradiationResidual(0,Vhdeltau);
+   real[int] sol = A^-1 * rhs;
+   cout << "	Time for solve = " << clock() - timeBeforeAssamblyNewton << endl;
+   // update state
+   [incu[]] = sol; 
+   real alphaLineSearch = 1.0;
+   u[] -= alphaLineSearch*incu[];
+   cout << "maximal increment: " << sol.linfty << "   maximal residuum: " << rhs.linfty << endl;
+   if ((rhs.linfty < 1e-6)*(sol.linfty < 1e-5) || (sol.linfty < 1e-8)){ 
+      cout << "CONVERGED after " << i << " steps!" << endl;
+   break;
+   };
+};
+include "include/pipehotwaterjacketradiationObjective.edp"
+real objective1 = objective;
+real shapeDerivativeNumeric = (objective1 - objective0) / t;
+fout << t << ", " << abs(shapeDerivativeNumeric-shapeDerivative) / abs(shapeDerivative) <<  ", " << abs(objective1 - objective0 - t * shapeDerivative) << ", "  << endl;
+cout.precision(6);
+cout.scientific;
+cout << "t = " << t << ",  val. FD = " << shapeDerivativeNumeric << ", val. Formula = " << shapeDerivative 
+     << ", error FD = " << abs(shapeDerivativeNumeric-shapeDerivative) / abs(shapeDerivative) 
+     <<  ", error expansion = " << abs(objective1 - objective0 - t * shapeDerivative) << endl;
+}

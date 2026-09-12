@@ -36,17 +36,40 @@ def _check_native() -> dict[str, bool]:
     return results
 
 
+_WSL_PROBE_TIMEOUT = 30  # seconds — a hung WSL VM must not block every run
+
+
 def _check_wsl() -> dict[str, bool]:
     exe_names = [exe for _, exe in _TOOLS]
     try:
-        r = subprocess.run(["wsl", "which"] + exe_names, capture_output=True, text=True)
-    except (FileNotFoundError, OSError):
+        r = subprocess.run(
+            ["wsl", "which"] + exe_names,
+            capture_output=True,
+            text=True,
+            timeout=_WSL_PROBE_TIMEOUT,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
         return {name: False for name, _ in _TOOLS}
     found = {
         line.strip().split("/")[-1]
         for line in r.stdout.splitlines()
         if line.strip() and "/" in line
     }
+    # advect (ISCDtoolbox/Advection) installs to ~/bin — outside the
+    # default WSL PATH.  The runner injects ~/bin at execution time
+    # (run_freefem_windows.py); mirror that here so the tool check
+    # does not report a false MISSING.
+    try:
+        r2 = subprocess.run(
+            ["wsl", "sh", "-c", "ls ~/bin 2>/dev/null"],
+            capture_output=True,
+            text=True,
+            timeout=_WSL_PROBE_TIMEOUT,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        r2 = None
+    if r2 is not None:
+        found.update(line.strip() for line in r2.stdout.splitlines() if line.strip())
     return {name: exe in found for name, exe in _TOOLS}
 
 
@@ -64,7 +87,7 @@ def check_tools() -> dict[str, bool]:
         for name in missing:
             base = name.split(" (")[0]
             url = _URLS.get(base, "")
-            print(f"    {name}  →  {url}", file=sys.stderr)
+            print(f"    {name}  ->  {url}", file=sys.stderr)
         print("  These must be installed manually.", file=sys.stderr)
         print("!" * 60 + "\n", file=sys.stderr)
 

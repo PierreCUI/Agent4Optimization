@@ -10,6 +10,7 @@ Output: a dict ``{"main": "...", "mesh": ""}`` where ``main`` is the complete
 
 import json
 import os
+import re
 import sys
 import warnings
 from pathlib import Path
@@ -19,12 +20,15 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from Generation.label_conventions import (
+from Generation.label_conventions import (  # noqa: E402
     BOUNDARY_VS_FIXED_LABELS,
+    DESIGN_DIRICHLET_PENALTY,
     DSX_LABEL_SEMANTICS,
     LABEL_999_AND_REGION3,
+    MULTI_DOMAIN_AND_INTERFACE,
 )
-from utils import parser_json
+from Generation.phi_conventions import PHI_GUIDANCE  # noqa: E402
+from utils import parser_json  # noqa: E402
 
 # ======================================================================
 # system prompt
@@ -142,7 +146,15 @@ _CODER_SYSTEM = (
     + """
 
     """
+    + DESIGN_DIRICHLET_PENALTY
+    + """
+
+    """
     + LABEL_999_AND_REGION3
+    + """
+
+    """
+    + MULTI_DOMAIN_AND_INTERFACE
     + """
 
     ```python
@@ -167,6 +179,9 @@ _CODER_SYSTEM = (
        a. imports
        b. problem name
        c. boundaries (if needed) + domain
+          (multi-domain problems: declare one Domain per material/region
+          and implement the interface continuity conditions between the
+          domains per the interface rules above)
        d. fields + test functions (with comments)
        e. constants (with comments)
        f. characteristic function
@@ -219,7 +234,40 @@ _CODER_SYSTEM = (
        - If there are multiple state fields, list them all in the Lagrangian.
        - The ``show_weak_material=False`` flag is commonly used.
        - 3D problems: add ``dimensions=3`` to ``Lagrangian()``.
-    
+
+    11. **Initial level set phi**: obey the PHI RULES below.  In short:
+       - if the problem statement prescribes an initial design
+         (``level_set_initial``), use it EXACTLY;
+       - otherwise pick a seed from the PHI TEMPLATE LIBRARY (solid
+         trunk shapes, sparse holes, checkerboard, combinations) and
+         adapt it to this problem — a connected load-to-sink path,
+         solid contact on the fixed (frozen) load and sink boundaries,
+         features several times ``hmax``, symmetric about any mirror
+         axis, smooth and low-frequency — with the reference examples
+         contributing only the construction STYLE (see the PHI STYLE
+         hint in the user prompt).
+
+    A bare half-plane such as ``'y - 0.02'`` is a LAST RESORT — use it
+    only when the problem prescribes such an initial design or when no
+    other seed fits the geometry.
+
+    12. **Afac (Lagrange multiplier ell) — initial estimate**:
+       The ProblemSpec normally carries NO ell constant: ell is the
+       BALANCE parameter of the optimisation, not a problem constant.
+       The pipeline's reflection loop calibrates it with a geometric
+       scan; the coder must supply an initial estimate of the right
+       order of magnitude, balancing the two objective terms:
+       ``ell0 ≈ Q * L * dT / |D|``, where ``Q`` is the dominant boundary
+       weight of the temperature/flux objective term (``q_b`` or ``q``),
+       ``L`` the length of that boundary, ``dT`` the characteristic
+       temperature difference of the problem, and ``|D|`` the domain
+       area.  Round to ONE significant figure (e.g. ``6e5``, ``2e4``).
+       Mark it source="designed" and describe it as
+       ``'volume weight (initial estimate, calibrated by pipeline)'``.
+
+"""
+    + PHI_GUIDANCE
+    + """
     ## Output
 
     Return exactly one JSON object:
@@ -245,6 +293,8 @@ _CODER_USER = """\
     - outer_iterations = {outer_iterations} (use for setup_optimization iterations=)
     - inner_iterations = {inner_iterations} (use for nonlinear solver maxiter if applicable)
 
+    {phi_style_hint}
+
     Generate the complete AutoFreeFEM Python code.
 """
 
@@ -265,6 +315,111 @@ def _load_documentation() -> str:
     if doc_path.exists():
         return doc_path.read_text(encoding="utf-8", errors="replace")
     return ""
+
+
+# ======================================================================
+# phi style analysis — majority vote over the selected examples
+# ======================================================================
+
+
+def _phi_of_example(examples: list[dict]) -> list[str]:
+    """Return one phi expression per example (or '' when absent)."""
+    phis = []
+    for exd in examples or []:
+        # Example dicts are LLM-adjacent data — a malformed entry
+        # (list/str/non-string py) must not abort generation; skip it.
+        if not isinstance(exd, dict):
+            continue
+        py = exd.get("py", "")
+        if not isinstance(py, str):
+            continue
+        m = re.search(r"""phi\s*=\s*('([^']*)'|"([^"]*)")""", py)
+        phis.append(m.group(2) if m and m.group(2) else (m.group(3) if m else ""))
+    return phis
+
+
+# Function CALLS only — a word-boundary prevents "cosine"-like words
+# from counting as sin/cos and "admin(" / "analysis(" from counting as
+# min/max.
+_PHI_PERIODIC_RE = re.compile(r"\b(?:sin|cos)\s*\(")
+_PHI_CUTTING_RE = re.compile(r"\b(?:min|max)\s*\(")
+
+
+def analyze_phi_style(examples: list[dict]) -> str | None:
+    """Classify the phi construction styles used by *examples*.
+
+    Returns the MAJORITY style among the examples that carry a phi:
+    "periodic" (sin/cos oscillatory forms), "cutting" (min/max
+    cutting/cleaning forms such as ``min(min(x, 1-x), min(y, 1-y))``),
+    or "simple" (a bare arithmetic expression with neither).  Returns
+    None when no example carries a phi.
+    """
+    styles = []
+    for phi in _phi_of_example(examples):
+        if not phi:
+            continue
+        if _PHI_PERIODIC_RE.search(phi):
+            styles.append("periodic")
+        elif _PHI_CUTTING_RE.search(phi):
+            styles.append("cutting")
+        else:
+            styles.append("simple")
+    if not styles:
+        return None
+
+    counts = {s: styles.count(s) for s in ("periodic", "cutting", "simple")}
+    # strict majority; ties on a non-majority are treated as "no clear style"
+    top = max(counts, key=counts.get)
+    if counts[top] > len(styles) / 2:
+        return top
+    return None
+
+
+def phi_style_hint(examples: list[dict]) -> str:
+    """Build the phi-style instruction text for a prompt.
+
+    Tells the LLM which phi construction style the MAJORITY of the
+    selected examples uses — periodic (sin/cos) vs cutting (min/max) —
+    and to follow it, scaled to the real domain size but NOT copied
+    verbatim.  Empty string when there is no clear majority.
+
+    The hint is deliberately subordinate to the PHI RULES: the paper's
+    prescribed phi always wins, and the examples only lend their
+    construction STYLE to a seed whose geometry is derived from the
+    problem's physics.
+    """
+    style = analyze_phi_style(examples)
+    if style is None:
+        return ""
+    lead = ("PHI STYLE HINT (style only — the PHI RULES come first: a "
+            "phi prescribed by the problem statement wins, and the seed "
+            "must be picked from the PHI TEMPLATE LIBRARY and adapted to "
+            "the problem's physics; this hint tells you which library "
+            "family the examples favour): ")
+    if style == "periodic":
+        return (
+            lead + "the selected examples predominantly use a "
+            "PERIODIC oscillatory form: a constant offset plus a "
+            "sin(...)*cos(...) (or equivalent) oscillation in x/y.  "
+            "Use this style for the perturbations of your physics-derived "
+            "seed, with frequencies scaled to the REAL domain size of the "
+            "mesh (never copy example frequencies verbatim)."
+        )
+    if style == "cutting":
+        return (
+            lead + "the selected examples predominantly use a "
+            "CUTTING form with min/max: "
+            "min or max combinations that cut out a shape (like "
+            "min(min(x, 1-x), min(y, 1-y)) or a banded strip).  "
+            "Use this min/max cutting style to realise your "
+            "physics-derived seed, adapted to the REAL domain size of the "
+            "mesh (never copy example geometry verbatim)."
+        )
+    return (
+        lead + "the selected examples predominantly use a SIMPLE "
+        "arithmetic form (no sin/cos, no min/max cutting) for phi — "
+        "follow the same simple style."
+    )
 
 
 # ======================================================================
@@ -310,9 +465,13 @@ def generate_code(
     mesh_json = json.dumps(mesh_spec or {}, indent=2, ensure_ascii=False)
 
     # Build examples text: each example shows name + full .py code
+    # Defensive .get: example dicts are LLM-adjacent data — malformed
+    # entries must not abort generation.
     examples_text = ""
     for ex in examples or []:
-        examples_text += f"=== EXAMPLE: {ex['name']} ===\n{ex['py']}\n\n"
+        if not isinstance(ex, dict):
+            continue
+        examples_text += f"=== EXAMPLE: {ex.get('name', '?')} ===\n{ex.get('py', '')}\n\n"
 
     agent.set_prompt_list(prompt_list)
     raw = agent.invoke(
@@ -323,11 +482,16 @@ def generate_code(
             "mesh_json": mesh_json,
             "outer_iterations": str(outer_iterations),
             "inner_iterations": str(inner_iterations),
+            "phi_style_hint": phi_style_hint(examples),
         }
     )
 
     try:
-        return json.loads(parser_json(raw))
+        parsed = json.loads(parser_json(raw))
+        if not isinstance(parsed, dict):
+            warnings.warn(f"generate_code returned non-object JSON ({type(parsed).__name__}).")
+            return {"main": raw, "mesh": "", "_error": "non-object JSON response"}
+        return parsed
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         warnings.warn(f"generate_code JSON parse failed: {e}")
         return {"main": raw, "mesh": "", "_error": str(e)}
@@ -378,26 +542,21 @@ if __name__ == "__main__":
             with open(mesh_file, "r", encoding="utf-8") as f:
                 mesh_spec = json.load(f)
 
-        # Load selected examples from examples.txt
-        examples = []
-        examples_file = spec_file.parent / "examples.txt"
-        if examples_file.exists():
-            selected_names = [
+        # Load selected examples from examples.txt (shared loader — the
+        # same logic select_examples.load_selected_examples provides).
+        from Generation.select_examples import load_selected_examples
+
+        examples = load_selected_examples(
+            [
                 l.strip()
-                for l in examples_file.read_text(encoding="utf-8").splitlines()
+                for l in spec_file.parent.joinpath("examples.txt").read_text(
+                    encoding="utf-8"
+                ).splitlines()
                 if l.strip()
             ]
-            examples_dir = Path("database") / "freefem_examples"
-            for ename in selected_names:
-                ex_dir = examples_dir / ename
-                if not ex_dir.is_dir():
-                    continue
-                for ef in ex_dir.iterdir():
-                    if ef.suffix == ".py":
-                        examples.append(
-                            {"name": ename, "py": ef.read_text(encoding="utf-8", errors="replace")}
-                        )
-                        break
+            if spec_file.parent.joinpath("examples.txt").exists()
+            else []
+        )
 
         result = generate_code(agent, problem_spec, mesh_spec, doc_text=doc_text, examples=examples)
 
@@ -436,4 +595,4 @@ if __name__ == "__main__":
     for name, status, lines, out in summary_rows:
         print(f"| {name:<42} | {status:<22} | {lines:<6} | {str(out):<40} |")
 
-    print(f"\nDone. Generated code saved to results/*/main.py")
+    print("\nDone. Generated code saved to results/*/main.py")

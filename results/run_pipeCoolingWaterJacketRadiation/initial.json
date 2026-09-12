@@ -1,0 +1,375 @@
+{
+ "extracted": {
+  "problem_type": "shape_optimization",
+  "problem_name": "pipeCoolingWaterJacketRadiation",
+  "dimension": 2,
+  "domain_name": "D",
+  "mesh_variable": "Th",
+  "mesh_file": "mesh.txt",
+  "mesh_labels_used": [
+   "2",
+   "3"
+  ],
+  "boundaries": [
+   {
+    "name": "\\Gamma_o",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "outer circle / pipe casing, exchanges heat with warm environment through convection and surface radiation; fixed boundary",
+    "mesh_label": "3"
+   },
+   {
+    "name": "\\Gamma_i",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "inner circle / tube wall swept by cooling water by convection; design boundary whose shape is optimised",
+    "mesh_label": "2"
+   }
+  ],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K"
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "\\delta u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity (aluminium)",
+    "unit": "W/(K m)"
+   },
+   {
+    "name": "k_{air}",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity (air)",
+    "unit": "W/(K m)"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient (environment)",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_{amb}",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature",
+    "unit": "K"
+   },
+   {
+    "name": "h_C",
+    "latex": "h_C",
+    "value": 1000,
+    "description": "convective heat transfer coefficient (cooling-water side)",
+    "unit": "W/(m^2 K)"
+   },
+   {
+    "name": "u_C",
+    "latex": "u_C",
+    "value": 283,
+    "description": "cooling-water temperature",
+    "unit": "K"
+   },
+   {
+    "name": "\\varepsilon",
+    "latex": "\\varepsilon",
+    "value": 0.8,
+    "description": "surface emissivity (oxidised aluminium)",
+    "unit": "-"
+   },
+   {
+    "name": "\\sigma",
+    "latex": "\\sigma",
+    "value": 5.67e-08,
+    "description": "Stefan-Boltzmann constant",
+    "unit": "W/(m^2 K^4)"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "value": 15000,
+    "description": "casing temperature weight, q_b = h_C (u_amb - u_C) = 1000 * 15",
+    "unit": "W/(m^2)"
+   },
+   {
+    "name": "R",
+    "latex": "R",
+    "value": 0.5,
+    "description": "outer radius of the pipe cross-section (fixed)",
+    "unit": "m"
+   },
+   {
+    "name": "r_0",
+    "latex": "r_0",
+    "value": 0.1,
+    "description": "initial inner radius (inner boundary is a design boundary)",
+    "unit": "m"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "q_b",
+    "latex": "q_b = h_C (u_{amb} - u_C)",
+    "formula": "1000 \\times 15 = 1.5 \\times 10^{4}"
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": "k_{air}/k_0 = 0.026/200 \\approx 1.3 \\times 10^{-4}"
+  },
+  "objective": {
+   "name": "J(u)",
+   "description": "Minimising J keeps the casing cold, i.e. maximises the heat absorbed from the environment through Gamma_o.",
+   "terms": [
+    "\\int_{D} \\ell \\chi \\,dx",
+    "\\int_{\\Gamma_o} q_b u \\,ds_x"
+   ]
+  },
+  "state_equation": {
+   "description": "Non-linear heat conduction in the annular domain with convection on the inner circle (cooling water) and convection plus surface radiation on the outer circle (environment).",
+   "weak_form_lhs": "\\int_{D} k \\chi (\\nabla u \\cdot \\nabla \\delta u)\\,dx + \\int_{\\Gamma_i} h_C u \\delta u \\,ds_x + \\int_{\\Gamma_o} h u \\delta u \\,ds_x + \\int_{\\Gamma_o} \\varepsilon \\sigma u^{4} \\delta u \\,ds_x",
+   "weak_form_rhs": "\\int_{\\Gamma_i} h_C u_C \\delta u \\,ds_x + \\int_{\\Gamma_o} h u_{amb} \\delta u \\,ds_x + \\int_{\\Gamma_o} \\varepsilon \\sigma u_{amb}^{4} \\delta u \\,ds_x",
+   "is_nonlinear": true
+  },
+  "newton_linearisation": {
+   "description": "Newton update [u_hat] solves the linearised state operator at state [u] with radiation term linearised as d_u[\\varepsilon \\sigma (u^4 - u_amb^4)] u_hat = 4 \\varepsilon \\sigma u^3 u_hat; state updated as u <- u - u_hat.",
+   "weak_form": "\\int_{D} k \\chi (\\nabla \\hat u \\cdot \\nabla \\delta u)\\,dx + \\int_{\\Gamma_i} h_C \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_o} h \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_o} 4 \\varepsilon \\sigma u^{3} \\hat u \\delta u \\,ds_x = \\int_{D} k \\chi (\\nabla u \\cdot \\nabla \\delta u)\\,dx + \\int_{\\Gamma_i} h_C (u - u_C) \\delta u \\,ds_x + \\int_{\\Gamma_o} (h (u - u_{amb}) + \\varepsilon \\sigma (u^{4} - u_{amb}^{4})) \\delta u \\,ds_x"
+  },
+  "adjoint_equation": {
+   "description": "Adjoint state [u_tilde]; the adjoint operator equals the linearisation of the state operator at u (self-adjoint), with adjoint load from the partial derivative of the casing temperature integral in the objective.",
+   "weak_form_lhs": "\\int_{D} k \\chi (\\nabla \\delta u \\cdot \\nabla \\tilde u)\\,dx + \\int_{\\Gamma_i} h_C \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_o} h \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_o} 4 \\varepsilon \\sigma u^{3} \\delta u \\tilde u \\,ds_x",
+   "weak_form_rhs": "- \\int_{\\Gamma_o} q_b \\delta u \\,ds_x"
+  },
+  "shape_derivative": {
+   "volume_expression": "\\int_{D} (\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf V \\,dx",
+   "boundary_expression": "\\int_{\\Gamma_i} \\kappa h_C (u - u_C) \\tilde u (\\mathbf V \\cdot \\mathbf n) \\,ds_x"
+  }
+ },
+ "designed": {
+  "problem_type": "shape_optimization",
+  "problem_type_source": "extracted",
+  "problem_name": "pipeCoolingWaterJacketRadiation",
+  "problem_name_source": "extracted",
+  "dimension": 2,
+  "dimension_source": "extracted",
+  "domain_name": "D",
+  "domain_name_source": "extracted",
+  "mesh_variable": "Th",
+  "mesh_variable_source": "extracted",
+  "mesh_file": "mesh.txt",
+  "mesh_file_source": "extracted",
+  "objective_name": "J(u)",
+  "objective_name_source": "extracted",
+  "objective_description": "Minimising J keeps the casing cold, i.e. maximises the heat absorbed from the environment through Gamma_o.",
+  "objective_description_source": "extracted",
+  "objective_terms": [
+   "\\int_{D} \\ell \\chi \\,dx",
+   "\\int_{\\Gamma_o} q_b u \\,ds_x"
+  ],
+  "objective_terms_source": "extracted",
+  "state_description": "Non-linear heat conduction in the annular domain with convection on the inner circle (cooling water) and convection plus surface radiation on the outer circle (environment).",
+  "state_description_source": "extracted",
+  "state_weak_lhs": "\\int_{D} k \\chi (\\nabla u \\cdot \\nabla \\delta u)\\,dx + \\int_{\\Gamma_i} h_C u \\delta u \\,ds_x + \\int_{\\Gamma_o} h u \\delta u \\,ds_x + \\int_{\\Gamma_o} \\varepsilon \\sigma u^{4} \\delta u \\,ds_x",
+  "state_weak_lhs_source": "extracted",
+  "state_weak_rhs": "\\int_{\\Gamma_i} h_C u_C \\delta u \\,ds_x + \\int_{\\Gamma_o} h u_{amb} \\delta u \\,ds_x + \\int_{\\Gamma_o} \\varepsilon \\sigma u_{amb}^{4} \\delta u \\,ds_x",
+  "state_weak_rhs_source": "extracted",
+  "state_is_nonlinear": true,
+  "state_is_nonlinear_source": "extracted",
+  "newton_description": "Newton update [u_hat] solves the linearised state operator at state [u] with radiation term linearised as d_u[\\varepsilon \\sigma (u^4 - u_amb^4)] u_hat = 4 \\varepsilon \\sigma u^3 u_hat; state updated as u <- u - u_hat.",
+  "newton_description_source": "extracted",
+  "newton_weak_form": "\\int_{D} k \\chi (\\nabla \\hat u \\cdot \\nabla \\delta u)\\,dx + \\int_{\\Gamma_i} h_C \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_o} h \\hat u \\delta u \\,ds_x + \\int_{\\Gamma_o} 4 \\varepsilon \\sigma u^{3} \\hat u \\delta u \\,ds_x = \\int_{D} k \\chi (\\nabla u \\cdot \\nabla \\delta u)\\,dx + \\int_{\\Gamma_i} h_C (u - u_C) \\delta u \\,ds_x + \\int_{\\Gamma_o} (h (u - u_{amb}) + \\varepsilon \\sigma (u^{4} - u_{amb}^{4})) \\delta u \\,ds_x",
+  "newton_weak_form_source": "extracted",
+  "newton_source": "extracted",
+  "adjoint_description": "Adjoint state [u_tilde]; the adjoint operator equals the linearisation of the state operator at u (self-adjoint), with adjoint load from the partial derivative of the casing temperature integral in the objective.",
+  "adjoint_description_source": "extracted",
+  "adjoint_weak_lhs": "\\int_{D} k \\chi (\\nabla \\delta u \\cdot \\nabla \\tilde u)\\,dx + \\int_{\\Gamma_i} h_C \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_o} h \\delta u \\tilde u \\,ds_x + \\int_{\\Gamma_o} 4 \\varepsilon \\sigma u^{3} \\delta u \\tilde u \\,ds_x",
+  "adjoint_weak_lhs_source": "extracted",
+  "adjoint_weak_rhs": "- \\int_{\\Gamma_o} q_b \\delta u \\,ds_x",
+  "adjoint_weak_rhs_source": "extracted",
+  "shape_derivative_volume": "\\int_{D} (\\operatorname{div} \\mathbf V (\\nabla u \\cdot \\nabla \\tilde u) - (\\nabla \\tilde u \\cdot (\\nabla u \\cdot \\nabla \\mathbf V)) - (\\nabla u \\cdot (\\nabla \\tilde u \\cdot \\nabla \\mathbf V))) k \\chi \\,dx + \\int_{D} \\ell \\chi \\operatorname{div} \\mathbf V \\,dx",
+  "shape_derivative_volume_source": "extracted",
+  "shape_derivative_boundary": "\\int_{\\Gamma_i} \\kappa h_C (u - u_C) \\tilde u (\\mathbf V \\cdot \\mathbf n) \\,ds_x",
+  "shape_derivative_boundary_source": "extracted",
+  "shape_derivative_source": "extracted",
+  "boundaries": [
+   {
+    "name": "\\Gamma_o",
+    "label": "3",
+    "kind": "Robin",
+    "design_role": "fixed",
+    "description": "outer circle / pipe casing, exchanges heat with warm environment through convection and surface radiation; fixed boundary",
+    "source": "extracted"
+   },
+   {
+    "name": "\\Gamma_i",
+    "label": "2",
+    "kind": "Robin",
+    "design_role": "design",
+    "description": "inner circle / tube wall swept by cooling water by convection; design boundary whose shape is optimised",
+    "source": "extracted"
+   }
+  ],
+  "interfaces": [],
+  "fields": [
+   {
+    "name": "u",
+    "latex": "u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "unit": "K",
+    "dirichlet_value": null,
+    "dirichlet_labels": [],
+    "source": "extracted",
+    "rationale": "No Dirichlet boundaries; all boundaries are Robin, so dirichlet_value is null and dirichlet_labels is empty."
+   }
+  ],
+  "test_functions": [
+   {
+    "name": "\\delta u",
+    "latex": "\\delta u",
+    "type": "scalar",
+    "fe_space": "P2",
+    "source": "extracted"
+   }
+  ],
+  "constants": [
+   {
+    "name": "k_0",
+    "latex": "k_0",
+    "value": 200,
+    "description": "thermal conductivity (aluminium)",
+    "unit": "W/(K m)",
+    "source": "extracted"
+   },
+   {
+    "name": "k_{air}",
+    "latex": "k_{air}",
+    "value": 0.026,
+    "description": "thermal conductivity (air)",
+    "unit": "W/(K m)",
+    "source": "extracted"
+   },
+   {
+    "name": "h",
+    "latex": "h",
+    "value": 25,
+    "description": "convective heat transfer coefficient (environment)",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_{amb}",
+    "latex": "u_{amb}",
+    "value": 298,
+    "description": "ambient temperature",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "h_C",
+    "latex": "h_C",
+    "value": 1000,
+    "description": "convective heat transfer coefficient (cooling-water side)",
+    "unit": "W/(m^2 K)",
+    "source": "extracted"
+   },
+   {
+    "name": "u_C",
+    "latex": "u_C",
+    "value": 283,
+    "description": "cooling-water temperature",
+    "unit": "K",
+    "source": "extracted"
+   },
+   {
+    "name": "\\varepsilon",
+    "latex": "\\varepsilon",
+    "value": 0.8,
+    "description": "surface emissivity (oxidised aluminium)",
+    "unit": "-",
+    "source": "extracted"
+   },
+   {
+    "name": "\\sigma",
+    "latex": "\\sigma",
+    "value": 5.67e-08,
+    "description": "Stefan-Boltzmann constant",
+    "unit": "W/(m^2 K^4)",
+    "source": "extracted"
+   },
+   {
+    "name": "q_b",
+    "latex": "q_b",
+    "value": 15000,
+    "description": "casing temperature weight, q_b = h_C (u_amb - u_C) = 1000 * 15",
+    "unit": "W/(m^2)",
+    "source": "extracted"
+   },
+   {
+    "name": "R",
+    "latex": "R",
+    "value": 0.5,
+    "description": "outer radius of the pipe cross-section (fixed)",
+    "unit": "m",
+    "source": "extracted"
+   },
+   {
+    "name": "r_0",
+    "latex": "r_0",
+    "value": 0.1,
+    "description": "initial inner radius (inner boundary is a design boundary)",
+    "unit": "m",
+    "source": "extracted"
+   }
+  ],
+  "expressions": [
+   {
+    "name": "q_b",
+    "latex": "q_b = h_C (u_{amb} - u_C)",
+    "formula": "1000 \\times 15 = 1.5 \\times 10^{4}",
+    "source": "extracted"
+   }
+  ],
+  "characteristic_function": {
+   "latex": "\\chi",
+   "strong_value": 1,
+   "weak_value": "k_{air}/k_0 = 0.026/200 \\approx 1.3 \\times 10^{-4}",
+   "source": "extracted"
+  },
+  "optimization_config": {
+   "mesh_file": "mesh.txt",
+   "hmin": 0.005,
+   "hmax": 0.05,
+   "diffusion": 0.0001,
+   "v0": 0.01,
+   "iterations": 30,
+   "level_set_initial": "\\sqrt{x^2 + y^2} - r_0",
+   "boundary_labels": [
+    "2"
+   ],
+   "fixed_labels": [
+    "3"
+   ],
+   "extra_params": {},
+   "source": "designed",
+   "rationale": "Parameters chosen for level-set shape optimization of the inner cooling channel in an annular pipe wall. hmin/hmax resolve the inner boundary and outer casing; diffusion and v0 control regularization and step size; 30 iterations balance cost and convergence. Boundary labels: design=2 (inner Robin), fixed=3 (outer Robin)."
+  }
+ }
+}
