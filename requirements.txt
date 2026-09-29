@@ -1,14 +1,12 @@
 langchain_core
 langchain_openai
 langchain_google_genai
-numpy
-sympy
 scipy
 matplotlib
 meshio
 pandas
 h5py
-filelock
 psutil
-setuptools<81
+pdflatex
+setuptools==79.0.1
 git+https://gitlab.tugraz.at/autofreefem/autofreefem.git

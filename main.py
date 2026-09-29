@@ -5,13 +5,18 @@ import time
 from pathlib import Path
 
 import configs
-from API import AgentRouter, DeepSeekCodeAgentV4FlashVision, DeepSeekCodeAgentV4Pro
+from API import (
+    AgentRouter,
+    DeepSeekCodeAgentV4FlashVision,
+    DeepSeekCodeAgentV4Pro,
+    test_connection,
+)
 from Execution.runner import run_problem as run_execution
-from Generation import auto_fix, generate_code, static_check
-from Generation.check_params import check_and_fix_params
+from Generation import generate_code, run_static_repair
+from Generation.check_static import strip_ff_comments
 from Generation.select_examples import load_selected_examples, select_examples
 from info import Info
-from Initialization import collect_input_files, handle_mesh, parse_problem, safety_check
+from Initialization import collect_input_files, run_spec_generation, safety_check
 from Initialization.example_initialization import run_example_initialization
 from Reflection.reflector import run_reflection
 
@@ -41,42 +46,33 @@ def _stage_copy_inputs(info: Info) -> None:
 
 
 def _stage_parse(agent, info: Info) -> bool:
-    """Run parse_problem + handle_mesh.
+    """Run the one-loop spec generation (both JSONs together).
 
-    Returns False when mesh extraction/design failed hard (no mesh spec
-    means code generation has nothing to work on — stop instead of
-    generating on an empty spec).
+    Returns False when the problem or the mesh spec ended up empty (the
+    loop exceeded its repair budget — no spec means code generation has
+    nothing to work on, so stop instead of generating on an empty spec).
     """
-    print("  [Parse] problem_parser ...", end=" ", flush=True)
+    print("  [Parse] spec generation (initial + mesh together) ...", end=" ", flush=True)
     t0 = time.time()
-    info.problem_spec = parse_problem(agent, info.input_files, info.problem_name)
+    specs = run_spec_generation(
+        agent, info.input_files, info.problem_name, output_dir=info.results_dir,
+        history_log=info.results_dir / "history.txt",
+    )
+    info.problem_spec = specs.get("initial") or {}
+    info.mesh_spec = specs.get("mesh") or {}
     if not (info.problem_spec or {}).get("designed"):
-        # parse_problem swallows a design-phase JSON failure into
-        # {"designed": {}} without a top-level _error — the generation
-        # stage would run on an empty spec (and reflection would burn
-        # its whole budget on the garbage).  Stop, like the mesh phase
-        # below and example_initialization do.
-        print("FAILED: empty ProblemSpec (design phase failed).")
+        print("FAILED: empty ProblemSpec (generation failed after repairs).")
+        return False
+    if not (info.mesh_spec or {}).get("designed"):
+        print("FAILED: empty mesh spec (generation failed after repairs).")
         return False
     info.save_json("initial.json", info.problem_spec)
-    print(f"({time.time() - t0:.1f}s)", flush=True)
-
-    print("  [Parse] mesh_handler ...", end=" ", flush=True)
-    t0 = time.time()
-    info.mesh_spec = handle_mesh(
-        agent,
-        info.input_files,
-        problem_context=info.problem_spec.get("designed") if info.problem_spec else None,
-    )
-    if not isinstance(info.mesh_spec, dict) or info.mesh_spec.get("_error"):
-        err = (info.mesh_spec or {}).get("_error", "non-dict result") if isinstance(info.mesh_spec, dict) else "non-dict result"
-        print(f"FAILED: mesh extraction/design error: {err}")
-        return False
     info.save_json("mesh.json", info.mesh_spec)
-    # Also write mesh.txt for the execution phase
+    # Also write mesh.txt for the execution phase (rule: the generated
+    # mesh carries no comments — stripped deterministically)
     mesh_code = info.mesh_spec.get("designed", {}).get("mesh_code", "")
     if mesh_code:
-        info.save_text("mesh.txt", mesh_code)
+        info.save_text("mesh.txt", strip_ff_comments(mesh_code))
     print(f"({time.time() - t0:.1f}s)", flush=True)
     return True
 
@@ -111,9 +107,10 @@ def _stage_generate(agent, info: Info) -> bool:
     print("  [Generate] coder ...", end=" ", flush=True)
     t0 = time.time()
 
-    # Load doc
-    doc_path = Path("database/freefem_functions/list_of_classes.txt")
-    doc_text = doc_path.read_text(encoding="utf-8", errors="replace") if doc_path.exists() else ""
+    # Load doc (shared loader — the same logic coder._load_documentation provides)
+    from Generation.coder import _load_documentation
+
+    doc_text = _load_documentation()
 
     # Load full .py for selected examples
     info.examples = load_selected_examples(info.selected_names)
@@ -146,89 +143,59 @@ def _stage_generate(agent, info: Info) -> bool:
 
 
 def _stage_static_check(agent, info: Info) -> None:
-    """Run static checks and optionally auto-fix.
-
-    The initial-parameter review (formerly Stage 5.5) runs at the END of
-    this stage: after the code is statically clean, the optimisation
-    parameters are reviewed and written back.
+    """Run the merged check -> review -> repair loop (ex-static check +
+    ex-parameter review).  The code is generated once; this stage only
+    REPAIRS the reported issues (at most configs.MAX_STATIC_FIXES
+    repairs), with an in-memory repair history maintained like the
+    Initialization spec loop.
     """
-    print("  [Check] static_check ...", end=" ", flush=True)
-    errors = static_check(info.generated_code, info.mesh_spec, info.problem_spec)
-    err_n = sum(1 for e in errors if e["severity"] == "error")
-    warn_n = sum(1 for e in errors if e["severity"] == "warning")
-    if errors:
-        print(f"-> {err_n}E+{warn_n}W", flush=True)
-        for e in errors:
-            print(f"    [{e['severity'].upper()}] {e['check']}: {e['message']}")
-
-        print("  [Fix] auto_fix ...", end=" ", flush=True)
-        fixed = auto_fix(agent, info.generated_code, errors)
-        if not isinstance(fixed, dict):
-            print(f"FAILED: auto_fix returned a non-dict result ({type(fixed).__name__}).")
-            print("    Continuing — the reflection loop traces runtime errors on main.py.")
-        elif "_error" in fixed:
-            print(f"FAILED: {fixed['_error']}")
-            print("    Continuing — the reflection loop traces runtime errors on main.py.")
-        else:
-            new_main = fixed.get("main")
-            if not isinstance(new_main, str) or not new_main.strip():
-                print("FAILED: auto_fix returned no usable main — keeping the generated code.")
-                print("    Continuing — the reflection loop traces runtime errors on main.py.")
-            else:
-                info.fixed_code = new_main
-                info.save_text("main.py", info.fixed_code)
-                info.generated_code = info.fixed_code
-                recheck = static_check(info.generated_code, info.mesh_spec, info.problem_spec)
-                print(f"-> {len(recheck)} remaining errors")
-    else:
-        print("OK", flush=True)
-
-    # ── tail of this stage: initial-parameter review (ex-Stage 5.5) ──
-    # Reference priority: the paper (extracted optimisation parameters)
-    # first, then the selected examples.  Only hmin/hmax/diffusion/v0/phi
-    # may change; show_weak_material is forced to False.
-    print("  [Params] check_and_fix ...", end=" ", flush=True)
+    print("  [Check] static repair ...", end=" ", flush=True)
     t0 = time.time()
-    result = check_and_fix_params(
+    mesh_txt = info.mesh_spec.get("designed", {}).get("mesh_code", "") if info.mesh_spec else ""
+    result = run_static_repair(
         agent,
         info.generated_code,
         problem_spec=info.problem_spec,
+        mesh_spec=info.mesh_spec,
         problem_description=info.problem_description,
-        mesh_txt=info.mesh_spec.get("designed", {}).get("mesh_code", "") if info.mesh_spec else "",
+        mesh_txt=mesh_txt,
         examples=info.examples,
+        history_log=info.results_dir / "history.txt",
     )
-    if result.get("_error"):
-        print(f"FAILED: {result['_error']}")
-        # the LLM pass failed, but check_and_fix_params already applied
-        # the deterministic fix (show_weak_material=False) — keep that.
-        info.generated_code = result.get("main", info.generated_code)
-        info.save_text("main.py", info.generated_code)
-        return
-    info.generated_code = result.get("main", info.generated_code)
+    info.generated_code = result.get("main") or info.generated_code
     info.save_text("main.py", info.generated_code)
-    rationale = (result.get("rationale") or "").replace("\n", " ")[:80]
-    print(f"-> {rationale} ({time.time() - t0:.1f}s)", flush=True)
+    history = result.get("history") or []
+    if result.get("_passed"):
+        print(f"OK ({len(history)} repair(s)) ({time.time() - t0:.1f}s)", flush=True)
+    else:
+        print(f"FAILED: repair budget exhausted ({len(history)} repair(s)) "
+              f"— continuing ({time.time() - t0:.1f}s)", flush=True)
+        print("    (the reflection loop traces runtime errors on main.py)")
+    for w in result.get("warnings") or []:
+        print(f"    [W] {w.get('check')}: {w.get('message')}")
 
 
-def _stage_run(info: Info) -> dict:
+def _stage_run(info: Info) -> None:
     """
     Run the generated code through AutoFreeFEM + FreeFEM.
 
-    Returns the execution result dict (also saved to disk and stored on info).
+    run_execution persists run_result.json to the results dir itself —
+    the reflection loop reads it back from disk (single writer).
     """
     main_py = info.results_dir / "main.py"
     if not main_py.exists():
         print("  [Run] main.py not found — skipping.")
-        return {}
+        return
 
     print("  [Run] executing …")
     t0 = time.time()
-    result = run_execution(main_py, info.results_dir)
+    result = run_execution(
+        main_py,
+        info.results_dir,
+        history_log=info.results_dir / "history.txt",
+        history_label="Execution/run_problem (Stage 6 formal run)",
+    )
     dt = time.time() - t0
-
-    # Persist for debugging and the reflection loop (run_problem already
-    # writes run_result.json to the results dir — single writer).
-    info.run_result = result
 
     py_rc = result["autofreefem"]["python"]["return_code"]
     edp_files = result["autofreefem"]["edp_files"]
@@ -238,8 +205,6 @@ def _stage_run(info: Info) -> dict:
     for ff in result["freefem"]:
         if ff["return_code"] != "0":
             print(f"    FreeFEM {ff['edp_file']}: exit={ff['return_code']}")
-
-    return result
 
 
 # ======================================================================
@@ -276,9 +241,19 @@ def main(agent, problem_name: str) -> None:
     if not info.input_files:
         print("  No input files found — skipping.")
         return
-    # Every LLM call of this problem (text + vision) appends one record
-    # to results/<problem>/history.txt: operation, input, output.
+    # Every round of the four stages (Initialization -> Generation ->
+    # Execution -> Reflection) appends FULL records — which function is
+    # working (for a repair, which round), what went in and what came
+    # out — to results/<problem>/history.txt.  A record only: never
+    # reflection evidence.
     agent.attach_history(info.results_dir / "history.txt")
+
+    # Connection tester FIRST: an unreachable model ends the whole run
+    # immediately instead of burning stage after stage on connection
+    # errors.
+    if not test_connection(agent):
+        print("  [main] LLM connection test FAILED — ending immediately.")
+        return
 
     t_start = time.time()
 
@@ -324,7 +299,7 @@ def main(agent, problem_name: str) -> None:
 
 # ======================================================================
 if __name__ == "__main__":
-    # Two-model setup: text-only calls (Stages 1-5.5, text classification)
+    # Two-model setup: text-only calls (Stages 1-5, text classification)
     # go to the pro model; calls with images (design snapshots in the
     # reflection loop) go to the vision model.  AgentRouter dispatches.
     demos_dir = Path("demos")

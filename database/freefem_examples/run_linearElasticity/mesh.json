@@ -1,26 +1,166 @@
 {
   "extracted": {
     "category": "code",
-    "mesh_code": "border C01(t=0, 2.){x=t; y=0; label=1;}\n\nborder C02(t=0, 0.45){x=2.; y=t; label=1;}\n\nborder C03(t=0, 0.1){x=2.; y=0.45+t; label=2;}\n\nborder C04(t=0, 0.45){x=2.; y=0.55+t; label=1;}\n\nborder C05(t=0, 2){x=2.-t; y=1.; label=1;}\n\nborder C06(t=0, 1){x=0.; y=1-t; label=4;}\n\nint n = 60;\n\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
-    "geometry_description": "",
+    "mesh_code": "border C01(t=0.0, 2.0){x=t; y=0.0; label=1;}\nborder C02(t=0.0, 0.45){x=2.0; y=t; label=1;}\nborder C03(t=0.0, 0.1){x=2.0; y=0.45+t; label=2;}\nborder C04(t=0.0, 0.45){x=2.0; y=0.55+t; label=1;}\nborder C05(t=0.0, 2.0){x=2.0-t; y=1.0; label=1;}\nborder C06(t=0.0, 1.0){x=0.0; y=1.0-t; label=4;}\nint n = 60;\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
+    "edges": [
+      {
+        "name": "C01",
+        "param": "t=0.0, 2.0",
+        "x": "t",
+        "y": "0.0",
+        "label": "1",
+        "role": "C01",
+        "source": "extracted"
+      },
+      {
+        "name": "C02",
+        "param": "t=0.0, 0.45",
+        "x": "2.0",
+        "y": "t",
+        "label": "1",
+        "role": "C02",
+        "source": "extracted"
+      },
+      {
+        "name": "C03",
+        "param": "t=0.0, 0.1",
+        "x": "2.0",
+        "y": "0.45+t",
+        "label": "2",
+        "role": "C03",
+        "source": "extracted"
+      },
+      {
+        "name": "C04",
+        "param": "t=0.0, 0.45",
+        "x": "2.0",
+        "y": "0.55+t",
+        "label": "1",
+        "role": "C04",
+        "source": "extracted"
+      },
+      {
+        "name": "C05",
+        "param": "t=0.0, 2.0",
+        "x": "2.0-t",
+        "y": "1.0",
+        "label": "1",
+        "role": "C05",
+        "source": "extracted"
+      },
+      {
+        "name": "C06",
+        "param": "t=0.0, 1.0",
+        "x": "0.0",
+        "y": "1.0-t",
+        "label": "4",
+        "role": "C06",
+        "source": "extracted"
+      }
+    ],
+    "n": 60,
+    "mesh_file": "mesh.txt",
     "labels_found": [
       "1",
       "2",
       "4"
     ],
     "has_syntax_errors": false,
-    "syntax_error_details": ""
+    "source": "extracted"
   },
   "designed": {
-    "mesh_code": "border C01(t=0, 2.){x=t; y=0; label=1;}\n\nborder C02(t=0, 0.45){x=2.; y=t; label=1;}\n\nborder C03(t=0, 0.1){x=2.; y=0.45+t; label=2;}\n\nborder C04(t=0, 0.45){x=2.; y=0.55+t; label=1;}\n\nborder C05(t=0, 2){x=2.-t; y=1.; label=1;}\n\nborder C06(t=0, 1){x=0.; y=1-t; label=4;}\n\nint n = 60;\n\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
+    "mesh_code": "border C01(t=0.0, 2.0){x=t; y=0.0; label=1;}\nborder C02(t=0.0, 0.45){x=2.0; y=t; label=1;}\nborder C03(t=0.0, 0.1){x=2.0; y=0.45+t; label=2;}\nborder C04(t=0.0, 0.45){x=2.0; y=0.55+t; label=1;}\nborder C05(t=0.0, 2.0){x=2.0-t; y=1.0; label=1;}\nborder C06(t=0.0, 1.0){x=0.0; y=1.0-t; label=4;}\nint n = 60;\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
     "mesh_code_source": "extracted",
-    "mesh_code_rationale": "",
+    "mesh_code_rationale": "The active mesh already carries the problem's labels (1 free, 2 loaded, 4 clamped) and the correct 2x1 domain, so it is kept verbatim; it contains no comments.",
+    "edges": [
+      {
+        "name": "C01",
+        "param": "t=0.0, 2.0",
+        "x": "t",
+        "y": "0.0",
+        "label": "1",
+        "label_source": "extracted",
+        "role": "C01",
+        "role_source": "designed",
+        "source": "extracted",
+        "rationale": "Unloaded free Neumann bottom edge, movable."
+      },
+      {
+        "name": "C02",
+        "param": "t=0.0, 0.45",
+        "x": "2.0",
+        "y": "t",
+        "label": "1",
+        "label_source": "extracted",
+        "role": "C02",
+        "role_source": "designed",
+        "source": "extracted",
+        "rationale": "Lower part of the right edge, unloaded and movable."
+      },
+      {
+        "name": "C03",
+        "param": "t=0.0, 0.1",
+        "x": "2.0",
+        "y": "0.45+t",
+        "label": "2",
+        "label_source": "extracted",
+        "role": "C03",
+        "role_source": "designed",
+        "source": "extracted",
+        "rationale": "Loaded segment Gamma_N whose position is prescribed, hence frozen."
+      },
+      {
+        "name": "C04",
+        "param": "t=0.0, 0.45",
+        "x": "2.0",
+        "y": "0.55+t",
+        "label": "1",
+        "label_source": "extracted",
+        "role": "C04",
+        "role_source": "designed",
+        "source": "extracted",
+        "rationale": "Upper part of the right edge, unloaded and movable."
+      },
+      {
+        "name": "C05",
+        "param": "t=0.0, 2.0",
+        "x": "2.0-t",
+        "y": "1.0",
+        "label": "1",
+        "label_source": "extracted",
+        "role": "C05",
+        "role_source": "designed",
+        "source": "extracted",
+        "rationale": "Unloaded free Neumann top edge, movable."
+      },
+      {
+        "name": "C06",
+        "param": "t=0.0, 1.0",
+        "x": "0.0",
+        "y": "1.0-t",
+        "label": "4",
+        "label_source": "extracted",
+        "role": "C06",
+        "role_source": "designed",
+        "source": "extracted",
+        "rationale": "Clamped edge (u=0 on label 4), frozen."
+      }
+    ],
+    "n": 60,
+    "n_source": "extracted",
+    "mesh_file": "mesh.txt",
+    "mesh_file_source": "designed",
+    "mesh_file_rationale": "Standard mesh file name used by the pipeline.",
     "labels_used": [
       "1",
       "2",
       "4"
     ],
+    "labels_used_source": "extracted",
     "dimension": 2,
-    "domain_description": "A 2.0 by 1.0 rectangular cantilever domain, with the left edge labeled 4, a small loaded segment on the right edge labeled 2, and all other boundary portions labeled 1."
+    "dimension_source": "extracted",
+    "domain_description": "Rectangle [0,2] x [0,1] with a loaded segment on the middle of the right edge and the left edge clamped.",
+    "domain_description_source": "designed",
+    "domain_description_rationale": "Derived from the border coordinates and the problem's boundary conditions."
   }
 }

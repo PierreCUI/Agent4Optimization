@@ -11,6 +11,7 @@ import platform
 import re
 import shutil
 import time
+import warnings
 from pathlib import Path
 
 import configs as _cfg
@@ -111,7 +112,26 @@ def _patch_newton_tolerance(edp_path: Path) -> bool:
         return False
 
 
-def run_problem(main_py: Path, workdir: Path = None, auto_render: bool = True) -> dict:
+def _tail_ff_console(stream: str) -> str:
+    """FreeFEM console output (stdout/stderr) keeps ONLY its last
+    ``configs.FF_CONSOLE_TAIL_CHARS`` characters — the SOURCE-level
+    truncation: every downstream consumer (run_result.json on disk,
+    history.txt records, LLM evidence) inherits it, so no location ever
+    records a longer FreeFEM console."""
+    from configs import FF_CONSOLE_TAIL_CHARS
+
+    if not isinstance(stream, str) or len(stream) <= FF_CONSOLE_TAIL_CHARS:
+        return stream
+    cut = len(stream) - FF_CONSOLE_TAIL_CHARS
+    return (
+        f"... [{cut} chars cut — keeping the LAST "
+        f"{FF_CONSOLE_TAIL_CHARS} chars] ...\n"
+        + stream[-FF_CONSOLE_TAIL_CHARS:]
+    )
+
+
+def run_problem(main_py: Path, workdir: Path = None, auto_render: bool = True,
+                history_log=None, history_label: str = "") -> dict:
     """
     Run *main_py* through AutoFreeFEM then FreeFEM.
 
@@ -152,8 +172,14 @@ def run_problem(main_py: Path, workdir: Path = None, auto_render: bool = True) -
     files_after = _list_files(workdir)
     new_files = [f for f in files_after if f not in files_before]
     # Find .edp from files_after (not new_files) because run_autofreefem
-    # cleans stale .edp then recreates the same filenames — diff misses them.
-    edp_files = [f for f in files_after if f.endswith(".edp")]
+    # cleans stale .edp then recreates the same filenames — diff misses
+    # them.  POLICY: only optimize scripts are collected — verify runs
+    # are NOT executed, and their information is not collected or used
+    # anywhere downstream.
+    edp_files = [
+        f for f in files_after
+        if f.endswith(".edp") and f.startswith("optimize")
+    ]
 
     print(f"  Python exit: {py_result['return_code']}")
     print(f"  New files:   {new_files}")
@@ -162,22 +188,28 @@ def run_problem(main_py: Path, workdir: Path = None, auto_render: bool = True) -
     # ── Phase 2: FreeFEM ───────────────────────────────────────────────
     freefem_records = []
 
-    # Detect nonlinear: read initial.json if available
+    # Detect nonlinear: read initial.json if available.  The designed
+    # state_is_nonlinear is derived from extracted.is_nonlinear (new
+    # schema) — fall back to the extracted ground truth when design
+    # failed or was omitted, so a nonlinear problem never silently runs
+    # on linear timeouts.
     is_nonlinear = False
     try:
         initial_path = workdir / "initial.json"
         if initial_path.exists():
             spec = json.loads(initial_path.read_text(encoding="utf-8"))
-            is_nonlinear = spec.get("designed", {}).get("state_is_nonlinear", False)
+            is_nonlinear = bool(
+                (spec.get("designed") or {}).get("state_is_nonlinear", False)
+                or (spec.get("extracted") or {}).get("is_nonlinear", False)
+            )
     except Exception:
         pass
 
     factor = _cfg.FREEFEM_NONLINEAR_FACTOR if is_nonlinear else 1
-    effective_total_timeout = _cfg.FREEFEM_TIMEOUT
+    # Only the per-step budget exists (no overall run budget): linear
+    # 60s, nonlinear 5min — first/last step get 10× inside the monitor.
+    # Applied only when the timeout is enabled (>= 0).
     effective_step_timeout = _cfg.FREEFEM_STEP_TIMEOUT
-    # Only apply nonlinear factor when timeout is enabled (>= 0)
-    if effective_total_timeout >= 0:
-        effective_total_timeout *= factor
     if effective_step_timeout >= 0:
         effective_step_timeout *= factor
 
@@ -228,17 +260,13 @@ def run_problem(main_py: Path, workdir: Path = None, auto_render: bool = True) -
             # applied to the generated edp before every FreeFEM launch.
             if _patch_newton_tolerance(edp_path):
                 print(f"  [patch] {edp_name}: Newton tolerance patched")
-            # Only monitor iteration progress for optimize runs;
-            # verify is a single solve that produces no iteration files.
-            is_optimize = edp_name.startswith("optimize")
             print(f"  FreeFem++ {edp_name} ...", end=" ", flush=True)
             t0 = time.time()
             try:
                 ff = ff_run(
                     edp_path,
                     workdir,
-                    monitor_progress=is_optimize,
-                    total_timeout=effective_total_timeout,
+                    monitor_progress=True,
                     step_timeout=effective_step_timeout,
                     expected_epochs=expected_epochs,
                 )
@@ -256,14 +284,18 @@ def run_problem(main_py: Path, workdir: Path = None, auto_render: bool = True) -
             if ff.get("stderr"):
                 for line in ff["stderr"].strip().splitlines()[:5]:
                     print(f"    [stderr] {line}")
-            freefem_records.append(
-                {
-                    "edp_file": edp_name,
-                    "return_code": ff["return_code"],
-                    "stdout": ff["stdout"],
-                    "stderr": ff["stderr"],
-                }
-            )
+            rec = {
+                "edp_file": edp_name,
+                "return_code": ff["return_code"],
+                "stdout": _tail_ff_console(ff["stdout"]),
+                "stderr": _tail_ff_console(ff["stderr"]),
+            }
+            # The monitor records the console err code it detected — it
+            # must survive into run_result.json or downstream judgment
+            # (reflection) never sees it.
+            if ff.get("console_err_code") is not None:
+                rec["console_err_code"] = ff["console_err_code"]
+            freefem_records.append(rec)
 
     result = {
         "autofreefem": {
@@ -282,6 +314,40 @@ def run_problem(main_py: Path, workdir: Path = None, auto_render: bool = True) -
             json.dump(result, f, indent=2, ensure_ascii=False, default=str)
     except OSError:
         pass
+
+    # Full history record (when a log is provided): the input code and
+    # the execution result (the FreeFEM console inside is ALREADY
+    # source-truncated to configs.FF_CONSOLE_TAIL_CHARS — every location
+    # records it the same way).
+    if history_log is not None:
+        try:
+            from history import record as record_history
+
+            input_parts = [f"--- FILE: {main_py.name} ---\n"]
+            try:
+                input_parts.append(
+                    main_py.read_text(encoding="utf-8", errors="replace")
+                )
+            except OSError:
+                input_parts.append("(unreadable)")
+            mesh_py = workdir / "mesh.txt"
+            if mesh_py.exists():
+                input_parts.append("\n--- FILE: mesh.txt ---\n")
+                try:
+                    input_parts.append(
+                        mesh_py.read_text(encoding="utf-8", errors="replace")
+                    )
+                except OSError:
+                    input_parts.append("(unreadable)")
+            record_history(
+                history_log,
+                "run_problem",
+                label=history_label or "Execution/run_problem",
+                input_text="".join(input_parts),
+                output_text=json.dumps(result, indent=2, ensure_ascii=False, default=str),
+            )
+        except Exception as e:
+            warnings.warn(f"history record failed: {e}")
 
     # ── Fallback: if MinTh.vtu was not produced, use the last iteration ──
     # FreeFEM writes *MinTh.vtu whenever the objective improves; a run that

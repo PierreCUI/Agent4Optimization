@@ -17,28 +17,28 @@ class ChatGPTCodeWriter(CodeWriter):
         self._model = ChatOpenAI(**model_kwargs)
 
 
-class ChatGPTCodeAgent56Sol(CodeAgent):
-    MODEL_NAME = "gpt-5.6-sol"
+class ChatGPTCodeAgent6Astra(CodeAgent):
+    MODEL_NAME = "gpt-6-astra"
 
     def __init__(self):
         super().__init__()
-        self.model_name = ChatGPTCodeAgent56Sol.MODEL_NAME
+        self.model_name = ChatGPTCodeAgent6Astra.MODEL_NAME
         self.writer = ChatGPTCodeWriter(self.model_name)
 
 
-class ChatGPTCodeAgent56Terra(CodeAgent):
-    MODEL_NAME = "gpt-5.6-terra"
+class ChatGPTCodeAgent6Sol(CodeAgent):
+    MODEL_NAME = "gpt-6-sol"
 
     def __init__(self):
         super().__init__()
-        self.model_name = ChatGPTCodeAgent56Terra.MODEL_NAME
+        self.model_name = ChatGPTCodeAgent6Sol.MODEL_NAME
         self.writer = ChatGPTCodeWriter(self.model_name)
 
 
-class ChatGPTCodeAgent56Luna(CodeAgent):
-    MODEL_NAME = "gpt-5.6-luna"
+class ChatGPTCodeAgent6Luna(CodeAgent):
+    MODEL_NAME = "gpt-6-luna"
 
     def __init__(self):
         super().__init__()
-        self.model_name = ChatGPTCodeAgent56Luna.MODEL_NAME
+        self.model_name = ChatGPTCodeAgent6Luna.MODEL_NAME
         self.writer = ChatGPTCodeWriter(self.model_name)

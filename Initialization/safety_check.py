@@ -93,22 +93,24 @@ def safety_check(agent, problem_description):
         result = json.loads(parser_json(raw_response))
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         warnings.warn(
-            f"Safety check JSON parsing failed: {e}. Falling back to 'pass' to avoid blocking legitimate queries."
+            f"Safety check JSON parsing failed: {e}. "
+            "Falling back to 'pass' to avoid blocking legitimate queries."
         )
         return "pass", problem_description, ""
     if not isinstance(result, dict):
         # Valid JSON that is not an object (array/string/number) — same
         # handling as a parse failure: fail open, never crash the pipeline.
         warnings.warn(
-            f"Safety check returned non-object JSON ({type(result).__name__}); falling back to 'pass'."
+            f"Safety check returned non-object JSON ({type(result).__name__}); "
+            "falling back to 'pass'."
         )
         return "pass", problem_description, ""
 
     classification = result.get("classification")
     if classification is None:
-        # A parsable-but-partial response (description present, category
-        # key omitted) must not hard-reject a legitimate query — same
-        # fail-open policy as the JSON parse failures above.
+        # A parsable-but-partial response (description present, the
+        # classification key omitted) must not hard-reject a legitimate
+        # query — same fail-open policy as the JSON parse failures above.
         warnings.warn(
             "Safety check response lacks 'classification'; falling back to 'pass'."
         )

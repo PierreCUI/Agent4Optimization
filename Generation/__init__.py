@@ -1,10 +1,8 @@
-from .check_instatic import auto_fix, static_check
-from .check_params import check_and_fix_params
+from .check_static import run_static_repair, static_check
 from .coder import generate_code
 
 __all__ = [
     "generate_code",
+    "run_static_repair",
     "static_check",
-    "auto_fix",
-    "check_and_fix_params",
 ]

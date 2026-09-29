@@ -1,0 +1,79 @@
+\documentclass[preview]{standalone}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{bm}
+\let\oldcdot\cdot
+\usepackage{breqn}
+\let\cdot\oldcdot
+\begin{document}
+The design domain $D$ is the rectangle $[0,2]\times[0,1]$ with a square hole $[0.2,0.8]\times[0.2,0.8]$ whose boundary carries label 10 (the material boundary).  The outer edges carry labels 1 = bottom, 2 = right, 3 = top, 4 = left.  The left edge $\Gamma_{4}$ (label 4) is the clamped Dirichlet edge with the spring support and is FROZEN (fixedLabels=[4]); the other three outer edges (labels 1, 2, 3) are NORMAL-LOCKED (boundaryLabels=[1,2,3]); no outer edge is free.
+Let $\phi(x)$ be the level-set function and
+ \begin{align*}\raisebox{\depth}{$\chi_2$}(x) &= \begin{cases} 1 & \mbox{if}\quad \phi(x) < 0 \\ 0 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases},\\
+\raisebox{\depth}{$\chi$}(x) &= \begin{cases} 1 & \mbox{if}\quad \phi(x) < 0 \\ 1/100 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases}.\end{align*}
+The Lagrangian of the linear Elasticity problem is
+\begin{dmath*}
+\mathcal L(\left[ {\mathbf{ u }}\right],\left[ {\delta\mathbf{  u }}\right]) = J({\mathbf{ u }}) +  \int_{\Gamma_{4}} c \left( {\mathbf{ u }} \cdot {\delta\mathbf{  u }} \right) \,ds_x -  \int_{D} f \raisebox{\depth}{$\chi_2$} \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,dx +  \int_{D} \left( \pmb \sigma({\mathbf{ u }}) \mathrel{:}  \nabla {\delta\mathbf{  u }}  \right) \,dx , 
+\end{dmath*}
+with 
+\begin{align*}
+\mu &= \frac{E}{2 \left(\nu + 1\right)},\\
+\lambda &= - \frac{E \nu}{\left(\nu + 1\right) \left(2 \nu - 1\right)},\\
+\pmb \sigma({\mathbf{ u }}) &= \raisebox{\depth}{$\chi$} \left(\mathbf{I} \lambda  \,\operatorname{tr}\left(\pmb \varepsilon({\mathbf{ u }})\right)  + 2 \mu \pmb \varepsilon({\mathbf{ u }})\right),\\
+\pmb \varepsilon({\mathbf{ u }}) &= \frac{ \nabla {\mathbf{ u }}  +   \nabla {\mathbf{ u }} ^\top }{2},\\
+J({\mathbf{ u }}) &=  \int_{D} \raisebox{\depth}{$\chi_2$} \left(-0.1 + 0.02 \left(X(x) + 0.5 + \left( \mathbf e_x \cdot {\mathbf{ u }} \right)\right)^{2} + \left(Y(x) - 0.5 + \left( \mathbf e_y \cdot {\mathbf{ u }} \right)\right)^{2}\right)  \;\operatorname{det}(\mathbf{I} +  \nabla {\mathbf{ u }} )  \,dx,\\
+Y(x) &= y,\\
+X(x) &= x.
+ \end{align*}
+Let
+\begin{equation*}
+V_{{\mathbf{ u }}} = \{ {\mathbf{ u }} \in \mathbb P_{2}(D)| {\mathbf{ u }} = \mathtt{\text{0.}}  \quad \text{{on}} \quad\Gamma_{4} \},\end{equation*}
+\begin{equation*}
+V_{{\delta\mathbf{  u }}} = \{ {\delta\mathbf{  u }} \in \mathbb P_{2}(D)| {\delta\mathbf{  u }} = 0  \quad \text{{on}} \quad\Gamma_{4} \}.\end{equation*}
+The state $\left[ {\mathbf{ u }}\right] \in  V_{{\mathbf{ u }}}$ is the solution of the linear problem
+\begin{dmath*}
+ \int_{\Gamma_{4}} c \left( {\mathbf{ u }} \cdot {\delta\mathbf{  u }} \right) \,ds_x -  \int_{D} f \raisebox{\depth}{$\chi_2$} \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,dx +  \int_{D} \left( \pmb \sigma({\mathbf{ u }}) \mathrel{:}  \nabla {\delta\mathbf{  u }}  \right) \,dx = 0\qquad \forall\; {{\delta\mathbf{  u }}\in V_{{\delta\mathbf{  u }}}} . 
+\end{dmath*}
+The adjoint state $\left[ \tilde{\mathbf{ u }}\right] \in  V_{{\delta\mathbf{  u }}}$ to the direct state $\left[ {\mathbf{ u }}\right]$ is the solution of
+\begin{dmath*}
+\partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} J({\delta\mathbf{  u }},{\mathbf{ u }}) +  \int_{\Gamma_{4}} c \left( {\delta\mathbf{  u }} \cdot \tilde{\mathbf{ u }} \right) \,ds_x +  \int_{D} \left( \partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} \pmb \sigma({\delta\mathbf{  u }}) \mathrel{:}  \nabla \tilde{\mathbf{ u }}  \right) \,dx = 0\qquad \forall\; {{\delta\mathbf{  u }}\in V_{{\mathbf{ u }}}} , 
+\end{dmath*}
+with 
+\begin{align*}
+\partial_{({\mathbf{ u }},{\delta\mathbf{  u }})} J({\delta\mathbf{  u }},{\mathbf{ u }}) &=  \int_{D} \raisebox{\depth}{$\chi_2$} \left(\left(0.04 \left(X(x) + 0.5 + \left( \mathbf e_x \cdot {\mathbf{ u }} \right)\right)^{2} \left( \mathbf e_x \cdot {\delta\mathbf{  u }} \right) \left(X(x) + 0.5 + \left( \mathbf e_x \cdot {\mathbf{ u }} \right)\right)^{-1} + 2 \left(Y(x) - 0.5 + \left( \mathbf e_y \cdot {\mathbf{ u }} \right)\right)^{2} \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \left(Y(x) - 0.5 + \left( \mathbf e_y \cdot {\mathbf{ u }} \right)\right)^{-1}\right)  \;\operatorname{det}(\mathbf{I} +  \nabla {\mathbf{ u }} )  + \left(-0.1 + 0.02 \left(X(x) + 0.5 + \left( \mathbf e_x \cdot {\mathbf{ u }} \right)\right)^{2} + \left(Y(x) - 0.5 + \left( \mathbf e_y \cdot {\mathbf{ u }} \right)\right)^{2}\right)  \;\operatorname{det}(\mathbf{I} +  \nabla {\mathbf{ u }} )   \,\operatorname{tr}\left(\left(  (\mathbf{I} +  \nabla {\mathbf{ u }} )^{-1}  \cdot  \nabla {\delta\mathbf{  u }}  \right)\right) \right) \,dx.
+ \end{align*}
+In order to compute the shape derivative, we consider a shape pertubation $\mathbf x = T_t(\mathbf X) = \mathbf X + t \mathbf  V(X)$ with a suitable velocity field $\mathbf V$. The perturbed Lagrangian $\mathcal G$ using the Lagrangian state $\left[ {\mathbf{ u }}\right]^{L}$ is given by
+\begin{dmath*}
+\mathcal G(t,\left[ {\mathbf{ u }}\right]^{L},\left[ {\delta\mathbf{  u }}\right]^{L}) = \mathcal V(J) +  \int_{\Gamma_{4}} c  \operatorname{det}\mathbf F( t )  \sqrt{\left( \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \cdot \left( \mathbf n \cdot  \mathbf F^{-1}(t) \right) \right)} \left( {\mathbf{ u }} \cdot {\delta\mathbf{  u }} \right) \,ds_x +  \int_{D}  \operatorname{det}\mathbf F( t )  \left( \mathcal V(\pmb \sigma) \mathrel{:} \left( \left(  \nabla {\delta\mathbf{  u }}  \cdot  \mathbf F^{-1}(t) \right) \right)\right) \,dx -  \int_{D} f \raisebox{\depth}{$\chi_2$}  \operatorname{det}\mathbf F( t )  \left( \mathbf e_y \cdot {\delta\mathbf{  u }} \right) \,dx , 
+\end{dmath*}
+with
+\begin{dmath*}
+\mathcal V(\pmb \sigma) = \raisebox{\depth}{$\chi$} \left(\mathbf{I} \lambda  \,\operatorname{tr}\left(\mathcal V(\pmb \varepsilon)\right)  + 2 \mu \mathcal V(\pmb \varepsilon)\right),
+ \end{dmath*}
+\begin{dmath*}
+\mathcal V(\pmb \varepsilon) = \frac{\left(  \nabla {\mathbf{ u }}  \cdot  \mathbf F^{-1}(t) \right) +  \left( \left(  \nabla {\mathbf{ u }}  \cdot  \mathbf F^{-1}(t) \right) \right)^\top }{2},
+ \end{dmath*}
+\begin{dmath*}
+\mathcal V(J) =  \int_{D} \raisebox{\depth}{$\chi_2$}  \operatorname{det}\mathbf F( t )  \left(-0.1 + 0.02 \left(X(T_t(x)) + 0.5 + \left( \mathbf e_x \cdot {\mathbf{ u }} \right)\right)^{2} + \left(Y(T_t(x)) - 0.5 + \left( \mathbf e_y \cdot {\mathbf{ u }} \right)\right)^{2}\right)  \;\operatorname{det}(\mathbf{I} + \left(  \nabla {\mathbf{ u }}  \cdot  \mathbf F^{-1}(t) \right))  \,dx.
+ \end{dmath*}
+with 
+\begin{dmath*}
+Y = y,\end{dmath*}
+and\begin{dmath*}
+X = x.\end{dmath*}
+For the direct state $\left[ {\mathbf{ u }}\right]$ and the adjoint state $\left[ \tilde{\mathbf{ u }}\right]$, the volume expression of the shape derivative is given by
+\begin{dmath*}
+DJ(\Omega)(\mathbf V) = \partial_{t} J({\mathbf V},{\mathbf{ u }}) +  \int_{\Gamma_{4}} c \operatorname{div} {\mathbf V} \left( {\mathbf{ u }} \cdot \tilde{\mathbf{ u }} \right) \,ds_x -  \int_{\Gamma_{4}} c \left( \mathbf n \cdot \left( \mathbf n \cdot  \nabla {\mathbf V}  \right) \right) \left( {\mathbf{ u }} \cdot \tilde{\mathbf{ u }} \right) \,ds_x -  \int_{D} f \raisebox{\depth}{$\chi_2$} \operatorname{div} {\mathbf V} \left( \mathbf e_y \cdot \tilde{\mathbf{ u }} \right) \,dx +  \int_{D} \operatorname{div} {\mathbf V} \left( \pmb \sigma({\mathbf{ u }}) \mathrel{:}  \nabla \tilde{\mathbf{ u }}  \right) + \left( \partial_{t} \pmb \sigma({\mathbf V},{\mathbf{ u }}) \mathrel{:}  \nabla \tilde{\mathbf{ u }}  \right) - \left( \pmb \sigma({\mathbf{ u }}) \mathrel{:} \left( \left(  \nabla \tilde{\mathbf{ u }}  \cdot  \nabla {\mathbf V}  \right) \right)\right) \,dx , 
+\end{dmath*}
+with
+\begin{dmath*}
+\partial_{t} \pmb \sigma({\mathbf V},{\mathbf{ u }}) = \raisebox{\depth}{$\chi$} \left(\mathbf{I} \lambda  \,\operatorname{tr}\left(\partial_{t} \pmb \varepsilon({\mathbf V},{\mathbf{ u }})\right)  + 2 \mu \partial_{t} \pmb \varepsilon({\mathbf V},{\mathbf{ u }})\right),
+ \end{dmath*}
+\begin{dmath*}
+\partial_{t} \pmb \varepsilon({\mathbf V},{\mathbf{ u }}) = - \frac{\left(  \nabla {\mathbf{ u }}  \cdot  \nabla {\mathbf V}  \right) +  \left( \left(  \nabla {\mathbf{ u }}  \cdot  \nabla {\mathbf V}  \right) \right)^\top }{2},
+ \end{dmath*}
+\begin{dmath*}
+\partial_{t} J({\mathbf V},{\mathbf{ u }}) =  \int_{D} \raisebox{\depth}{$\chi_2$} \left(\operatorname{div} {\mathbf V} \left(-0.1 + 0.02 \left(X(x) + 0.5 + \left( \mathbf e_x \cdot {\mathbf{ u }} \right)\right)^{2} + \left(Y(x) - 0.5 + \left( \mathbf e_y \cdot {\mathbf{ u }} \right)\right)^{2}\right)  \;\operatorname{det}(\mathbf{I} +  \nabla {\mathbf{ u }} )  + \left(0.04 \left(  \nabla X(x)  \cdot {\mathbf V} \right) \left(X(x) + 0.5 + \left( \mathbf e_x \cdot {\mathbf{ u }} \right)\right) + 2 \left(  \nabla Y(x)  \cdot {\mathbf V} \right) \left(Y(x) - 0.5 + \left( \mathbf e_y \cdot {\mathbf{ u }} \right)\right)\right)  \;\operatorname{det}(\mathbf{I} +  \nabla {\mathbf{ u }} )  + \left(-0.1 + 0.02 \left(X(x) + 0.5 + \left( \mathbf e_x \cdot {\mathbf{ u }} \right)\right)^{2} + \left(Y(x) - 0.5 + \left( \mathbf e_y \cdot {\mathbf{ u }} \right)\right)^{2}\right)  \;\operatorname{det}(\mathbf{I} +  \nabla {\mathbf{ u }} )   \,\operatorname{tr}\left(- \left(  (\mathbf{I} +  \nabla {\mathbf{ u }} )^{-1}  \cdot \left(  \nabla {\mathbf{ u }}  \cdot  \nabla {\mathbf V}  \right) \right)\right) \right) \,dx.
+ \end{dmath*}
+\end{document}

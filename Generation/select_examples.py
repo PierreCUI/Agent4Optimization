@@ -1,9 +1,17 @@
 """
 LLM-based example selection for code generation.
 
-Reads all pre-computed initial.json / mesh.json from database/freefem_examples,
-builds concise summaries, and uses an LLM to pick the most relevant examples
-for a given problem.  Batches summaries when they exceed MAX_INPUT_TOKENS.
+Candidates are the FULL initial.json / mesh.json specs of the database
+examples — no summaries.  ONE scoring round: each candidate gets a
+0-100 relevance score (batched by MAX_INPUT_TOKENS when the full specs
+do not fit in one call); every candidate at or above
+configs.EXAMPLE_SCORE_THRESHOLD is kept, best first, until the NEXT
+example's full .py would exceed the token budget — an example is never
+truncated or partially sent.
+
+When a database folder lacks its JSONs, they are generated on the spot
+via Initialization's spec loop (a safeguard — Initialization normally
+produces them; this only protects against a missing file).
 """
 
 import json
@@ -16,7 +24,12 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from configs import MAX_INPUT_TOKENS, MAX_SELECTOR_ROUNDS, TOKEN_BUDGET_RATIO  # noqa: E402
+from configs import (  # noqa: E402
+    EXAMPLE_SCORE_THRESHOLD,
+    MAX_INPUT_TOKENS,
+    TOKEN_BUDGET_RATIO,
+)
+from history import set_label  # noqa: E402
 from utils import parser_json  # noqa: E402
 
 # ======================================================================
@@ -34,326 +47,109 @@ def _first_py(ex_dir: Path):
     return next((p for p in ex_dir.iterdir() if p.suffix == ".py"), None)
 
 
-def _build_summary(name: str, initial_path: Path, mesh_path: Path) -> dict:
-    """Build a compact summary dict for one example."""
-    summary = {"name": name}
-    try:
-        if initial_path.exists():
-            with open(initial_path, "r", encoding="utf-8") as f:
-                spec = json.load(f)
-            ds = spec.get("designed", {})
-            ex = spec.get("extracted", {})
-            summary["problem_type"] = ds.get("problem_type", "?")
-            summary["dimension"] = ds.get("dimension", "?")
-            summary["fields"] = [
-                {"name": f.get("name"), "type": f.get("type"), "fe_space": f.get("fe_space")}
-                for f in ds.get("fields", [])
-            ]
-            summary["state_is_nonlinear"] = ds.get("state_is_nonlinear", False)
-            summary["num_constants"] = len(ds.get("constants", []))
-            summary["num_domains"] = len(ds.get("domains", []))
-            summary["num_interfaces"] = len(ds.get("interfaces", []))
-            summary["has_adjoint"] = bool(
-                ex.get("adjoint_equation") or ds.get("adjoint_description")
-            )
-            summary["has_shape_derivative"] = bool(
-                ex.get("shape_derivative") or ds.get("shape_derivative_volume")
-            )
-    except Exception as e:
-        # A malformed initial.json must not silently degrade into a
-        # name-only candidate — warn so the selector knows the summary
-        # is partial.
-        warnings.warn(f"_build_summary {name}: initial.json parse error: {e}")
-
-    try:
-        if mesh_path.exists():
-            with open(mesh_path, "r", encoding="utf-8") as f:
-                mesh = json.load(f)
-            mds = mesh.get("designed", {})
-            summary["mesh_dim"] = mds.get("dimension")
-            summary["mesh_labels"] = mds.get("labels_used", [])
-    except Exception as e:
-        warnings.warn(f"_build_summary {name}: mesh.json parse error: {e}")
-
-    return summary
-
-
-def load_example_summaries(examples_dir: Path) -> list[dict]:
-    """Return a compact summary for every example folder with initial.json."""
-    summaries = []
-    if not examples_dir.is_dir():
-        warnings.warn(f"select_examples: examples directory {examples_dir} not found.")
-        return summaries
-    for folder in sorted(examples_dir.iterdir()):
-        if not folder.is_dir():
-            continue
-        initial = folder / "initial.json"
-        mesh = folder / "mesh.json"
-        if not initial.exists():
-            continue
-        summaries.append(_build_summary(folder.name, initial, mesh))
-    return summaries
-
-
 # ======================================================================
-# LLM selection
+# LLM scoring (single round)
 # ======================================================================
-
-_SELECTOR_SYSTEM = """\
-    You are an example selector for a code-generation system.  You are given:
-    
-    1. A **target problem summary** — a JSON object describing the problem for
-       which we need to generate AutoFreeFEM code.
-    
-    2. A list of **candidate example summaries** — each describes a reference
-       example that has both a problem description and working AutoFreeFEM code.
-    
-    Your task: select every example that is RELEVANT to the target problem.
-    Prioritise matches on:
-    
-    - problem_type (shape_optimization vs topology_optimization) — exact match first
-    - dimension (2D vs 3D) — exact match
-    - field types (scalar vs vector) and number of fields
-    - linear vs nonlinear
-    - physics domain (elasticity, diffusion, thermal, fluid, etc.)
-    - mesh complexity (number of labels / boundaries)
-    - number of computational domains and interfaces (multi-domain problems
-      should prefer multi-domain examples)
-    
-    Return exactly one JSON object:
-    {{"selected": ["example_name_1", "example_name_2", ...], "reasoning": "one sentence"}}
-    Return as many examples as you consider relevant, ordered by relevance
-    (most relevant first).  Include only genuinely useful examples — omit those
-    that share little with the target problem.
-"""
-
-_SELECTOR_USER = """\
-    Target problem:
-    {target_summary_json}
-    
-    Candidate examples:
-    {candidates_json}
-    
-    Pick every genuinely relevant example from this batch.  Return the selection JSON.
-"""
-
-# ── Round 2: final ranking across shortlisted candidates ──────────────
-
-_RANKER_SYSTEM = """\
-    You are an example ranker for a code-generation system.  You are given a
-    target problem summary and a list of pre-selected candidate examples (each
-    already deemed relevant by a first-pass filter).
-    
-    Your task: produce a **final ranked list**, ordered by relevance (most
-    relevant first).  Drop any candidate that is not actually useful after
-    side-by-side comparison.
-    
-    Return exactly one JSON object:
-    {{"selected": ["name1", "name2", ...], "reasoning": "one sentence"}}
-    Return as many as are genuinely useful, in descending relevance order.
-"""
-
-_RANKER_USER = """\
-    Target problem:
-    {target_summary_json}
-    
-    Shortlisted candidates:
-    {shortlist_json}
-    
-    Return the final ranked selection JSON.
-"""
-
-# ── Fallback scorer (used when ranking rounds are exhausted) ──────────
 
 _SCORER_SYSTEM = """\
-    You are an example relevance scorer.  You are given a target problem summary
-    and a list of candidate examples.
-    
+    You are an example scorer for a code-generation system.  You are given a
+    TARGET problem (its initial.json and mesh.json specs) and a list of
+    candidate examples (each with its full initial.json and mesh.json
+    specs).
+
     Your task: assign each candidate a relevance score from 0 to 100, where:
       100 = perfectly relevant (same physics, same dimension, same field types)
       0   = completely irrelevant
-    
+
+    Prioritise: problem_type (shape vs topology optimisation), dimension,
+    field types and number of fields, linear vs nonlinear, physics domain
+    (elasticity, diffusion, thermal, fluid, ...), mesh complexity (number
+    of labels), number of computational domains and interfaces.
+
     Return exactly one JSON object:
     {{"scores": {{"name1": 95, "name2": 70, ...}}, "reasoning": "one sentence"}}
     Score every candidate — do not omit any.
 """
 
 _SCORER_USER = """\
-    Target problem:
-    {target_summary_json}
-    
-    Candidates to score:
-    {shortlist_json}
-    
+    Target problem (initial.json + mesh.json):
+    {target_json}
+
+    Candidate examples (initial.json + mesh.json each):
+    {candidates_json}
+
     Return the scoring JSON.
 """
 
 
-# ======================================================================
-# main entry point
-# ======================================================================
+def _load_candidate_specs(agent, examples_dir: Path) -> list:
+    """Load the FULL initial/mesh specs of every example folder.
 
+    Missing JSONs are generated via Initialization's spec loop (a
+    safeguard — Initialization normally produces them) and written back
+    so the next run finds them."""
+    from Initialization import collect_input_files, run_spec_generation
 
-def select_examples(
-    agent, problem_spec: dict, mesh_spec: dict = None, examples_dir: Path = None, trace: list = None
-) -> list[str]:
-    """
-    Multi-round LLM-based example selection.
-
-    Round 1 — per-batch filtering.  Then iterative reduction until the
-    shortlist fits within TOKEN_BUDGET_RATIO × MAX_INPUT_TOKENS (or
-    MAX_SELECTOR_ROUNDS is exhausted, in which case score-based trimming
-    kicks in).
-
-    If *trace* is provided (a list), each round's state is appended as a
-    dict ``{"round": N, "action": "...", "count": int, "names": [...]}``.
-    """
-    if examples_dir is None:
-        examples_dir = Path(__file__).resolve().parent.parent / "database" / "freefem_examples"
-
-    # Build target summary
-    ds = problem_spec.get("designed", {})
-    target = {
-        "problem_type": ds.get("problem_type", "?"),
-        "dimension": ds.get("dimension", "?"),
-        "fields": [
-            {"name": f.get("name"), "type": f.get("type"), "fe_space": f.get("fe_space")}
-            for f in ds.get("fields", [])
-        ],
-        "state_is_nonlinear": ds.get("state_is_nonlinear", False),
-        "num_constants": len(ds.get("constants", [])),
-        "num_domains": len(ds.get("domains", [])),
-        "num_interfaces": len(ds.get("interfaces", [])),
-    }
-    if mesh_spec:
-        mds = mesh_spec.get("designed", {})
-        target["mesh_labels"] = mds.get("labels_used", [])
-
-    target_json = json.dumps(target, ensure_ascii=False)
-
-    # Load all candidate summaries
-    all_candidates = load_example_summaries(examples_dir)
-    if not all_candidates:
-        warnings.warn("select_examples: no example summaries found")
-        return []
-
-    def _add_trace(round_num: int, action, names):
-        if trace is not None:
-            trace.append(
-                {"round": round_num, "action": action, "count": len(names), "names": list(names)}
-            )
-
-    # ── Round 1: per-batch filtering ──────────────────────────────────
-    batches = _build_batches(target_json, all_candidates)
-    shortlist = _run_round1(agent, target_json, batches)
-    _add_trace(1, f"Round 1 ({len(batches)} batch(es))", shortlist)
-    if not shortlist:
-        return []
-
-    # ── Iterative reduction: keep ranking until under TOKEN_BUDGET_RATIO × MAX ──
-    name_to_summary = {c["name"]: c for c in all_candidates}
-    # Round-1 output is raw LLM text — drop names that are not real
-    # example folders (the ranking rounds already filter; Round 1 did not).
-    shortlist = [n for n in shortlist if n in name_to_summary]
-    if not shortlist:
-        return []
-    token_budget = int(MAX_INPUT_TOKENS * TOKEN_BUDGET_RATIO)
-    round_num = 0
-
-    for round_num in range(MAX_SELECTOR_ROUNDS):
-        current_tokens = _estimate_tokens(
-            json.dumps([name_to_summary.get(n, {"name": n}) for n in shortlist], ensure_ascii=False)
-        )
-        if current_tokens <= token_budget:
-            # Verify with actual .py sizes (summary-JSON may undercount)
-            real_tokens = 0
-            for n in shortlist:
-                ex_dir = examples_dir / n
-                if not ex_dir.is_dir():
-                    continue
-                py_file = _first_py(ex_dir)
-                if py_file is not None:
-                    real_tokens += _estimate_tokens(
-                        py_file.read_text(encoding="utf-8", errors="replace")
-                    )
-            if real_tokens <= token_budget:
-                _add_trace(
-                    round_num + 2,
-                    f"Round {round_num + 2} — fits budget ({real_tokens} actual <= {token_budget})",
-                    shortlist,
-                )
-                break
-            _add_trace(
-                round_num + 2,
-                f"Round {round_num + 2} — JSON fits ({current_tokens}) but .py over ({real_tokens}), continuing",
-                shortlist,
-            )
-
-        shortlist_summaries = [name_to_summary[n] for n in shortlist if n in name_to_summary]
-        if not shortlist_summaries:
-            break
-
-        prompt_list = [
-            {"role": "system", "content": _RANKER_SYSTEM},
-            {"role": "user", "content": _RANKER_USER},
-        ]
-        agent.set_prompt_list(prompt_list)
-        raw = agent.invoke(
-            {
-                "target_summary_json": target_json,
-                "shortlist_json": json.dumps(shortlist_summaries, ensure_ascii=False),
-            }
-        )
+    candidates = []
+    if not examples_dir.is_dir():
+        warnings.warn(f"select_examples: examples directory {examples_dir} not found.")
+        return candidates
+    for folder in sorted(examples_dir.iterdir()):
+        if not folder.is_dir():
+            continue
+        # temp/ is the pipeline's staged-run scratch inside a case
+        # folder — never an example candidate (it lacks the spec JSONs
+        # and would trigger the on-the-spot safeguard generation).
+        if folder.name == "temp":
+            continue
+        init_p, mesh_p = folder / "initial.json", folder / "mesh.json"
         try:
-            result = json.loads(parser_json(raw))
-            if not isinstance(result, dict):
-                # A JSON array / null passes json.loads but has no
-                # .get — warn and stop the reduction like the sibling
-                # guards in _run_round1.
+            if init_p.exists() and mesh_p.exists():
+                initial = json.loads(init_p.read_text(encoding="utf-8"))
+                mesh = json.loads(mesh_p.read_text(encoding="utf-8"))
+            else:
                 warnings.warn(
-                    "select_examples reduction round returned "
-                    f"non-object JSON ({type(result).__name__}); stopping."
+                    f"select_examples: {folder.name} lacks initial.json / "
+                    f"mesh.json — generating via Initialization (safeguard)."
                 )
-                break
-            new_shortlist = [n for n in result.get("selected", []) if n in set(shortlist)]
-            if not new_shortlist:
-                break
-            if new_shortlist == shortlist:
-                break
-            shortlist = new_shortlist
-            _add_trace(round_num + 2, f"Round {round_num + 2} — re-rank ({len(shortlist)} kept)", shortlist)
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
-            warnings.warn(f"select_examples reduction round failed: {e}")
-            break
-
-    if round_num == MAX_SELECTOR_ROUNDS - 1:
-        still = _estimate_tokens(
-            json.dumps([name_to_summary.get(n, {"name": n}) for n in shortlist], ensure_ascii=False)
-        )
-        if still > token_budget:
-            warnings.warn(
-                f"select_examples: still over token budget after {MAX_SELECTOR_ROUNDS} rounds "
-                f"({still} > {token_budget}).  Switching to score-based trimming."
-            )
-            shortlist = _score_and_trim(
-                agent, target_json, shortlist, name_to_summary, examples_dir, token_budget
-            )
-            _add_trace(round_num + 2, "Score round — trimmed to budget", shortlist)
-
-    # ── Final safety trim ──────────────────────────────────────────────
-    final = _trim_by_tokens(shortlist, examples_dir)
-    if final != shortlist:
-        _add_trace(round_num + 2, "Final hard trim", final)
-    return final
-
-
-# ======================================================================
-# internal helpers
-# ======================================================================
+                inputs = collect_input_files(folder)
+                if not inputs:
+                    warnings.warn(
+                        f"select_examples: {folder.name} has no input files "
+                        f"— skipped."
+                    )
+                    continue
+                specs = run_spec_generation(
+                    agent, inputs, problem_name=folder.name, output_dir=folder
+                )
+                initial = specs.get("initial") or {}
+                mesh = specs.get("mesh") or {}
+                if (specs.get("_passed") is not True
+                        or not initial.get("designed")
+                        or not mesh.get("designed")):
+                    warnings.warn(
+                        f"select_examples: {folder.name} spec generation "
+                        f"failed — skipped."
+                    )
+                    continue
+                init_p.write_text(
+                    json.dumps(initial, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+                mesh_p.write_text(
+                    json.dumps(mesh, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+        except Exception as e:
+            warnings.warn(f"select_examples: {folder.name} specs unusable: {e}")
+            continue
+        candidates.append({"name": folder.name, "initial": initial, "mesh": mesh})
+    return candidates
 
 
-def _build_batches(target_json: str, candidates: list[dict]) -> list[list[dict]]:
-    """Split *candidates* into batches that each fit within MAX_INPUT_TOKENS."""
+def _build_batches(target_json: str, candidates: list) -> list:
+    """Split *candidates* into batches that each fit within
+    MAX_INPUT_TOKENS (the target JSON rides along in every batch)."""
     target_tokens = _estimate_tokens(target_json)
     batches = []
     current_batch = []
@@ -372,143 +168,168 @@ def _build_batches(target_json: str, candidates: list[dict]) -> list[list[dict]]
     return batches
 
 
-def _run_round1(agent, target_json: str, batches: list[list[dict]]) -> list[str]:
-    """Run first-pass selection on each batch; return deduplicated names."""
-    all_selected = []
-    for batch in batches:
-        candidates_json = json.dumps(batch, ensure_ascii=False)
-        prompt_list = [
-            {"role": "system", "content": _SELECTOR_SYSTEM},
-            {"role": "user", "content": _SELECTOR_USER},
-        ]
-        agent.set_prompt_list(prompt_list)
-        raw = agent.invoke(
-            {
-                "target_summary_json": target_json,
-                "candidates_json": candidates_json,
-            }
-        )
-        try:
-            result = json.loads(parser_json(raw))
-            if not isinstance(result, dict):
-                warnings.warn(
-                    f"select_examples round-1 returned non-object JSON "
-                    f"({type(result).__name__}) — skipping this batch."
-                )
-                continue
-            selected = result.get("selected", [])
-            if isinstance(selected, list):
-                all_selected.extend(selected)
-            else:
-                warnings.warn(
-                    f"select_examples round-1 'selected' is not a list "
-                    f"({type(selected).__name__}) — skipping this batch."
-                )
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
-            warnings.warn(f"select_examples round-1 JSON parse failed: {e}")
-
-    seen = set()
-    unique = []
-    for name in all_selected:
-        if name not in seen:
-            seen.add(name)
-            unique.append(name)
-    return unique
-
-
-def _score_and_trim(
-    agent,
-    target_json: str,
-    shortlist: list[str],
-    name_to_summary: dict,
-    examples_dir: Path,
-    token_budget: int,
-) -> list[str]:
-    """
-    Let LLM score each candidate 0-100, then keep highest scores within budget.
-
-    Token budget is checked against actual .py file sizes, not summaries.
-    """
-    shortlist_summaries = [name_to_summary[n] for n in shortlist if n in name_to_summary]
-    if not shortlist_summaries:
-        return shortlist
-
-    prompt_list = [
+def _score_batch(agent, target_json: str, batch: list) -> dict:
+    """One scoring call on a batch — returns {name: score}; empty dict
+    on any failure (that batch then simply contributes no candidates)."""
+    candidates_json = json.dumps(batch, ensure_ascii=False)
+    agent.set_prompt_list([
         {"role": "system", "content": _SCORER_SYSTEM},
         {"role": "user", "content": _SCORER_USER},
-    ]
-    agent.set_prompt_list(prompt_list)
+    ])
     raw = agent.invoke(
         {
-            "target_summary_json": target_json,
-            "shortlist_json": json.dumps(shortlist_summaries, ensure_ascii=False),
+            "target_json": target_json,
+            "candidates_json": candidates_json,
         }
     )
-
     try:
         result = json.loads(parser_json(raw))
-        if not isinstance(result, dict):
-            warnings.warn(
-                f"score_and_trim: non-object JSON ({type(result).__name__}) — "
-                f"keeping the full shortlist."
-            )
-            return shortlist
-        scores = result.get("scores", {})
-        if not isinstance(scores, dict):
-            warnings.warn(
-                f"score_and_trim: scores is not an object ({type(scores).__name__}) — "
-                f"keeping the full shortlist."
-            )
-            return shortlist
-        # The scorer is instructed to score EVERY candidate; a partial
-        # dict silently drops the unscored ones — surface it instead.
-        unscored = sorted(set(shortlist) - set(scores))
-        if unscored:
-            warnings.warn(
-                f"score_and_trim: {len(unscored)} candidate(s) returned without a "
-                f"score ({unscored}) — they are dropped from the selection."
-            )
-        sorted_names = sorted(
-            (n for n in scores if n in shortlist),
-            key=lambda n: scores.get(n, 0),
-            reverse=True,
+    except Exception as e:
+        warnings.warn(f"select_examples scoring JSON parse failed: {e}")
+        return {}
+    if not isinstance(result, dict) or not isinstance(result.get("scores"), dict):
+        warnings.warn(
+            f"select_examples scoring returned unusable result "
+            f"({type(result).__name__}) — skipping this batch."
         )
-        trimmed = []
-        total_tokens = 0
-        for name in sorted_names:
-            ex_dir = examples_dir / name
-            py_file = _first_py(ex_dir) if ex_dir.is_dir() else None
-            c_tokens = (
-                _estimate_tokens(py_file.read_text(encoding="utf-8", errors="replace"))
-                if py_file
-                else 0
-            )
-            if total_tokens + c_tokens > token_budget:
-                break
-            trimmed.append(name)
-            total_tokens += c_tokens
-        return trimmed
-    except (json.JSONDecodeError, KeyError, TypeError) as e:
-        warnings.warn(f"score_and_trim failed: {e}")
-        return shortlist
+        return {}
+    scores = result["scores"]
+    out = {}
+    for name, score in scores.items():
+        try:
+            out[str(name)] = float(score)
+        except (TypeError, ValueError):
+            pass
+    missing = sorted({c["name"] for c in batch} - set(out))
+    if missing:
+        warnings.warn(
+            f"select_examples: {len(missing)} candidate(s) returned without "
+            f"a score ({missing}) — they are dropped."
+        )
+    return out
 
 
-def _trim_by_tokens(names: list[str], examples_dir: Path) -> list[str]:
-    """Keep only the first N examples whose full .py fits in
-    TOKEN_BUDGET_RATIO × MAX_INPUT_TOKENS."""
+# ======================================================================
+# main entry point
+# ======================================================================
+
+
+def select_examples(
+    agent, problem_spec: dict, mesh_spec: dict = None,
+    examples_dir: Path = None, trace: list = None,
+) -> list:
+    """
+    Single-round LLM example selection.
+
+    Every candidate (full initial.json + mesh.json) is scored 0-100 in
+    ONE scoring round (batched by MAX_INPUT_TOKENS when needed);
+    candidates at or above configs.EXAMPLE_SCORE_THRESHOLD are kept,
+    best first, until the NEXT example's full .py would exceed
+    TOKEN_BUDGET_RATIO x MAX_INPUT_TOKENS — never truncating an example.
+
+    If *trace* is provided (a list), the selection state is appended as
+    a dict ``{"round": N, "action": "...", "count": int, "names": [...]}``.
+    """
+    if examples_dir is None:
+        examples_dir = Path(__file__).resolve().parent.parent / "database" / "freefem_examples"
+
+    target_json = json.dumps(
+        {"initial": problem_spec, "mesh": mesh_spec or {}},
+        ensure_ascii=False,
+    )
+
+    candidates = _load_candidate_specs(agent, examples_dir)
+    if not candidates:
+        warnings.warn("select_examples: no candidate specs found")
+        return []
+
+    batches = _build_batches(target_json, candidates)
+    scores = {}
+    for bi, batch in enumerate(batches):
+        set_label(
+            agent,
+            f"Generation/select_examples scoring batch {bi + 1}/{len(batches)}",
+        )
+        scores.update(_score_batch(agent, target_json, batch))
+
+    qualified = sorted(
+        (n for n in scores if scores[n] >= EXAMPLE_SCORE_THRESHOLD),
+        key=lambda n: scores[n],
+        reverse=True,
+    )
+    if trace is not None:
+        trace.append(
+            {
+                "round": 1,
+                "action": (
+                    f"Scoring ({len(batches)} batch(es)) — "
+                    f"{len(qualified)} above threshold {EXAMPLE_SCORE_THRESHOLD}"
+                ),
+                "count": len(qualified),
+                "names": list(qualified),
+            }
+        )
+
+    # Pack the best first, by the FULL .py size of each example, until
+    # the next one would not fit — never truncate an example.
     token_budget = int(MAX_INPUT_TOKENS * TOKEN_BUDGET_RATIO)
-    trimmed = []
-    total_tokens = 0
-    for name in names:
+    picked = []
+    total = 0
+    for name in qualified:
         ex_dir = examples_dir / name
         py_file = _first_py(ex_dir) if ex_dir.is_dir() else None
-        if py_file:
-            tokens = _estimate_tokens(py_file.read_text(encoding="utf-8", errors="replace"))
-            if total_tokens + tokens > token_budget:
-                break
-            total_tokens += tokens
-        trimmed.append(name)
-    return trimmed
+        c_tokens = (
+            _estimate_tokens(py_file.read_text(encoding="utf-8", errors="replace"))
+            if py_file
+            else 0
+        )
+        if total + c_tokens > token_budget:
+            break
+        picked.append(name)
+        total += c_tokens
+
+    # Unless the database is EMPTY, never return an empty selection:
+    # force-pick the highest-scoring example (even below threshold) —
+    # the coder always gets at least one reference.
+    if not picked and candidates:
+        if scores:
+            best = max(scores, key=scores.get)
+            warnings.warn(
+                f"select_examples: nothing reached threshold "
+                f"{EXAMPLE_SCORE_THRESHOLD} — force-selecting the "
+                f"highest-scoring example '{best}' ({scores[best]})."
+            )
+            picked = [best]
+        else:
+            picked = [candidates[0]["name"]]
+            warnings.warn(
+                f"select_examples: scoring returned no scores — "
+                f"force-selecting '{picked[0]}'."
+            )
+        if trace is not None:
+            trace.append(
+                {
+                    "round": 1,
+                    "action": "Force-selected (empty selection is never "
+                              "returned while the database has examples)",
+                    "count": len(picked),
+                    "names": list(picked),
+                }
+            )
+
+    if trace is not None:
+        trace.append(
+            {
+                "round": 1,
+                "action": (
+                    f"Packed {len(picked)} within budget "
+                    f"({total} of {token_budget} tokens)"
+                ),
+                "count": len(picked),
+                "names": list(picked),
+            }
+        )
+    return picked
 
 
 # ======================================================================
@@ -516,7 +337,7 @@ def _trim_by_tokens(names: list[str], examples_dir: Path) -> list[str]:
 # ======================================================================
 
 
-def load_selected_examples(selected_names: list[str], examples_dir: Path = None) -> list[dict]:
+def load_selected_examples(selected_names: list, examples_dir: Path = None) -> list:
     """Return full ``{"name": ..., "py": ...}`` dicts for *selected_names*."""
     if examples_dir is None:
         examples_dir = Path(__file__).resolve().parent.parent / "database" / "freefem_examples"
@@ -550,7 +371,7 @@ if __name__ == "__main__":
 
     spec_files = sorted(results_dir.glob("*/initial.json"))
     if not spec_files:
-        print("No results/*/initial.json found. Run problem_parser first.")
+        print("No results/*/initial.json found. Run `python main.py` first.")
         sys.exit(1)
 
     print(f"{'=' * 70}")
@@ -582,10 +403,9 @@ if __name__ == "__main__":
             f.write("\n".join(selected) + "\n")
 
         ds = problem_spec.get("designed", {})
-        rounds = len(trace)
         print(
             f"    type={ds.get('problem_type', '?')}, {ds.get('dimension', '?')}D, "
-            f"nonlinear={ds.get('state_is_nonlinear', False)}, rounds={rounds}, final={len(selected)} examples"
+            f"nonlinear={ds.get('state_is_nonlinear', False)}, final={len(selected)} examples"
         )
 
     # ── detailed trace table ──
@@ -594,15 +414,15 @@ if __name__ == "__main__":
     print(f"{'=' * 100}")
     for name, trace, selected in all_traces:
         print(f"\n-- {name} --")
-        print(f"  {'Round':<34} | {'Action':<42} | {'N':<4} | Names")
-        print(f"  {'-' * 34}|{'-' * 42}|{'-' * 4}|{'-' * 40}")
-        for i, t in enumerate(trace):
-            act = t["action"][:40]
+        print(f"  {'Round':<8} | {'Action':<56} | {'N':<4} | Names")
+        print(f"  {'-' * 8}|{'-' * 56}|{'-' * 4}|{'-' * 40}")
+        for t in trace:
+            act = t["action"][:54]
             n = t["count"]
             names_str = ", ".join(t["names"][:4])
             if len(t["names"]) > 4:
                 names_str += f", ... (+{len(t['names']) - 4})"
-            print(f"  {str(i + 1):<34} | {act:<42} | {n:<4} | {names_str}")
-        print(f"  {'':>82} | Final: {', '.join(selected)}")
+            print(f"  {str(t['round']):<8} | {act:<56} | {n:<4} | {names_str}")
+        print(f"  {'':>70} | Final: {', '.join(selected)}")
 
     print("\nDone. Saved to results/*/examples.txt")

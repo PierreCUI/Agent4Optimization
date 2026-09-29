@@ -1,0 +1,520 @@
+{
+  "extracted": {
+    "problem_type": "topology_optimization",
+    "problem_type_source": "extracted",
+    "problem_name": "linearElasticityTarget",
+    "problem_name_source": "extracted",
+    "dimension": 2,
+    "dimension_source": "extracted",
+    "is_nonlinear": false,
+    "is_nonlinear_source": "extracted",
+    "domain_name": "D",
+    "domain_name_source": "extracted",
+    "boundaries": [
+      {
+        "name": "Gamma_4",
+        "definition": "u = 0 on Gamma_4",
+        "kind": "Dirichlet",
+        "mesh_label": "4",
+        "source": "extracted",
+        "design_role": null
+      }
+    ],
+    "mesh_labels_used": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "10"
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "\\mathbf{u}",
+        "type": "vector",
+        "fe_space": "P2",
+        "domain": "D",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "4"
+        ],
+        "source": "extracted"
+      },
+      {
+        "name": "u_tilde",
+        "latex": "\\tilde{\\mathbf{u}}",
+        "type": "vector",
+        "fe_space": "P2",
+        "domain": "D",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "4"
+        ],
+        "source": "extracted"
+      }
+    ],
+    "test_functions": [
+      {
+        "name": "delta_u",
+        "fe_space": "P2",
+        "domain": "D",
+        "source": "extracted"
+      }
+    ],
+    "constants": [
+      {
+        "name": "nu",
+        "latex": "\\nu",
+        "value": "0.3",
+        "description": "Poisson's ratio",
+        "unit": "-",
+        "source": "extracted"
+      },
+      {
+        "name": "E",
+        "latex": "E",
+        "value": "2.00e+03",
+        "description": "Young's modulus",
+        "unit": "\\frac{N}{m^2}",
+        "source": "extracted"
+      },
+      {
+        "name": "c",
+        "latex": "c",
+        "value": "1.00e+10",
+        "description": "spring stiffness",
+        "unit": "-",
+        "source": "extracted"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": "-10",
+        "description": "vertical load component",
+        "unit": "\\frac{N}{m^2}",
+        "source": "extracted"
+      }
+    ],
+    "characteristic_functions": [
+      {
+        "name": "chi",
+        "latex": "\\raisebox{\\depth}{$\\chi$}",
+        "strong_value": "1",
+        "weak_value": "1/100",
+        "condition": "chi = 1 if phi < 0 and chi = 1/100 if phi >= 0",
+        "source": "extracted"
+      },
+      {
+        "name": "chi2",
+        "latex": "\\raisebox{\\depth}{$\\chi_2$}",
+        "strong_value": "1",
+        "weak_value": "0",
+        "condition": "chi_2 = 1 if phi < 0 and chi_2 = 0 if phi >= 0",
+        "source": "extracted"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "mu",
+        "latex": "\\mu = \\frac{E}{2(\\nu+1)}",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda = -\\frac{E\\nu}{(\\nu+1)(2\\nu-1)}",
+        "source": "extracted"
+      },
+      {
+        "name": "sigma",
+        "latex": "\\pmb\\sigma(\\mathbf{u}) = \\chi\\left(\\mathbf{I}\\lambda\\operatorname{tr}(\\pmb\\varepsilon(\\mathbf{u})) + 2\\mu\\pmb\\varepsilon(\\mathbf{u})\\right)",
+        "source": "extracted"
+      },
+      {
+        "name": "epsilon",
+        "latex": "\\pmb\\varepsilon(\\mathbf{u}) = \\frac{\\nabla\\mathbf{u} + \\nabla\\mathbf{u}^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "J",
+        "latex": "J(\\mathbf{u}) = \\int_D \\chi_2\\left(-0.1 + 0.02\\left(X(x)+0.5+(\\mathbf{e}_x\\cdot\\mathbf{u})\\right)^2 + \\left(Y(x)-0.5+(\\mathbf{e}_y\\cdot\\mathbf{u})\\right)^2\\right)\\det(\\mathbf{I}+\\nabla\\mathbf{u})\\,dx",
+        "source": "extracted"
+      },
+      {
+        "name": "X",
+        "latex": "X(x) = x",
+        "source": "extracted"
+      },
+      {
+        "name": "Y",
+        "latex": "Y(x) = y",
+        "source": "extracted"
+      },
+      {
+        "name": "dJ_adjoint",
+        "latex": "\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}J(\\delta\\mathbf{u},\\mathbf{u}) = \\int_D \\chi_2\\left(\\left(0.04\\left(X+0.5+\\mathbf{e}_x\\cdot\\mathbf{u}\\right)^2(\\mathbf{e}_x\\cdot\\delta\\mathbf{u})(X+0.5+\\mathbf{e}_x\\cdot\\mathbf{u})^{-1} + 2\\left(Y-0.5+\\mathbf{e}_y\\cdot\\mathbf{u}\\right)^2(\\mathbf{e}_y\\cdot\\delta\\mathbf{u})(Y-0.5+\\mathbf{e}_y\\cdot\\mathbf{u})^{-1}\\right)\\det(\\mathbf{I}+\\nabla\\mathbf{u}) + \\left(-0.1+0.02\\left(X+0.5+\\mathbf{e}_x\\cdot\\mathbf{u}\\right)^2+\\left(Y-0.5+\\mathbf{e}_y\\cdot\\mathbf{u}\\right)^2\\right)\\det(\\mathbf{I}+\\nabla\\mathbf{u})\\operatorname{tr}\\left((\\mathbf{I}+\\nabla\\mathbf{u})^{-1}\\cdot\\nabla\\delta\\mathbf{u}\\right)\\right)dx",
+        "source": "extracted"
+      },
+      {
+        "name": "V_sigma",
+        "latex": "\\mathcal{V}(\\pmb\\sigma) = \\chi\\left(\\mathbf{I}\\lambda\\operatorname{tr}(\\mathcal{V}(\\pmb\\varepsilon)) + 2\\mu\\mathcal{V}(\\pmb\\varepsilon)\\right)",
+        "source": "extracted"
+      },
+      {
+        "name": "V_epsilon",
+        "latex": "\\mathcal{V}(\\pmb\\varepsilon) = \\frac{(\\nabla\\mathbf{u}\\cdot\\mathbf{F}^{-1}) + (\\nabla\\mathbf{u}\\cdot\\mathbf{F}^{-1})^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "V_J",
+        "latex": "\\mathcal{V}(J) = \\int_D \\chi_2\\det\\mathbf{F}(t)\\left(-0.1+0.02\\left(X(T_t(x))+0.5+\\mathbf{e}_x\\cdot\\mathbf{u}\\right)^2+\\left(Y(T_t(x))-0.5+\\mathbf{e}_y\\cdot\\mathbf{u}\\right)^2\\right)\\det\\left(\\mathbf{I}+\\nabla\\mathbf{u}\\cdot\\mathbf{F}^{-1}\\right)\\,dx",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_sigma",
+        "latex": "\\partial_t\\pmb\\sigma(\\mathbf{V},\\mathbf{u}) = \\chi\\left(\\mathbf{I}\\lambda\\operatorname{tr}(\\partial_t\\pmb\\varepsilon(\\mathbf{V},\\mathbf{u})) + 2\\mu\\partial_t\\pmb\\varepsilon(\\mathbf{V},\\mathbf{u})\\right)",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_epsilon",
+        "latex": "\\partial_t\\pmb\\varepsilon(\\mathbf{V},\\mathbf{u}) = -\\frac{(\\nabla\\mathbf{u}\\cdot\\nabla\\mathbf{V}) + (\\nabla\\mathbf{u}\\cdot\\nabla\\mathbf{V})^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_J",
+        "latex": "\\partial_t J(\\mathbf{V},\\mathbf{u}) = \\int_D \\chi_2\\left(\\operatorname{div}\\mathbf{V}\\left(-0.1+0.02\\left(X+0.5+\\mathbf{e}_x\\cdot\\mathbf{u}\\right)^2+\\left(Y-0.5+\\mathbf{e}_y\\cdot\\mathbf{u}\\right)^2\\right)\\det(\\mathbf{I}+\\nabla\\mathbf{u}) + \\left(0.04(\\nabla X\\cdot\\mathbf{V})(X+0.5+\\mathbf{e}_x\\cdot\\mathbf{u}) + 2(\\nabla Y\\cdot\\mathbf{V})(Y-0.5+\\mathbf{e}_y\\cdot\\mathbf{u})\\right)\\det(\\mathbf{I}+\\nabla\\mathbf{u}) + \\left(-0.1+0.02\\left(X+0.5+\\mathbf{e}_x\\cdot\\mathbf{u}\\right)^2+\\left(Y-0.5+\\mathbf{e}_y\\cdot\\mathbf{u}\\right)^2\\right)\\det(\\mathbf{I}+\\nabla\\mathbf{u})\\operatorname{tr}\\left(-(\\mathbf{I}+\\nabla\\mathbf{u})^{-1}\\cdot(\\nabla\\mathbf{u}\\cdot\\nabla\\mathbf{V})\\right)\\right)dx",
+        "source": "extracted"
+      },
+      {
+        "name": "G",
+        "latex": "\\mathcal{G}(t,[\\mathbf{u}]^L,[\\delta\\mathbf{u}]^L) = \\mathcal{V}(J) + \\int_{\\partial D} c\\det\\mathbf{F}(t)\\sqrt{(\\mathbf{n}\\cdot\\mathbf{F}^{-1}(t))\\cdot(\\mathbf{n}\\cdot\\mathbf{F}^{-1}(t))}(\\mathbf{u}\\cdot\\delta\\mathbf{u})\\,ds + \\int_D \\det\\mathbf{F}(t)\\left(\\mathcal{V}(\\pmb\\sigma):(\\nabla\\delta\\mathbf{u}\\cdot\\mathbf{F}^{-1}(t))\\right)dx - \\int_D f\\chi_2\\det\\mathbf{F}(t)(\\mathbf{e}_y\\cdot\\delta\\mathbf{u})\\,dx",
+        "source": "extracted"
+      },
+      {
+        "name": "T_t",
+        "latex": "\\mathbf{x} = T_t(\\mathbf{X}) = \\mathbf{X} + t\\mathbf{V}(\\mathbf{X})",
+        "source": "extracted"
+      }
+    ],
+    "lagrangian": {
+      "objective": "J(\\mathbf{u})",
+      "state_equation": {
+        "description": "The state u in V_u is the solution of the linear problem",
+        "weak_form_lhs": "\\int_{\\partial D} c(\\mathbf{u}\\cdot\\delta\\mathbf{u})\\,ds_x - \\int_D f\\chi_2(\\mathbf{e}_y\\cdot\\delta\\mathbf{u})\\,dx + \\int_D (\\pmb\\sigma(\\mathbf{u}):\\nabla\\delta\\mathbf{u})\\,dx",
+        "weak_form_rhs": "0"
+      },
+      "adjoint_equation": "\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}J(\\delta\\mathbf{u},\\mathbf{u}) + \\int_{\\partial D} c(\\delta\\mathbf{u}\\cdot\\tilde{\\mathbf{u}})\\,ds_x + \\int_D (\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}\\pmb\\sigma(\\delta\\mathbf{u}):\\nabla\\tilde{\\mathbf{u}})\\,dx = 0",
+      "shape_derivative": "DJ(\\Omega)(\\mathbf{V}) = \\partial_t J(\\mathbf{V},\\mathbf{u}) + \\int_{\\partial D} c\\operatorname{div}\\mathbf{V}(\\mathbf{u}\\cdot\\tilde{\\mathbf{u}})\\,ds_x - \\int_{\\partial D} c(\\mathbf{n}\\cdot(\\mathbf{n}\\cdot\\nabla\\mathbf{V}))(\\mathbf{u}\\cdot\\tilde{\\mathbf{u}})\\,ds_x - \\int_D f\\chi_2\\operatorname{div}\\mathbf{V}(\\mathbf{e}_y\\cdot\\tilde{\\mathbf{u}})\\,dx + \\int_D \\operatorname{div}\\mathbf{V}(\\pmb\\sigma(\\mathbf{u}):\\nabla\\tilde{\\mathbf{u}}) + (\\partial_t\\pmb\\sigma(\\mathbf{V},\\mathbf{u}):\\nabla\\tilde{\\mathbf{u}}) - (\\pmb\\sigma(\\mathbf{u}):(\\nabla\\tilde{\\mathbf{u}}\\cdot\\nabla\\mathbf{V}))\\,dx",
+      "source": "extracted"
+    },
+    "extra_requirements": [],
+    "mesh_labels_used_source": "extracted"
+  },
+  "designed": {
+    "problem_type": "topology_optimization",
+    "problem_type_source": "extracted",
+    "problem_name": "linearElasticityTarget",
+    "problem_name_source": "extracted",
+    "dimension": 2,
+    "dimension_source": "extracted",
+    "state_is_nonlinear": false,
+    "state_is_nonlinear_source": "extracted",
+    "domain_name": "D",
+    "domain_name_source": "extracted",
+    "domain_description": "Rectangle [0,2] x [0,1] occupied by the level-set material field phi (solid where phi < 0), with a pre-cut square hole [0.2,0.8] x [0.2,0.8] whose boundary carries mesh label 10.",
+    "domain_description_source": "designed",
+    "domain_description_rationale": "Geometry read from mesh.txt borders; the source names only D.",
+    "boundaries": [
+      {
+        "name": "Gamma_4",
+        "definition": "u = 0 on Gamma_4",
+        "kind": "Dirichlet",
+        "design_role": "fixed",
+        "label": "4",
+        "source": "extracted"
+      },
+      {
+        "name": "Gamma_1",
+        "definition": "bottom edge y = 0, carries the distributed spring term int c (u.delta_u) ds of the state weak form",
+        "kind": "Robin",
+        "design_role": "design",
+        "label": "1",
+        "source": "designed",
+        "rationale": "Mesh label 1 is the bottom side; the weak form's boundary integral over dD acts on it as a Robin/spring condition."
+      },
+      {
+        "name": "Gamma_2",
+        "definition": "right edge x = 2, carries the distributed spring term int c (u.delta_u) ds of the state weak form",
+        "kind": "Robin",
+        "design_role": "design",
+        "label": "2",
+        "source": "designed",
+        "rationale": "Mesh label 2 is the right side; the dD spring integral acts on it, and Robin boundaries are design by convention."
+      },
+      {
+        "name": "Gamma_3",
+        "definition": "top edge y = 1, carries the distributed spring term int c (u.delta_u) ds of the state weak form",
+        "kind": "Robin",
+        "design_role": "design",
+        "label": "3",
+        "source": "designed",
+        "rationale": "Mesh label 3 is the top side; the dD spring integral acts on it, and Robin boundaries are design by convention."
+      },
+      {
+        "definition": "boundary of the pre-cut square hole, carries the same distributed spring term int c (u.delta_u) ds (dD includes the hole boundary)",
+        "kind": "Robin",
+        "label": "10",
+        "source": "designed",
+        "rationale": "dD includes the hole boundary, so the weak form acts on it; label 10 is a material boundary and carries no design role."
+      }
+    ],
+    "mesh_labels_used": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "10"
+    ],
+    "fields": [
+      {
+        "name": "u",
+        "latex": "\\mathbf{u}",
+        "type": "vector",
+        "fe_space": "P2",
+        "domain": "D",
+        "unit": "meter",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "4"
+        ],
+        "source": "extracted"
+      },
+      {
+        "name": "u_tilde",
+        "latex": "\\tilde{\\mathbf{u}}",
+        "type": "vector",
+        "fe_space": "P2",
+        "domain": "D",
+        "unit": "meter",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "4"
+        ],
+        "source": "extracted"
+      }
+    ],
+    "constants": [
+      {
+        "name": "nu",
+        "latex": "\\nu",
+        "value": "0.3",
+        "description": "Poisson's ratio",
+        "unit": "-",
+        "unit_source": "extracted",
+        "source": "extracted"
+      },
+      {
+        "name": "E",
+        "latex": "E",
+        "value": "2.00e+03",
+        "description": "Young's modulus",
+        "unit": "\\frac{N}{m^2}",
+        "unit_source": "extracted",
+        "source": "extracted"
+      },
+      {
+        "name": "c",
+        "latex": "c",
+        "value": "1.00e+10",
+        "description": "spring stiffness",
+        "unit": "-",
+        "unit_source": "extracted",
+        "source": "extracted"
+      },
+      {
+        "name": "f",
+        "latex": "f",
+        "value": "-10",
+        "description": "vertical load component",
+        "unit": "\\frac{N}{m^2}",
+        "unit_source": "extracted",
+        "source": "extracted"
+      }
+    ],
+    "characteristic_functions": [
+      {
+        "name": "chi",
+        "latex": "\\raisebox{\\depth}{$\\chi$}",
+        "strong_value": "1",
+        "weak_value": "1/100",
+        "condition": "chi = 1 if phi < 0 and chi = 1/100 if phi >= 0",
+        "source": "extracted"
+      },
+      {
+        "name": "chi2",
+        "latex": "\\raisebox{\\depth}{$\\chi_2$}",
+        "strong_value": "1",
+        "weak_value": "0",
+        "condition": "chi_2 = 1 if phi < 0 and chi_2 = 0 if phi >= 0",
+        "source": "extracted"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "mu",
+        "latex": "\\mu = \\frac{E}{2(\\nu+1)}",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda = -\\frac{E\\nu}{(\\nu+1)(2\\nu-1)}",
+        "source": "extracted"
+      },
+      {
+        "name": "sigma",
+        "latex": "\\pmb\\sigma(\\mathbf{u}) = \\chi\\left(\\mathbf{I}\\lambda\\operatorname{tr}(\\pmb\\varepsilon(\\mathbf{u})) + 2\\mu\\pmb\\varepsilon(\\mathbf{u})\\right)",
+        "source": "extracted"
+      },
+      {
+        "name": "epsilon",
+        "latex": "\\pmb\\varepsilon(\\mathbf{u}) = \\frac{\\nabla\\mathbf{u} + \\nabla\\mathbf{u}^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "J",
+        "latex": "J(\\mathbf{u}) = \\int_D \\chi_2\\left(-0.1 + 0.02\\left(X(x)+0.5+(\\mathbf{e}_x\\cdot\\mathbf{u})\\right)^2 + \\left(Y(x)-0.5+(\\mathbf{e}_y\\cdot\\mathbf{u})\\right)^2\\right)\\det(\\mathbf{I}+\\nabla\\mathbf{u})\\,dx",
+        "source": "extracted"
+      },
+      {
+        "name": "X",
+        "latex": "X(x) = x",
+        "source": "extracted"
+      },
+      {
+        "name": "Y",
+        "latex": "Y(x) = y",
+        "source": "extracted"
+      },
+      {
+        "name": "dJ_adjoint",
+        "latex": "\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}J(\\delta\\mathbf{u},\\mathbf{u}) = \\int_D \\chi_2\\left(\\left(0.04\\left(X+0.5+\\mathbf{e}_x\\cdot\\mathbf{u}\\right)^2(\\mathbf{e}_x\\cdot\\delta\\mathbf{u})(X+0.5+\\mathbf{e}_x\\cdot\\mathbf{u})^{-1} + 2\\left(Y-0.5+\\mathbf{e}_y\\cdot\\mathbf{u}\\right)^2(\\mathbf{e}_y\\cdot\\delta\\mathbf{u})(Y-0.5+\\mathbf{e}_y\\cdot\\mathbf{u})^{-1}\\right)\\det(\\mathbf{I}+\\nabla\\mathbf{u}) + \\left(-0.1+0.02\\left(X+0.5+\\mathbf{e}_x\\cdot\\mathbf{u}\\right)^2+\\left(Y-0.5+\\mathbf{e}_y\\cdot\\mathbf{u}\\right)^2\\right)\\det(\\mathbf{I}+\\nabla\\mathbf{u})\\operatorname{tr}\\left((\\mathbf{I}+\\nabla\\mathbf{u})^{-1}\\cdot\\nabla\\delta\\mathbf{u}\\right)\\right)dx",
+        "source": "extracted"
+      },
+      {
+        "name": "V_sigma",
+        "latex": "\\mathcal{V}(\\pmb\\sigma) = \\chi\\left(\\mathbf{I}\\lambda\\operatorname{tr}(\\mathcal{V}(\\pmb\\varepsilon)) + 2\\mu\\mathcal{V}(\\pmb\\varepsilon)\\right)",
+        "source": "extracted"
+      },
+      {
+        "name": "V_epsilon",
+        "latex": "\\mathcal{V}(\\pmb\\varepsilon) = \\frac{(\\nabla\\mathbf{u}\\cdot\\mathbf{F}^{-1}) + (\\nabla\\mathbf{u}\\cdot\\mathbf{F}^{-1})^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "T_t",
+        "latex": "\\mathbf{x} = T_t(\\mathbf{X}) = \\mathbf{X} + t\\mathbf{V}(\\mathbf{X})",
+        "source": "extracted"
+      },
+      {
+        "name": "F",
+        "latex": "\\mathbf{F}(t) = \\nabla T_t = \\mathbf{I} + t\\nabla\\mathbf{V}",
+        "source": "designed",
+        "rationale": "Deformation gradient of the shape-perturbation map T_t; F(t) is referenced by the kept expressions V_J and G but is not written out in the source."
+      },
+      {
+        "name": "V_J",
+        "latex": "\\mathcal{V}(J) = \\int_D \\chi_2\\det\\mathbf{F}(t)\\left(-0.1+0.02\\left(X(T_t(x))+0.5+\\mathbf{e}_x\\cdot\\mathbf{u}\\right)^2+\\left(Y(T_t(x))-0.5+\\mathbf{e}_y\\cdot\\mathbf{u}\\right)^2\\right)\\det\\left(\\mathbf{I}+\\nabla\\mathbf{u}\\cdot\\mathbf{F}^{-1}\\right)\\,dx",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_sigma",
+        "latex": "\\partial_t\\pmb\\sigma(\\mathbf{V},\\mathbf{u}) = \\chi\\left(\\mathbf{I}\\lambda\\operatorname{tr}(\\partial_t\\pmb\\varepsilon(\\mathbf{V},\\mathbf{u})) + 2\\mu\\partial_t\\pmb\\varepsilon(\\mathbf{V},\\mathbf{u})\\right)",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_epsilon",
+        "latex": "\\partial_t\\pmb\\varepsilon(\\mathbf{V},\\mathbf{u}) = -\\frac{(\\nabla\\mathbf{u}\\cdot\\nabla\\mathbf{V}) + (\\nabla\\mathbf{u}\\cdot\\nabla\\mathbf{V})^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_J",
+        "latex": "\\partial_t J(\\mathbf{V},\\mathbf{u}) = \\int_D \\chi_2\\left(\\operatorname{div}\\mathbf{V}\\left(-0.1+0.02\\left(X+0.5+\\mathbf{e}_x\\cdot\\mathbf{u}\\right)^2+\\left(Y-0.5+\\mathbf{e}_y\\cdot\\mathbf{u}\\right)^2\\right)\\det(\\mathbf{I}+\\nabla\\mathbf{u}) + \\left(0.04(\\nabla X\\cdot\\mathbf{V})(X+0.5+\\mathbf{e}_x\\cdot\\mathbf{u}) + 2(\\nabla Y\\cdot\\mathbf{V})(Y-0.5+\\mathbf{e}_y\\cdot\\mathbf{u})\\right)\\det(\\mathbf{I}+\\nabla\\mathbf{u}) + \\left(-0.1+0.02\\left(X+0.5+\\mathbf{e}_x\\cdot\\mathbf{u}\\right)^2+\\left(Y-0.5+\\mathbf{e}_y\\cdot\\mathbf{u}\\right)^2\\right)\\det(\\mathbf{I}+\\nabla\\mathbf{u})\\operatorname{tr}\\left(-(\\mathbf{I}+\\nabla\\mathbf{u})^{-1}\\cdot(\\nabla\\mathbf{u}\\cdot\\nabla\\mathbf{V})\\right)\\right)dx",
+        "source": "extracted"
+      },
+      {
+        "name": "G",
+        "latex": "\\mathcal{G}(t,[\\mathbf{u}]^L,[\\delta\\mathbf{u}]^L) = \\mathcal{V}(J) + \\int_{\\partial D} c\\det\\mathbf{F}(t)\\sqrt{(\\mathbf{n}\\cdot\\mathbf{F}^{-1}(t))\\cdot(\\mathbf{n}\\cdot\\mathbf{F}^{-1}(t))}(\\mathbf{u}\\cdot\\delta\\mathbf{u})\\,ds + \\int_D \\det\\mathbf{F}(t)\\left(\\mathcal{V}(\\pmb\\sigma):(\\nabla\\delta\\mathbf{u}\\cdot\\mathbf{F}^{-1}(t))\\right)dx - \\int_D f\\chi_2\\det\\mathbf{F}(t)(\\mathbf{e}_y\\cdot\\delta\\mathbf{u})\\,dx",
+        "source": "extracted"
+      }
+    ],
+    "lagrangian": {
+      "objective_name": "J",
+      "objective_description": "Least-squares mismatch between the deformed configuration and the target metric built from X(x)=x and Y(x)=y, weighted by 0.02 in x and 1 in y, integrated over the solid phase chi_2.",
+      "objective_terms": "\\int_D \\chi_2\\left(-0.1 + 0.02\\left(x+0.5+u_x\\right)^2 + \\left(y-0.5+u_y\\right)^2\\right)\\det(\\mathbf{I}+\\nabla\\mathbf{u})\\,dx",
+      "objective_terms_source": "extracted",
+      "state_description": "Linear elasticity equilibrium of the displacement u: distributed spring (Robin) support of stiffness c on the whole boundary, vertical body force f*chi_2*e_y over the solid, and a clamp u = 0 on Gamma_4 carried by the field declaration.",
+      "state_weak_form_lhs": "int_{label 1} c (u.delta_u) ds + int_{label 2} c (u.delta_u) ds + int_{label 3} c (u.delta_u) ds + int_{label 10} c (u.delta_u) ds - int_D f*chi_2*(e_y.delta_u) dx + int_D (sigma(u):grad(delta_u)) dx",
+      "state_weak_form_lhs_source": "designed",
+      "state_weak_form_lhs_rationale": "Same terms as the source; the dD boundary integral is resolved to the concrete labels it acts on (delta_u vanishes on the Dirichlet labeled 4).",
+      "state_weak_form_rhs": "0",
+      "state_weak_form_rhs_source": "extracted",
+      "adjoint_equation": "partial_{(u,delta_u)}J(delta_u,u) + int_{label 1} c (delta_u.u_tilde) ds + int_{label 2} c (delta_u.u_tilde) ds + int_{label 3} c (delta_u.u_tilde) ds + int_{label 10} c (delta_u.u_tilde) ds + int_D (partial_{(u,delta_u)}sigma(delta_u):grad(u_tilde)) dx = 0",
+      "adjoint_equation_source": "designed",
+      "adjoint_equation_rationale": "Adjoint equation of the source with the dD integral resolved to labels 1,2,3,10.",
+      "shape_derivative": "DJ(Omega)(V) = partial_t J(V,u) + int_{label 1} c*div(V)*(u.u_tilde) ds + int_{label 2} c*div(V)*(u.u_tilde) ds + int_{label 3} c*div(V)*(u.u_tilde) ds + int_{label 10} c*div(V)*(u.u_tilde) ds - int_{label 1} c*(n.(n.grad(V)))*(u.u_tilde) ds - int_{label 2} c*(n.(n.grad(V)))*(u.u_tilde) ds - int_{label 3} c*(n.(n.grad(V)))*(u.u_tilde) ds - int_{label 10} c*(n.(n.grad(V)))*(u.u_tilde) ds - int_D f*chi_2*div(V)*(e_y.u_tilde) dx + int_D div(V)*(sigma(u):grad(u_tilde)) + (partial_t sigma(V,u):grad(u_tilde)) - (sigma(u):(grad(u_tilde).grad(V))) dx",
+      "shape_derivative_source": "designed",
+      "shape_derivative_rationale": "Source volume shape derivative with the boundary integrals split onto labels 1,2,3,10.",
+      "penalty_used": false,
+      "penalty_used_source": "designed",
+      "penalty_used_rationale": "The Dirichlet condition is single-valued (u = 0 on Gamma_4) and is enforced by the field declaration, so no 1e15 penalty term is needed.",
+      "check_units": true,
+      "check_units_source": "designed"
+    },
+    "optimization_config": {
+      "mesh_file": "mesh.txt",
+      "mesh_file_source": "extracted",
+      "hmin": 0.01,
+      "hmin_source": "designed",
+      "hmin_rationale": "Finer than the initial n=60 element size (~0.033) so that phase interfaces can resolve.",
+      "hmax": 0.05,
+      "hmax_source": "designed",
+      "hmax_rationale": "Coarse bound comparable to the initial 2x1 mesh spacing of n=60, adequate for the 0.6-wide hole and the trunk features.",
+      "diffusion": 0.001,
+      "diffusion_source": "designed",
+      "diffusion_rationale": "Small diffusive regularisation for a domain of size 2x1 that keeps the level set smooth without erasing features.",
+      "v0": 1.0,
+      "v0_source": "designed",
+      "v0_rationale": "Unit velocity normalisation matching the O(1) body-force scale f = 10 relative to E = 2e3.",
+      "iterations": 100,
+      "iterations_source": "designed",
+      "phi": "x - 0.7",
+      "phi_source": "designed",
+      "phi_rationale": "A single solid slab x < 0.7: the clamped Dirichlet edge Gamma_4 at x = 0 is solid along its entire length 0 <= y <= 1, and the solid occupies about 1.10 of the material area 1.64 (the 2x1 rectangle minus the 0.36 pre-cut hole), i.e. a solid fraction of roughly 67% inside the required 20-80% band. The void strip x > 0.7 and the part of the pre-cut hole [0.2,0.8]x[0.2,0.8] that lies in the solid remain material-free, and the solid stays connected through the x < 0.2 band.",
+      "boundary_labels": [
+        "1",
+        "2",
+        "3"
+      ],
+      "boundary_labels_source": "designed",
+      "boundary_labels_rationale": "Non-Dirichlet outer boundaries carrying the Robin spring term are the movable design boundaries.",
+      "fixed_labels": [
+        "4"
+      ],
+      "fixed_labels_source": "designed",
+      "fixed_labels_rationale": "Label 4 is the Dirichlet clamped edge and stays frozen.",
+      "show_weak_material": false,
+      "show_weak_material_source": "designed",
+      "source": "designed"
+    },
+    "extra_requirements": [],
+    "test_functions": [
+      {
+        "name": "delta_u",
+        "fe_space": "P2",
+        "domain": "D",
+        "source": "designed"
+      }
+    ]
+  }
+}

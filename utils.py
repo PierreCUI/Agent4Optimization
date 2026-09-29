@@ -46,7 +46,7 @@ def parser_json(text: str) -> str:
             return ""  # not JSON — an empty block with a language label
         return m.group(0)  # a JSON scalar payload on the marker line
 
-    text = re.sub(r"```([A-Za-z0-9_+-]*)[ \t]*```(?=\n|$)", _keep_json_label, text)
+    text = re.sub(r"```([A-Za-z0-9_+-]*)[ \t]*```(?=\n|$)", _keep_json_label, text)  # noqa: E501
     text = text.strip()
 
     def _clean_payload(s: str) -> str | None:
@@ -100,7 +100,7 @@ def code_masked_positions(text: str) -> set[int]:
     Quote-aware (backslash escapes and triple-quoted strings handled),
     so position-sensitive scans (finditer over code shapes) can skip
     text that is not real code.  Every call site that needs
-    ``setup_optimization``/``Lagrangian`` spans uses this to reject
+    ``setup_optimization`` argument spans uses this to reject
     comment/docstring mentions.
     """
     masked = set()

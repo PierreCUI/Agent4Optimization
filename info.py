@@ -31,14 +31,11 @@ class Info:
         self.generated_code: str = ""  # main.py content
 
         # ── static check ─────────────────────────────────────────────
-        self.fixed_code: str = ""  # code after auto_fix
-
-        # ── execution ─────────────────────────────────────────────
-        self.run_result: Optional[dict] = None  # latest run_problem() output
+        # (the static repair loop writes the fixed code straight into generated_code)
 
         # ── reflection ─────────────────────────────────────────────
         self.reflection_attempts: int = 0
-        self.reflection_history: list[dict] = []  # per-iteration records
+        self.repair_records: list[dict] = []  # round-0 console + per-round repair records
         self.reflection_status: str = "not_run"  # pass|give_up|give_up_max
 
         # ── results path ─────────────────────────────────────────────

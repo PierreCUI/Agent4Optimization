@@ -1,8 +1,13 @@
 # Claude Code workspace / wrappers
 .claude/
 .claude-deepseek.env
+.claude-deepseek-vision.env
 claude-deepseek.cmd
 claude-deepseek.ps1
+claude-deepseek-vision.cmd
+
+# Pipeline scratch
+temp/
 
 # IDE
 .idea/

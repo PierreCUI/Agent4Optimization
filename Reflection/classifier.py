@@ -1,7 +1,40 @@
-"""Two-level error classifier."""
+"""Coarse error classifier + deterministic fix-eligibility gates.
+
+Error taxonomy (the reflection loop's five categories):
+  1. syntax_error       — imports, call signatures/arguments, spelling
+                          and capitalisation, fixed contents
+                          (check_units / show_weak_material /
+                          iterations), the extracted/designed rules,
+                          and any other Python/FreeFEM-reported syntax
+                          problem.
+  2. formula_error      — every FORMULA: intermediate formulas, the J
+                          formula, the Lagrangian formulas, and the
+                          nonlinear formulas.
+  3. design_error       — design VALUES: physical-parameter numbers,
+                          Afac (ell), CharacteristicFunction values,
+                          phi, the three-way boundary labels, each
+                          boundary's physical properties (including
+                          the ScalarField/VectorField Dirichlet
+                          conditions and the pen penalty implementation
+                          — pen's EXISTENCE is design, its VALUE is the
+                          fixed convention 1e15), and the mesh border
+                          definitions.
+  4. fe_parameter_error — finite-element parameters: hmin/hmax/
+                          diffusion/v0, the mesh resolution, and each
+                          field's precision (P1/P2).
+  5. other_error        — the fallback.
+
+The model judges the category from the ERROR BEHAVIOUR (crash,
+non-convergence, oscillation, wrong result, degenerate result) plus ALL
+other information — there is NO fixed symptom-to-category wiring.
+Before the first repair round the reflector pre-computes which fix
+types are USABLE (have repair room under the extracted/designed rules)
+and the classification prompt shows ONLY the usable types.
+"""
 
 import re
 import warnings
+from typing import Optional
 
 # Shared by the reflector (which appends the header to the context) and
 # the classifier (which uses its presence as a hard filter) — one
@@ -18,54 +51,31 @@ MINTH_RENDER_SUMMARY_HEADER = "=== MinTh.vtu Render Summary ==="
 def _canonical_label(text: str) -> str:
     """Extract the single canonical keyword from an LLM label answer.
 
-    Accepts benign variants ("pass.", "Pass ✓", '"wrong_result"',
-    "Wrong Result"); a prose/refusal answer maps to "unknown" so the
-    caller's warning path fires instead of silently faking a value.
+    Accepts benign variants ("pass.", "Pass ✓", '"formula_error"');
+    a prose/refusal answer maps to "unknown" so the caller's warning
+    path fires instead of silently faking a value.
     """
     t = re.sub(r"[^a-z]+", "", text.strip().lower())
     # Pass verdict checked FIRST so a passing run whose justification
-    # mentions a failure word ("pass — not wrong_result") is never
-    # inverted into wrong_result by the keyword checks below.
+    # mentions a failure word is never inverted into an error category.
     if t == "pass" or t.startswith("pass"):
         return "pass"
-    # A CANONICAL LABEL WORD in the answer wins over any explanatory
-    # prose the model appended — "autofreefem_error, not converging" is
-    # an autofreefem_error, not a convergence diagnosis.  (Order: autofreefem
-    # before freefem — it contains it.  The natural phrasings
-    # "noconvergence"/"notconverge" are NOT label words — they live in
-    # the heuristic tier below.)
-    if "autofreefemerror" in t:
-        return "autofreefem_error"
-    if "freefemerror" in t:
-        return "freefem_error"
-    # wrongresult BEFORE nonconvergence: a reply carrying both canonical
-    # words ("wrong_result (non convergence)") must take the label the
-    # model actually answered, not the prose diagnosis
-    if "wrongresult" in t or "invalid" in t:
-        return "wrong_result"
-    if "nonconvergence" in t:
-        return "non_convergence"
-    if "hardware" in t:
-        return "hardware_limit"
-    # Word-bounded on the ORIGINAL text (t has the spaces stripped, so a
-    # word boundary there can never fire): "another"/"mother" in prose
-    # must not read as the "other" category.
-    if re.search(r"\bother\b", text.strip().lower()):
-        return "other"
-    # No canonical label word — keyword heuristics on the prose.
-    # Accept natural phrasings: "no convergence" -> noconvergence,
-    # "did/does not converge" -> ...notconverge, "failed to converge" /
-    # "convergence failure" -> converg+fail — all before the broad
-    # "fail" rule, which would steal them into wrong_result.
-    if (
-        "noconvergence" in t
-        or "notconverge" in t
-        or ("converg" in t and "fail" in t)
-        or ("converg" in t and "not" in t)
-    ):
-        return "non_convergence"
-    if "fail" in t:
-        return "wrong_result"
+    # A CANONICAL LABEL WORD wins over any explanatory prose.
+    if "wrongresult" in t:
+        return "wrong_result"  # quality-check contract label
+    if "syntaxerror" in t:
+        return "syntax_error"
+    if "formulaerror" in t:
+        return "formula_error"
+    if "designerror" in t:
+        return "design_error"
+    if "feparametererror" in t or "feparameter" in t:
+        return "fe_parameter_error"
+    if "othererror" in t:
+        return "other_error"
+    # NO prose heuristics — no keyword-to-category wiring: a reply
+    # without a canonical label word is "unknown" and the callers fall
+    # back to other_error uniformly.
     return "unknown"
 
 
@@ -75,22 +85,15 @@ def _canonical_label(text: str) -> str:
 
 
 def coarse_classify(
-    agent, problem_name: str, context_text: str, images=None, image_section: str = ""
+    agent, problem_name: str, context_text: str, images=None,
+    image_section: str = "", available_types: str = "",
 ) -> str:
     """
-    Classify the current problem state into one of 7 coarse categories.
+    Classify the current problem state into one of 6 categories.
 
-    Args:
-        agent: CodeAgent for LLM calls.
-        problem_name: Name of the problem.
-        context_text: Full working directory contents (text files only).
-        images: Optional PNG paths (iteration-label composite) for the
-                multimodal reflection loop.
-        image_section: Text describing the attached image(s).
-
-    Returns:
-        One of: pass, autofreefem_error, freefem_error,
-                non_convergence, wrong_result, hardware_limit, other.
+    *available_types* is the pre-computed list of USABLE error types
+    (the model must pick from it — the deterministic gates already
+    removed the types with no repair room).
     """
     from .prompts import CLASSIFY_COARSE_SYSTEM, CLASSIFY_COARSE_USER
 
@@ -101,425 +104,244 @@ def coarse_classify(
 
     agent.set_prompt_list(prompt_list)
     raw = agent.invoke_multimodal(
-        {"problem_name": problem_name, "context_text": context_text,
-         "image_section": image_section},
+        {
+            "problem_name": problem_name,
+            "context_text": context_text,
+            "image_section": image_section,
+            "available_types": available_types or "(all types usable)",
+        },
         images=images,
     )
 
     label = _canonical_label(raw)
     valid = [
         "pass",
-        "autofreefem_error",
-        "freefem_error",
-        "non_convergence",
-        "wrong_result",
-        "hardware_limit",
-        "other",
+        "syntax_error",
+        "formula_error",
+        "design_error",
+        "fe_parameter_error",
+        "other_error",
     ]
 
     if label not in valid:
         warnings.warn(
             f"coarse_classify: unknown label '{label}' (raw: {raw[:60]!r}). "
-            f"Falling back to 'other'."
+            f"Falling back to 'other_error'."
         )
-        label = "other"
+        label = "other_error"
 
     return label
 
 
 # ======================================================================
-# fine classification
+# deterministic fix-eligibility gates (no LLM calls)
+#
+# Before the FIRST repair round the reflector computes, for each fix
+# type, whether it has REPAIR ROOM under the extracted/designed rules:
+#   * syntax_fix / free_fix — always usable (the code itself is the
+#     subject; the fallback may touch anything).
+#   * formula_fix — usable while at least one formula part is DESIGNED
+#     (extracted formulas are ground truth).
+#   * design_fix — usable while at least one design VALUE is designed:
+#     physical constants, Afac (when ell is not extracted), the
+#     CharacteristicFunction values, phi, the boundary labels, a
+#     boundary's physical properties (incl. a field's designed
+#     Dirichlet condition and the pen-existence repair), or (when the
+#     mesh is not a provided/frozen one) the border definitions.
+#   * fe_param_fix — usable while at least one of hmin/hmax/diffusion/
+#     v0 is designed, or the mesh resolution is mutable, or a field's
+#     fe_space is designed.
 # ======================================================================
 
+# Designed keys whose NAME starts with one of these prefixes are
+# formula/model parts (they carry a <key>_source sibling).
+_FORMULA_PREFIXES = (
+    "objective",
+    "state_",
+    "adjoint",
+    "shape_derivative",
+    "newton",
+    "expression",
+    "characteristic",
+    "Lagrangian",   # canonical capitalised key (item 7)
+    "lagrangian",   # tolerated LLM casing variant (normalize renames it)
+    "is_nonlinear",
+)
 
-def fine_classify(
-    agent,
-    problem_name: str,
-    coarse: str,
-    main_py: str,
-    mesh_txt: str,
-    run_result_json: str,
-    objective_data: str,
-    convergence_data: str,
-    edp_code: str,
-    context_text: str = "",
-    images=None,
-    image_section: str = "",
-) -> str:
+# Numeric setup_optimization parameters that fe_param_fix may write.
+_FE_PARAM_KEYS = ("hmin", "hmax", "diffusion", "v0")
+
+# The phi key: current-format specs use "phi", older on-disk specs use
+# "level_set_initial".
+_PHI_KEYS = ("phi", "level_set_initial")
+
+
+def _source_of(mapping: dict, key: str) -> str:
+    """The source annotation of *key* in *mapping*.
+
+    Accepts the current per-key ``<key>_source`` sibling and the older
+    object-level ``source`` (both appear in on-disk specs).
     """
-    Diagnose the specific sub-category for a given coarse category.
+    return str(mapping.get(f"{key}_source", mapping.get("source", "designed")))
 
-    Args:
-        agent: CodeAgent for LLM calls.
-        problem_name: Name of the problem.
-        coarse: Coarse category from coarse_classify().
-        main_py: Current main.py content.
-        mesh_txt: Current mesh.txt content.
-        run_result_json: JSON string of run_result.
-        objective_data: Content of objective*.txt (or empty).
-        convergence_data: Content of convergenceShape*.txt (or empty).
-        edp_code: Content of generated .edp files (or empty).
-        context_text: Full context (for 'other' category).
 
-    Returns:
-        Sub-category label string.
+def _extracted_constant_names(spec: dict) -> set:
+    """Names (and latex names) of extracted constants — immutable."""
+    extracted = spec.get("extracted") or {}
+    names = set()
+    for c in extracted.get("constants") or []:
+        if not isinstance(c, dict):
+            continue
+        for k in ("name", "latex"):
+            if isinstance(c.get(k), str) and c[k]:
+                names.add(c[k])
+    return names
+
+
+def _designed_formula_part(spec: dict) -> bool:
+    """Whether any formula/model part is DESIGNED (replaceable)."""
+    designed = spec.get("designed") or {}
+    if not isinstance(designed, dict):
+        return False
+    for key, value in designed.items():
+        if key.endswith(("_source", "_rationale")):
+            continue
+        if value and key.startswith(_FORMULA_PREFIXES):
+            if _source_of(designed, key) == "designed":
+                return True
+    return False
+
+
+def available_fix_types(spec: dict, main_py: str, mesh_frozen: bool) -> dict:
+    """The pre-computed usable fix types (before the first repair round).
+
+    Returns ``{fix_type: (usable, reason)}`` — *reason* is a short
+    human-readable explanation (empty when usable).
     """
-    # Select the right prompt based on coarse category
-    if coarse == "autofreefem_error":
-        return _fine_classify_af(
-            agent,
-            problem_name,
-            main_py,
-            mesh_txt,
-            run_result_json,
-            objective_data,
-            convergence_data,
-            edp_code,
-            images=images,
-            image_section=image_section,
-        )
-    elif coarse == "freefem_error":
-        return _fine_classify_ff(
-            agent,
-            problem_name,
-            main_py,
-            mesh_txt,
-            run_result_json,
-            objective_data,
-            convergence_data,
-            edp_code,
-            images=images,
-            image_section=image_section,
-        )
-    elif coarse == "non_convergence":
-        return _fine_classify_conv(
-            agent,
-            problem_name,
-            main_py,
-            mesh_txt,
-            run_result_json,
-            objective_data,
-            convergence_data,
-            edp_code,
-            images=images,
-            image_section=image_section,
-        )
-    elif coarse == "wrong_result":
-        return _fine_classify_wrong(
-            agent,
-            problem_name,
-            main_py,
-            mesh_txt,
-            run_result_json,
-            objective_data,
-            convergence_data,
-            edp_code,
-            context_text=context_text,
-            images=images,
-            image_section=image_section,
-        )
-    elif coarse == "hardware_limit":
-        return _fine_classify_hw(
-            agent,
-            problem_name,
-            main_py,
-            mesh_txt,
-            run_result_json,
-            objective_data,
-            convergence_data,
-            edp_code,
-            images=images,
-            image_section=image_section,
-        )
-    elif coarse == "other":
-        return _fine_classify_other(
-            agent, problem_name, context_text, images=images, image_section=image_section
-        )
-    else:
-        # Defensive fallthrough: no fine label for this coarse category
-        # (e.g. "pass", which the reflection loop handles before this
-        # point) — reuse the coarse label as-is.
-        return coarse
-
-
-def _fine_payload(
-    coarse: str,
-    problem_name: str,
-    main_py: str,
-    mesh_txt: str,
-    run_result_json: str,
-    objective_data: str,
-    convergence_data: str,
-    edp_code: str,
-    context_text: str = "",
-    image_section: str = "",
-) -> dict:
-    """Build the invoke payload shared by the fine classifiers."""
-    payload = {
-        "problem_name": problem_name,
-        "coarse": coarse,
-        "run_result_json": run_result_json,
-        "main_py": main_py,
-        "mesh_txt": mesh_txt,
-        "objective_data": objective_data or "(not available)",
-        "convergence_data": convergence_data or "(not available)",
-        "edp_code": edp_code or "(not available)",
-        "image_section": image_section,
+    out = {
+        "syntax_fix": (True, ""),
+        "free_fix": (True, ""),
+        "formula_fix": (False, ""),
+        "design_fix": (False, ""),
+        "fe_param_fix": (False, ""),
     }
-    if context_text:
-        payload["context_text"] = context_text
-    return payload
+    if not isinstance(spec, dict):
+        return out
+    designed = spec.get("designed") or {}
+    opt = designed.get("optimization_config") or {}
 
+    # ── formula_fix ────────────────────────────────────────────────
+    if _designed_formula_part(spec):
+        out["formula_fix"] = (True, "")
 
-def _fine_run(
-    agent,
-    system: str,
-    user: str,
-    payload: dict,
-    valid: list,
-    fallback: str,
-    name: str,
-    images=None,
-) -> str:
-    """Invoke one fine-classification prompt and validate the label."""
-    agent.set_prompt_list(
-        [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ]
-    )
-    raw = agent.invoke_multimodal(payload, images=images)
-    # Same leniency as the coarse path: punctuation / whitespace variants
-    # of a label ("ff_syntax.", "newton-fail", "no minth vtu") must not
-    # silently re-target the fix onto the per-category default.
-    def _norm(s: str) -> str:
-        return re.sub(r"[\W]+", "", s.lower())
-
-    label = _norm(raw)
-    canonical = next((v for v in valid if _norm(v) == label), None)
-    if canonical is None:
-        warnings.warn(
-            f"fine_classify {name}: unknown label '{raw.strip()[:60]}'. "
-            f"Falling back to '{fallback}'."
-        )
-        label = fallback
+    # ── design_fix ─────────────────────────────────────────────────
+    reasons = []
+    hit = False
+    consts = designed.get("constants") or []
+    extracted_names = _extracted_constant_names(spec)
+    designed_const = False
+    for c in consts:
+        if not isinstance(c, dict):
+            continue
+        if str(c.get("source", "designed")) != "designed":
+            continue
+        name = c.get("name")
+        if name in extracted_names or c.get("latex") in extracted_names:
+            continue
+        designed_const = True
+        break
+    if designed_const:
+        hit = True
+    afac_free = not (extracted_names & {"ell", "Afac", "\\ell"}) \
+        and bool(re.search(r"\bAfac\s*=\s*Constant\s*\(", main_py))
+    if afac_free:
+        hit = True
+    chi = designed.get("characteristic_function")
+    if isinstance(chi, dict) and str(chi.get("source", "designed")) == "designed":
+        hit = True
+    for k in _PHI_KEYS:
+        if k in opt and _source_of(opt, k) == "designed":
+            hit = True
+    for k in ("boundary_labels", "fixed_labels"):
+        if k in opt and _source_of(opt, k) == "designed":
+            hit = True
+    for b in (designed.get("domain") or {}).get("boundaries", []) or []:
+        if isinstance(b, dict) and str(b.get("source", "designed")) == "designed":
+            hit = True
+            break
+    # a designed Dirichlet condition of a declared field is a boundary
+    # physical property — design repair room (the pen-existence repair
+    # rides on it too)
+    for f in designed.get("fields") or []:
+        if not isinstance(f, dict):
+            continue
+        if (f.get("dirichlet_value") not in (None, "")
+                and _source_of(f, "dirichlet_value") == "designed") \
+                or (isinstance(f.get("dirichlet_labels"), list)
+                    and f.get("dirichlet_labels")
+                    and _source_of(f, "dirichlet_labels") == "designed"):
+            hit = True
+            break
+    if not mesh_frozen:
+        hit = True  # the border definitions are mutable
+    if hit:
+        out["design_fix"] = (True, "")
     else:
-        label = canonical
-    return label
+        reasons.append("no designed design values (constants/Afac/chi/phi/"
+                       "labels/boundaries/Dirichlet/mesh are all extracted "
+                       "or frozen)")
+
+    # ── fe_param_fix ───────────────────────────────────────────────
+    fe_hit = False
+    for k in _FE_PARAM_KEYS:
+        if k in opt and _source_of(opt, k) == "designed":
+            fe_hit = True
+    if not mesh_frozen:
+        fe_hit = True  # the resolution is mutable
+    for f in designed.get("fields") or []:
+        if isinstance(f, dict) and f.get("fe_space") \
+                and _source_of(f, "fe_space") == "designed":
+            fe_hit = True
+    if fe_hit:
+        out["fe_param_fix"] = (True, "")
+    else:
+        reasons.append("no designed fe parameters (hmin/hmax/diffusion/v0/"
+                       "resolution/fe_space are all extracted or frozen)")
+    return out
 
 
-def _fine_classify_af(
-    agent,
-    problem_name,
-    main_py,
-    mesh_txt,
-    run_result_json,
-    objective_data,
-    convergence_data,
-    edp_code,
-    images=None,
-    image_section="",
-) -> str:
-    """Fine classification for autofreefem_error."""
-    from .prompts import CLASSIFY_FINE_AF_SYSTEM, CLASSIFY_FINE_USER
-
-    return _fine_run(
-        agent,
-        CLASSIFY_FINE_AF_SYSTEM,
-        CLASSIFY_FINE_USER,
-        _fine_payload("autofreefem_error", problem_name, main_py, mesh_txt,
-                      run_result_json, objective_data, convergence_data,
-                      edp_code, image_section=image_section),
-        [
-            "python_syntax",
-            "missing_import",
-            "undefined_name",
-            "api_signature_error",
-            "api_semantic_error",
-            "label_assignment_error",
-            "unit_error",
-            "mesh_file_error",
-            "timeout",
-            "no_edp",
-            "env_error",
-        ],
-        "api_semantic_error",
-        "AF",
-        images=images,
-    )
+def available_types_text(available: dict) -> str:
+    """Render the usable fix types for the classification prompt: ONLY
+    the usable error types and their repair methods are shown."""
+    label = {
+        "syntax_fix": "syntax_error — repaired by syntax_fix (code repair with the text model)",
+        "formula_fix": "formula_error — repaired by formula_fix (formula-related code)",
+        "design_fix": "design_error — repaired by design_fix (design values: physical-parameter numbers, Afac, CharacteristicFunction values, phi, the boundary labels, boundary physical properties incl. the fields' Dirichlet conditions, the pen penalty implementation — existence only, its value is always 1e15, mesh definitions — borders and square()/buildmesh count as borders)",
+        "fe_param_fix": "fe_parameter_error — repaired by fe_param_fix (hmin/hmax/diffusion/v0, mesh resolution, field precision P1/P2)",
+        "free_fix": "other_error — repaired by free_fix (free repair, the fallback)",
+    }
+    lines = ["## Usable error types (choose ONLY among these)"]
+    for fix_type, (usable, _reason) in available.items():
+        if usable:
+            lines.append(f"- {label[fix_type]}")
+    return "\n".join(lines)
 
 
-def _fine_classify_ff(
-    agent,
-    problem_name,
-    main_py,
-    mesh_txt,
-    run_result_json,
-    objective_data,
-    convergence_data,
-    edp_code,
-    images=None,
-    image_section="",
-) -> str:
-    """Fine classification for freefem_error."""
-    from .prompts import CLASSIFY_FINE_FF_SYSTEM, CLASSIFY_FINE_USER
-
-    return _fine_run(
-        agent,
-        CLASSIFY_FINE_FF_SYSTEM,
-        CLASSIFY_FINE_USER,
-        _fine_payload("freefem_error", problem_name, main_py, mesh_txt,
-                      run_result_json, objective_data, convergence_data,
-                      edp_code, image_section=image_section),
-        [
-            "ff_syntax",
-            "ff_mesh_load",
-            "ff_fe_space",
-            "ff_boundary_label",
-            "ff_label_semantics",
-            "ff_include",
-            "ff_tool",
-            "ff_undefined_var",
-            "ff_matrix_solver",
-            "ff_unknown",
-        ],
-        "ff_unknown",
-        "FF",
-        images=images,
-    )
-
-
-def _fine_classify_conv(
-    agent,
-    problem_name,
-    main_py,
-    mesh_txt,
-    run_result_json,
-    objective_data,
-    convergence_data,
-    edp_code,
-    images=None,
-    image_section="",
-) -> str:
-    """Fine classification for non_convergence."""
-    from .prompts import CLASSIFY_FINE_CONV_SYSTEM, CLASSIFY_FINE_USER
-
-    return _fine_run(
-        agent,
-        CLASSIFY_FINE_CONV_SYSTEM,
-        CLASSIFY_FINE_USER,
-        _fine_payload("non_convergence", problem_name, main_py, mesh_txt,
-                      run_result_json, objective_data, convergence_data,
-                      edp_code, image_section=image_section),
-        [
-            "newton_fail",
-            "linear_solver_fail",
-            "nan_inf",
-            "obj_divergence",
-            "obj_oscillation",
-            "line_search_stall",
-            "mesh_degen",
-            "mmg_hang",
-            "taylor_fail",
-        ],
-        "obj_divergence",
-        "CONV",
-        images=images,
-    )
-
-
-def _fine_classify_wrong(
-    agent,
-    problem_name,
-    main_py,
-    mesh_txt,
-    run_result_json,
-    objective_data,
-    convergence_data,
-    edp_code,
-    context_text="",
-    images=None,
-    image_section="",
-) -> str:
-    """Fine classification for wrong_result."""
-    from .prompts import CLASSIFY_FINE_WRONG_SYSTEM, CLASSIFY_FINE_WRONG_USER
-
-    label = _fine_run(
-        agent,
-        CLASSIFY_FINE_WRONG_SYSTEM,
-        CLASSIFY_FINE_WRONG_USER,
-        _fine_payload("wrong_result", problem_name, main_py, mesh_txt,
-                      run_result_json, objective_data, convergence_data,
-                      edp_code, context_text or "(no context)",
-                      image_section=image_section),
-        ["no_minth_vtu", "empty_design", "pathological_objective",
-         "physics_violation", "phi_unsuitable"],
-        "empty_design",
-        "WRONG",
-        images=images,
-    )
-
-    # Hard filter: if context_text contains a render summary, MinTh.vtu
-    # definitely exists — "no_minth_vtu" is impossible.  The header
-    # constant is shared with the reflector, so rewording the header
-    # cannot silently disable this filter.
-    if MINTH_RENDER_SUMMARY_HEADER.lower() in (context_text or "").lower():
-        if label == "no_minth_vtu":
-            warnings.warn(
-                "fine_classify WRONG: LLM returned 'no_minth_vtu' but MinTh.vtu "
-                "render summary is in context.  Falling back to 'empty_design'."
-            )
-            label = "empty_design"
-    return label
-
-
-def _fine_classify_hw(
-    agent,
-    problem_name,
-    main_py,
-    mesh_txt,
-    run_result_json,
-    objective_data,
-    convergence_data,
-    edp_code,
-    images=None,
-    image_section="",
-) -> str:
-    """Fine classification for hardware_limit."""
-    from .prompts import CLASSIFY_FINE_HW_SYSTEM, CLASSIFY_FINE_USER
-
-    return _fine_run(
-        agent,
-        CLASSIFY_FINE_HW_SYSTEM,
-        CLASSIFY_FINE_USER,
-        _fine_payload("hardware_limit", problem_name, main_py, mesh_txt,
-                      run_result_json, objective_data, convergence_data,
-                      edp_code, image_section=image_section),
-        ["memory_limit", "disk_limit", "process_limit"],
-        "memory_limit",
-        "HW",
-        images=images,
-    )
-
-
-def _fine_classify_other(agent, problem_name, context_text, images=None,
-                         image_section="") -> str:
-    """Free-form diagnosis for 'other' category."""
-    from .prompts import CLASSIFY_FINE_OTHER_SYSTEM, CLASSIFY_FINE_OTHER_USER
-
-    prompt_list = [
-        {"role": "system", "content": CLASSIFY_FINE_OTHER_SYSTEM},
-        {"role": "user", "content": CLASSIFY_FINE_OTHER_USER},
-    ]
-
-    agent.set_prompt_list(prompt_list)
-    raw = agent.invoke_multimodal(
-        {"problem_name": problem_name, "context_text": context_text,
-         "image_section": image_section},
-        images=images,
-    )
-
-    return raw.strip()
+def fix_type_for(coarse: str, available: dict) -> tuple:
+    """Map a coarse category to the fix type using the PRE-COMPUTED
+    availability (no implicit remapping: an unusable type falls back to
+    free_fix deterministically)."""
+    mapping = {
+        "syntax_error": ("syntax_fix", ""),
+        "formula_error": ("formula_fix", "formula_fix has no repair room (formulas extracted) — falling back to free_fix"),
+        "design_error": ("design_fix", "design_fix has no repair room (design values extracted/frozen) — falling back to free_fix"),
+        "fe_parameter_error": ("fe_param_fix", "fe_param_fix has no repair room (fe parameters extracted/frozen) — falling back to free_fix"),
+        "other_error": ("free_fix", ""),
+    }
+    fix_type, note = mapping.get(coarse, ("free_fix", ""))
+    if fix_type in available and available[fix_type][0]:
+        return fix_type, ""
+    return "free_fix", note
 
 
 # ======================================================================
@@ -536,7 +358,7 @@ def quality_check(agent, problem_name: str, context_text: str, images=None,
         agent: CodeAgent for LLM calls.
         problem_name: Name of the problem.
         context_text: Full working directory contents.
-        images: Optional PNG paths (iteration-label composite).
+        images: Optional PNG paths (one per design snapshot).
         image_section: Text describing the attached image(s).
 
     Returns:
@@ -566,3 +388,47 @@ def quality_check(agent, problem_name: str, context_text: str, images=None,
         f"Falling back to 'wrong_result'."
     )
     return "wrong_result"
+
+
+# ======================================================================
+# generic Constant(...) value read/replace — shared by the permission
+# builders and the fix enforcers (both in fixer.py).  Mask-aware so a
+# comment/string mention never matches.
+# ======================================================================
+
+_CONSTANT_RE_TMPL = (
+    r"\b{name}\s*=\s*Constant\(\s*r?['\"][^'\"]*['\"]\s*,\s*([-+0-9.eE]+)"
+)
+
+
+def _constant_value(code: str, name: str) -> Optional[float]:
+    """The numeric value of ``name = Constant(...)`` in *code*."""
+    from utils import code_masked_positions
+
+    masked = code_masked_positions(code)
+    for m in re.finditer(_CONSTANT_RE_TMPL.format(name=re.escape(name)), code):
+        if m.start() in masked:
+            continue
+        try:
+            return float(m.group(1))
+        except ValueError:
+            continue
+    return None
+
+
+def _constant_replace(code: str, name: str, value: float) -> str:
+    """Replace the numeric value of ``name = Constant(...)`` (mask-aware)."""
+    from utils import code_masked_positions
+
+    masked = code_masked_positions(code)
+    new = f"{value:g}"
+    out = []
+    pos = 0
+    for m in re.finditer(_CONSTANT_RE_TMPL.format(name=re.escape(name)), code):
+        if m.start() in masked:
+            continue
+        out.append(code[pos:m.start(1)])
+        out.append(new)
+        pos = m.end(1)
+    out.append(code[pos:])
+    return "".join(out)

@@ -8,6 +8,7 @@
 \usepackage{breqn}
 \let\cdot\oldcdot
 \begin{document}
+The design domain $D$ is the rectangle $[0,2]\times[0,1]$.  $\Gamma_{4}$ is the left edge ($x=0$) — the clamped Dirichlet edge (label 4); $\Gamma_N$ is the loaded segment of the right edge ($x=2$, $0.45\le y\le 0.55$, label 2).  $\Gamma_{4}$ and $\Gamma_N$ are FROZEN (fixedLabels=[2,4]); the remaining boundary (label 1 — the bottom edge, the top edge, and the unloaded parts of the right edge) is NORMAL-LOCKED (boundaryLabels=[1]); no boundary is free.
 Let $\phi(x)$ be the level-set function and
  \begin{align*}\raisebox{\depth}{$\chi$}(x) &= \begin{cases} 1 & \mbox{if}\quad \phi(x) < 0 \\ 1/100 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases}.\end{align*}
 The Lagrangian of the linear Elasticity problem is

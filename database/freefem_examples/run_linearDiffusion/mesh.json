@@ -1,24 +1,152 @@
 {
   "extracted": {
     "category": "code",
-    "mesh_code": "real x0 = 0;\nreal x1 = 2;\nreal y0 = -0.4;\nreal y1 = 0.4;\nborder C01(t=0, 1.){x=t; y=0; label=1;}\nborder C02(t=0, 1.){x=1.; y=t; label=1;}\nborder C03(t=0, 1.){x=1.-t; y=1.; label=1;}\nborder C04(t=0, 0.4){x=0.; y=1-t; label=1;}\nborder C05(t=0, 0.2){x=0.; y=0.6-t; label=3;}\nborder C06(t=0, 0.4){x=0.; y=0.4-t; label=1;}\nint n = 50;\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
-    "geometry_description": "",
+    "mesh_code": "real x0 = 0.0;\nreal x1 = 2.0;\nreal y0 = -0.4;\nreal y1 = 0.4;\nborder C01(t=0.0, 1.0){x=t; y=0.0; label=1;}\nborder C02(t=0.0, 1.0){x=1.0; y=t; label=1;}\nborder C03(t=0.0, 1.0){x=1.0-t; y=1.0; label=1;}\nborder C04(t=0.0, 0.4){x=0.0; y=1.0-t; label=1;}\nborder C05(t=0.0, 0.2){x=0.0; y=0.6-t; label=3;}\nborder C06(t=0.0, 0.4){x=0.0; y=0.4-t; label=1;}\nint n = 50;\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
+    "edges": [
+      {
+        "name": "C01",
+        "param": "t=0.0, 1.0",
+        "x": "t",
+        "y": "0.0",
+        "label": "1",
+        "role": "C01",
+        "source": "extracted"
+      },
+      {
+        "name": "C02",
+        "param": "t=0.0, 1.0",
+        "x": "1.0",
+        "y": "t",
+        "label": "1",
+        "role": "C02",
+        "source": "extracted"
+      },
+      {
+        "name": "C03",
+        "param": "t=0.0, 1.0",
+        "x": "1.0-t",
+        "y": "1.0",
+        "label": "1",
+        "role": "C03",
+        "source": "extracted"
+      },
+      {
+        "name": "C04",
+        "param": "t=0.0, 0.4",
+        "x": "0.0",
+        "y": "1.0-t",
+        "label": "1",
+        "role": "C04",
+        "source": "extracted"
+      },
+      {
+        "name": "C05",
+        "param": "t=0.0, 0.2",
+        "x": "0.0",
+        "y": "0.6-t",
+        "label": "3",
+        "role": "C05",
+        "source": "extracted"
+      },
+      {
+        "name": "C06",
+        "param": "t=0.0, 0.4",
+        "x": "0.0",
+        "y": "0.4-t",
+        "label": "1",
+        "role": "C06",
+        "source": "extracted"
+      }
+    ],
+    "n": 50,
+    "mesh_file": "mesh.txt",
     "labels_found": [
       "1",
       "3"
     ],
     "has_syntax_errors": false,
-    "syntax_error_details": ""
+    "syntax_error_details": "",
+    "source": "extracted"
   },
   "designed": {
-    "mesh_code": "real x0 = 0;\nreal x1 = 2;\nreal y0 = -0.4;\nreal y1 = 0.4;\nborder C01(t=0, 1.){x=t; y=0; label=1;}\nborder C02(t=0, 1.){x=1.; y=t; label=1;}\nborder C03(t=0, 1.){x=1.-t; y=1.; label=1;}\nborder C04(t=0, 0.4){x=0.; y=1-t; label=1;}\nborder C05(t=0, 0.2){x=0.; y=0.6-t; label=3;}\nborder C06(t=0, 0.4){x=0.; y=0.4-t; label=1;}\nint n = 50;\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
+    "mesh_code": "real x0 = 0.0;\nreal x1 = 2.0;\nreal y0 = -0.4;\nreal y1 = 0.4;\nborder C01(t=0.0, 1.0){x=t; y=0.0; label=1;}\nborder C02(t=0.0, 1.0){x=1.0; y=t; label=1;}\nborder C03(t=0.0, 1.0){x=1.0-t; y=1.0; label=1;}\nborder C04(t=0.0, 0.4){x=0.0; y=1.0-t; label=1;}\nborder C05(t=0.0, 0.2){x=0.0; y=0.6-t; label=3;}\nborder C06(t=0.0, 0.4){x=0.0; y=0.4-t; label=1;}\nint n = 50;\nmesh Th = buildmesh(C01(n) + C02(n) + C03(n) + C04(n) + C05(n) + C06(n));",
     "mesh_code_source": "extracted",
-    "mesh_code_rationale": "",
+    "mesh_code_rationale": "The active mesh already carries the problem's labels (3 = Dirichlet patch on the left edge, 1 = the free Neumann boundary), so it is kept verbatim and contains no comments.",
+    "edges": [
+      {
+        "name": "C01",
+        "param": "t=0.0, 1.0",
+        "x": "t",
+        "y": "0.0",
+        "label": "1",
+        "role": "design",
+        "source": "designed",
+        "rationale": "Bottom edge, unloaded Neumann boundary, movable."
+      },
+      {
+        "name": "C02",
+        "param": "t=0.0, 1.0",
+        "x": "1.0",
+        "y": "t",
+        "label": "1",
+        "role": "design",
+        "source": "designed",
+        "rationale": "Right edge, unloaded Neumann boundary, movable."
+      },
+      {
+        "name": "C03",
+        "param": "t=0.0, 1.0",
+        "x": "1.0-t",
+        "y": "1.0",
+        "label": "1",
+        "role": "design",
+        "source": "designed",
+        "rationale": "Top edge, unloaded Neumann boundary, movable."
+      },
+      {
+        "name": "C04",
+        "param": "t=0.0, 0.4",
+        "x": "0.0",
+        "y": "1.0-t",
+        "label": "1",
+        "role": "design",
+        "source": "designed",
+        "rationale": "Upper part of the left edge, unloaded Neumann boundary, movable."
+      },
+      {
+        "name": "C05",
+        "param": "t=0.0, 0.2",
+        "x": "0.0",
+        "y": "0.6-t",
+        "label": "3",
+        "role": "fixed",
+        "source": "designed",
+        "rationale": "Dirichlet sink u = 0 (Gamma_3), frozen during the optimisation."
+      },
+      {
+        "name": "C06",
+        "param": "t=0.0, 0.4",
+        "x": "0.0",
+        "y": "0.4-t",
+        "label": "1",
+        "role": "design",
+        "source": "designed",
+        "rationale": "Lower part of the left edge, unloaded Neumann boundary, movable."
+      }
+    ],
+    "n": 50,
+    "n_source": "extracted",
+    "mesh_file": "mesh.txt",
+    "mesh_file_source": "extracted",
     "labels_used": [
       "1",
       "3"
     ],
+    "labels_used_source": "extracted",
     "dimension": 2,
-    "domain_description": "Unit square [0,1]x[0,1] whose boundary is labeled 1 except for a small segment on the left edge between y=0.4 and y=0.6, which is labeled 3."
+    "dimension_source": "extracted",
+    "domain_description": "Unit square [0,1] x [0,1]; border C05 is the label-3 Dirichlet patch on the left edge (y in [0.4,0.6]), all other borders carry label 1. The variables x0/x1/y0/y1 are declared but unused by the active borders.",
+    "domain_description_source": "designed",
+    "domain_description_rationale": "Derived from the active border coordinates, which span the unit square."
   }
 }

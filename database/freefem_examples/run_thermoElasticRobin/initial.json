@@ -1,33 +1,39 @@
 {
   "extracted": {
-    "problem_type": "topology_optimization",
-    "problem_name": "run_thermoElasticRobin",
+    "problem_type": "shape_optimization",
+    "problem_type_source": "extracted",
+    "problem_name": "thermoElasticRobin",
+    "problem_name_source": "extracted",
     "dimension": 2,
+    "dimension_source": "extracted",
+    "is_nonlinear": false,
+    "is_nonlinear_source": "extracted",
     "domain_name": "D",
-    "mesh_variable": "Th",
-    "mesh_file": "Mesh1.mesh",
+    "domain_name_source": "extracted",
     "mesh_labels_used": [
       "1",
       "2",
       "3",
-      "4",
-      "5"
+      "4"
     ],
     "boundaries": [
       {
-        "name": "\\Gamma_T",
-        "kind": "Dirichlet",
-        "description": "temperature boundary with prescribed temperature g_T(x) via penalty"
+        "name": "Gamma_T",
+        "kind": "Robin",
+        "source": "extracted",
+        "design_role": null
       },
       {
-        "name": "\\Gamma_D",
+        "name": "Gamma_D",
         "kind": "Dirichlet",
-        "description": "displacement boundary with zero displacement penalized by beta"
+        "source": "extracted",
+        "design_role": null
       },
       {
-        "name": "\\Gamma_N",
+        "name": "Gamma_N",
         "kind": "Neumann",
-        "description": "loaded boundary with vertical traction q"
+        "source": "extracted",
+        "design_role": null
       }
     ],
     "fields": [
@@ -36,519 +42,839 @@
         "latex": "T",
         "type": "scalar",
         "fe_space": "P2",
-        "dirichlet_value": "g_T(x) = 30 y"
+        "domain": "D",
+        "source": "extracted"
       },
       {
         "name": "u",
         "latex": "\\mathbf{u}",
         "type": "vector",
-        "fe_space": "P2"
+        "fe_space": "P2",
+        "domain": "D",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "Gamma_D"
+        ],
+        "source": "extracted"
+      },
+      {
+        "name": "T_tilde",
+        "latex": "\\tilde{T}",
+        "type": "scalar",
+        "fe_space": "P2",
+        "domain": "D",
+        "source": "extracted"
+      },
+      {
+        "name": "u_tilde",
+        "latex": "\\tilde{\\mathbf{u}}",
+        "type": "vector",
+        "fe_space": "P2",
+        "domain": "D",
+        "dirichlet_value": "0",
+        "dirichlet_labels": [
+          "Gamma_D"
+        ],
+        "source": "extracted"
       }
     ],
     "test_functions": [
       {
         "name": "delta_T",
-        "latex": "\\delta T",
-        "type": "scalar",
-        "fe_space": "P2"
+        "fe_space": "P2",
+        "domain": "D",
+        "source": "extracted"
       },
       {
         "name": "delta_u",
-        "latex": "\\delta\\mathbf{u}",
-        "type": "vector",
-        "fe_space": "P2"
+        "fe_space": "P2",
+        "domain": "D",
+        "source": "extracted"
       }
     ],
     "constants": [
       {
         "name": "nu",
         "latex": "\\nu",
-        "value": 0.23,
+        "value": "0.23",
         "description": "Poisson's ratio",
-        "unit": "-"
+        "unit": "$-$",
+        "source": "extracted"
       },
       {
-        "name": "E0",
-        "latex": "E_0",
-        "value": 32000000.0,
+        "name": "E_0",
+        "latex": "E_{0}",
+        "value": "3.20e+07",
         "description": "Young's modulus",
-        "unit": "N/m^2"
+        "unit": "$\\frac{N}{m^2}$",
+        "source": "extracted"
       },
       {
         "name": "rho",
         "latex": "\\rho",
-        "value": 2500.0,
+        "value": "2.50e+03",
         "description": "density",
-        "unit": "kg/m^3"
+        "unit": "$\\frac{kg}{m^3}$",
+        "source": "extracted"
       },
       {
         "name": "gamma",
         "latex": "\\gamma",
-        "value": 100,
-        "description": "displacement cost factor",
-        "unit": "N/m^2"
+        "value": "100",
+        "description": "disp. cost factor",
+        "unit": "$\\frac{N}{m^2}$",
+        "source": "extracted"
       },
       {
         "name": "g",
         "latex": "g",
-        "value": 9.81,
-        "description": "gravitational acceleration",
-        "unit": "m/s^2"
+        "value": "9.81",
+        "description": "gravitational acc.",
+        "unit": "$\\frac{m}{s^2}$",
+        "source": "extracted"
       },
       {
         "name": "ell",
         "latex": "\\ell",
-        "value": 1,
+        "value": "1",
         "description": "material cost",
-        "unit": "N/m^2"
+        "unit": "$\\frac{N}{m^2}$",
+        "source": "extracted"
       },
       {
         "name": "beta_T",
-        "latex": "\\beta_T",
-        "value": 100000000000.0,
-        "description": "penalty parameter for temperature boundary",
-        "unit": "W/(K m^2)"
+        "latex": "\\beta_{T}",
+        "value": "1.00e+11",
+        "description": "penalty parameter",
+        "unit": "$\\frac{W}{K m^2}$",
+        "source": "extracted"
       },
       {
         "name": "beta",
         "latex": "\\beta",
-        "value": 100000000000.0,
-        "description": "penalty parameter for displacement boundary",
-        "unit": "N/m^3"
+        "value": "1.00e+11",
+        "description": "penalty parameter",
+        "unit": "$\\frac{N}{m^3}$",
+        "source": "extracted"
       },
       {
-        "name": "k0",
-        "latex": "k_0",
-        "value": 1.25,
-        "description": "thermal conductivity",
-        "unit": "W/(K m)"
+        "name": "k_0",
+        "latex": "k_{0}",
+        "value": "1.25",
+        "description": "ther. conductivity",
+        "unit": "$\\frac{W}{K m}$",
+        "source": "extracted"
       },
       {
         "name": "alpha_T",
-        "latex": "\\alpha_T",
-        "value": 3.6e-05,
-        "description": "thermal expansion coefficient",
-        "unit": "1/K"
+        "latex": "\\alpha_{T}",
+        "value": "3.60e-05",
+        "description": "ther. expansion coeff.",
+        "unit": "$\\frac{1}{K}$",
+        "source": "extracted"
       },
       {
         "name": "q",
         "latex": "q",
-        "value": 5000.0,
-        "description": "vertical load component",
-        "unit": "N/m^2"
-      }
-    ],
-    "expressions": [
-      {
-        "name": "k",
-        "latex": "k(x)",
-        "formula": "k_0 if phi(x) < 0; k_0/1000 if phi(x) >= 0"
-      },
-      {
-        "name": "E",
-        "latex": "E(x)",
-        "formula": "E_0 if phi(x) < 0; E_0/1000 if phi(x) >= 0"
-      },
-      {
-        "name": "alpha_T",
-        "latex": "\\alpha_T(x)",
-        "formula": "\\alpha_T if phi(x) < 0; \\alpha_T/1000 if phi(x) >= 0"
-      },
-      {
-        "name": "epsilon",
-        "latex": "\\pmb\\varepsilon(\\mathbf{u})",
-        "formula": "\\frac{\\nabla \\mathbf{u} + (\\nabla \\mathbf{u})^\\top}{2}"
-      },
-      {
-        "name": "epsilon_e",
-        "latex": "\\pmb\\varepsilon_e(T,\\mathbf{u})",
-        "formula": "-\\mathbf{I} \\alpha_T T + \\pmb\\varepsilon(\\mathbf{u})"
-      },
-      {
-        "name": "mu",
-        "latex": "\\mu",
-        "formula": "\\frac{E}{2(\\nu+1)}"
-      },
-      {
-        "name": "sigma",
-        "latex": "\\pmb\\sigma(T,\\mathbf{u})",
-        "formula": "\\mathbf{I}\\lambda\\,\\operatorname{tr}(\\pmb\\varepsilon_e(T,\\mathbf{u})) + 2\\mu\\pmb\\varepsilon_e(T,\\mathbf{u})"
-      },
-      {
-        "name": "lambda",
-        "latex": "\\lambda",
-        "formula": "\\frac{\\nu E}{(1-2\\nu)(\\nu+1)}"
-      },
-      {
-        "name": "J",
-        "latex": "J(\\mathbf{u})",
-        "formula": "\\int_D \\ell \\chi\\, dx + \\int_{\\Gamma_D} \\beta(\\mathbf{e}_x\\cdot\\mathbf{u})^2\\, ds - \\int_{\\Gamma_N} \\gamma(\\mathbf{e}_y\\cdot\\mathbf{u})\\, ds"
-      },
-      {
-        "name": "g_T",
-        "latex": "g_T(x)",
-        "formula": "30 y"
-      },
-      {
-        "name": "dJ_du",
-        "latex": "\\partial_{(\\mathbf{u},\\delta\\mathbf{u})} J(\\delta\\mathbf{u},\\mathbf{u})",
-        "formula": "-\\int_{\\Gamma_N} \\gamma(\\mathbf{e}_y\\cdot\\delta\\mathbf{u})\\, ds + \\int_{\\Gamma_D} 2\\beta(\\mathbf{e}_x\\cdot\\mathbf{u})^2(\\mathbf{e}_x\\cdot\\delta\\mathbf{u})(\\mathbf{e}_x\\cdot\\mathbf{u})^{-1}\\, ds"
+        "value": "5.00e+03",
+        "description": "vert. load comp.",
+        "unit": "$\\frac{N}{m^2}$",
+        "source": "extracted"
       }
     ],
     "characteristic_function": {
-      "latex": "\\chi(x)",
-      "strong_value": "1 if phi(x) < 0; 0 if phi(x) >= 0"
+      "latex": "\\raisebox{\\depth}{$\\chi$}",
+      "latex_source": "extracted",
+      "condition": "chi = 1 if phi(x) < 0 and chi = 0 if phi(x) >= 0",
+      "condition_source": "extracted",
+      "strong_value": "1",
+      "strong_value_source": "extracted",
+      "weak_value": "0",
+      "weak_value_source": "extracted",
+      "source": "extracted"
     },
-    "objective": {
-      "name": "J",
-      "description": "Cost functional for the thermo-elastic problem",
-      "terms": [
-        "\\int_D \\ell \\chi \\, dx : material cost",
-        "\\int_{\\Gamma_D} \\beta (\\mathbf{e}_x \\cdot \\mathbf{u})^2 \\, ds : penalty on horizontal displacement on \\Gamma_D",
-        "-\\int_{\\Gamma_N} \\gamma (\\mathbf{e}_y \\cdot \\mathbf{u}) \\, ds : weighted vertical displacement on \\Gamma_N"
-      ]
+    "expressions": [
+      {
+        "name": "k_of_x",
+        "latex": "k(x) = k_0 \\text{ if } \\phi(x) < 0, \\quad k(x) = k_0/1000 \\text{ if } \\phi(x) \\ge 0",
+        "source": "extracted"
+      },
+      {
+        "name": "E_of_x",
+        "latex": "E(x) = E_0 \\text{ if } \\phi(x) < 0, \\quad E(x) = E_0/1000 \\text{ if } \\phi(x) \\ge 0",
+        "source": "extracted"
+      },
+      {
+        "name": "alpha_T_of_x",
+        "latex": "\\alpha_{T}(x) = \\alpha_{T} \\text{ if } \\phi(x) < 0, \\quad \\alpha_{T}(x) = \\alpha_{T}/1000 \\text{ if } \\phi(x) \\ge 0",
+        "source": "extracted"
+      },
+      {
+        "name": "epsilon_delta_u",
+        "latex": "\\pmb\\varepsilon(\\delta\\mathbf u) = \\frac{\\nabla \\delta\\mathbf u + \\nabla \\delta\\mathbf u^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "epsilon_u",
+        "latex": "\\pmb\\varepsilon(\\mathbf u) = \\frac{\\nabla \\mathbf u + \\nabla \\mathbf u^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "epsilon_e",
+        "latex": "\\pmb\\varepsilon_{e}(T,\\mathbf u) = -\\mathbf I \\alpha_{T} T + \\pmb\\varepsilon(\\mathbf u)",
+        "source": "extracted"
+      },
+      {
+        "name": "mu",
+        "latex": "\\mu = \\frac{E}{2(\\nu+1)}",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda = \\frac{\\nu E}{(1-2\\nu)(\\nu+1)}",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda_alt",
+        "latex": "\\lambda = -\\frac{\\nu E}{(\\nu+1)(2\\nu-1)}",
+        "source": "extracted"
+      },
+      {
+        "name": "sigma",
+        "latex": "\\pmb\\sigma(T,\\mathbf u) = \\mathbf I \\lambda \\operatorname{tr}(\\pmb\\varepsilon_{e}(T,\\mathbf u)) + 2\\mu\\pmb\\varepsilon_{e}(T,\\mathbf u)",
+        "source": "extracted"
+      },
+      {
+        "name": "J",
+        "latex": "J(\\mathbf u) = \\int_{D} \\ell \\raisebox{\\depth}{$\\chi$}\\,dx + \\int_{\\Gamma_D} \\beta (\\mathbf e_x \\cdot \\mathbf u)^{2}\\,ds_x - \\int_{\\Gamma_N} \\gamma (\\mathbf e_y \\cdot \\mathbf u)\\,ds_x",
+        "source": "extracted"
+      },
+      {
+        "name": "g_T",
+        "latex": "g_{T}(x) = 30 y",
+        "source": "extracted"
+      },
+      {
+        "name": "dJ_partial",
+        "latex": "\\partial_{(\\mathbf u,\\delta\\mathbf u)} J(\\delta\\mathbf u,\\mathbf u) = -\\int_{\\Gamma_N} \\gamma (\\mathbf e_y \\cdot \\delta\\mathbf u)\\,ds_x + \\int_{\\Gamma_D} 2\\beta (\\mathbf e_x \\cdot \\mathbf u)^{2}(\\mathbf e_x \\cdot \\delta\\mathbf u)(\\mathbf e_x \\cdot \\mathbf u)^{-1}\\,ds_x",
+        "source": "extracted"
+      },
+      {
+        "name": "d_sigma_du",
+        "latex": "\\partial_{(\\mathbf u,\\delta\\mathbf u)}\\pmb\\sigma(\\delta\\mathbf u) = \\mathbf I \\lambda \\operatorname{tr}(\\partial_{(\\mathbf u,\\delta\\mathbf u)}\\pmb\\varepsilon_e(\\delta\\mathbf u)) + 2\\mu \\partial_{(\\mathbf u,\\delta\\mathbf u)}\\pmb\\varepsilon_e(\\delta\\mathbf u)",
+        "source": "extracted"
+      },
+      {
+        "name": "d_sigma_dT",
+        "latex": "\\partial_{(T,\\delta T)}\\pmb\\sigma(\\delta T) = \\mathbf I \\lambda \\operatorname{tr}(\\partial_{(T,\\delta T)}\\pmb\\varepsilon_e(\\delta T)) + 2\\mu \\partial_{(T,\\delta T)}\\pmb\\varepsilon_e(\\delta T)",
+        "source": "extracted"
+      },
+      {
+        "name": "d_eps_e_du",
+        "latex": "\\partial_{(\\mathbf u,\\delta\\mathbf u)}\\pmb\\varepsilon_e(\\delta\\mathbf u) = \\pmb\\varepsilon(\\delta\\mathbf u)",
+        "source": "extracted"
+      },
+      {
+        "name": "d_eps_e_dT",
+        "latex": "\\partial_{(T,\\delta T)}\\pmb\\varepsilon_e(\\delta T) = -\\mathbf I \\alpha_{T}\\delta T",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_sigma",
+        "latex": "\\partial_t\\pmb\\sigma(\\mathbf V,\\mathbf u) = \\mathbf I \\lambda \\operatorname{tr}(\\partial_t\\pmb\\varepsilon_e(\\mathbf V,\\mathbf u)) + 2\\mu \\partial_t\\pmb\\varepsilon_e(\\mathbf V,\\mathbf u)",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_eps",
+        "latex": "\\partial_t\\pmb\\varepsilon(\\mathbf V,\\mathbf u) = -\\frac{(\\nabla\\mathbf u \\cdot \\nabla\\mathbf V) + ((\\nabla\\mathbf u \\cdot \\nabla\\mathbf V))^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_eps_tilde",
+        "latex": "\\partial_t\\pmb\\varepsilon(\\tilde{\\mathbf u},\\mathbf V) = -\\frac{(\\nabla\\tilde{\\mathbf u} \\cdot \\nabla\\mathbf V) + ((\\nabla\\tilde{\\mathbf u} \\cdot \\nabla\\mathbf V))^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_eps_e",
+        "latex": "\\partial_t\\pmb\\varepsilon_e(\\mathbf V,\\mathbf u) = \\partial_t\\pmb\\varepsilon(\\mathbf V,\\mathbf u)",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_J",
+        "latex": "\\partial_t J(\\mathbf V,\\mathbf u) = \\int_D \\ell \\raisebox{\\depth}{$\\chi$}\\operatorname{div}\\mathbf V\\,dx - \\left(\\int_{\\Gamma_N}\\gamma\\operatorname{div}\\mathbf V(\\mathbf e_y \\cdot \\mathbf u)\\,ds_x - \\int_{\\Gamma_N}\\gamma(\\mathbf n \\cdot (\\mathbf n \\cdot \\nabla\\mathbf V))(\\mathbf e_y \\cdot \\mathbf u)\\,ds_x\\right) + \\int_{\\Gamma_D}\\beta\\operatorname{div}\\mathbf V(\\mathbf e_x \\cdot \\mathbf u)^{2}\\,ds_x - \\int_{\\Gamma_D}\\beta(\\mathbf n \\cdot (\\mathbf n \\cdot \\nabla\\mathbf V))(\\mathbf e_x \\cdot \\mathbf u)^{2}\\,ds_x",
+        "source": "extracted"
+      }
+    ],
+    "lagrangian": {
+      "source": "extracted",
+      "objective": {
+        "name": "J",
+        "latex": "J(\\mathbf u) = \\int_{D} \\ell \\raisebox{\\depth}{$\\chi$}\\,dx + \\int_{\\Gamma_D} \\beta (\\mathbf e_x \\cdot \\mathbf u)^{2}\\,ds_x - \\int_{\\Gamma_N} \\gamma (\\mathbf e_y \\cdot \\mathbf u)\\,ds_x",
+        "source": "extracted"
+      },
+      "state_equation": [
+        {
+          "description": "thermal state equation (first line of the linear problem)",
+          "weak_form_lhs": "-\\int_{\\Gamma_T} \\beta_T g_T(x) \\delta T\\,ds_x + \\int_{\\Gamma_T} \\beta_T T \\delta T\\,ds_x + \\int_{D} k(\\nabla T \\cdot \\nabla \\delta T)\\,dx",
+          "weak_form_rhs": "0",
+          "source": "extracted"
+        },
+        {
+          "description": "mechanical state equation (second line of the linear problem)",
+          "weak_form_lhs": "\\int_{\\Gamma_D} \\beta(\\mathbf u \\cdot \\delta\\mathbf u)\\,ds_x + \\int_{\\Gamma_N} q(\\mathbf e_y \\cdot \\delta\\mathbf u)\\,ds_x + \\int_{D} \\rho g \\raisebox{\\depth}{$\\chi$}(\\mathbf e_y \\cdot \\delta\\mathbf u)\\,dx + \\int_{D} (\\pmb\\sigma(T,\\mathbf u) : \\pmb\\varepsilon(\\delta\\mathbf u)^\\top)\\,dx",
+          "weak_form_rhs": "0",
+          "source": "extracted"
+        }
+      ],
+      "adjoint_equation": [
+        {
+          "description": "thermal adjoint equation",
+          "weak_form_lhs": "\\int_{\\Gamma_T} \\beta_T \\delta T \\tilde T\\,ds_x + \\int_{D} k(\\nabla\\delta T \\cdot \\nabla\\tilde T)\\,dx + \\int_{D} (\\partial_{(T,\\delta T)}\\pmb\\sigma(\\delta T) : \\pmb\\varepsilon(\\tilde{\\mathbf u})^\\top)\\,dx",
+          "weak_form_rhs": "0",
+          "source": "extracted"
+        },
+        {
+          "description": "mechanical adjoint equation",
+          "weak_form_lhs": "\\partial_{(\\mathbf u,\\delta\\mathbf u)}J(\\delta\\mathbf u,\\mathbf u) + \\int_{\\Gamma_D}\\beta(\\delta\\mathbf u \\cdot \\tilde{\\mathbf u})\\,ds_x + \\int_{D}(\\partial_{(\\mathbf u,\\delta\\mathbf u)}\\pmb\\sigma(\\delta\\mathbf u) : \\pmb\\varepsilon(\\tilde{\\mathbf u})^\\top)\\,dx",
+          "weak_form_rhs": "0",
+          "source": "extracted"
+        }
+      ],
+      "shape_derivative": {
+        "latex": "DJ(\\Omega)(\\mathbf V) = -\\int_{\\Gamma_T}\\beta_T(\\nabla g_T \\cdot \\mathbf V)\\tilde T\\,ds_x - \\int_{\\Gamma_T}\\beta_T g_T \\operatorname{div}\\mathbf V\\,\\tilde T\\,ds_x + \\int_{\\Gamma_T}\\beta_T g_T(\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla\\mathbf V))\\tilde T\\,ds_x + \\int_{\\Gamma_T}\\beta_T\\operatorname{div}\\mathbf V\\,T\\tilde T\\,ds_x - \\int_{\\Gamma_T}\\beta_T(\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla\\mathbf V))T\\tilde T\\,ds_x + \\int_{D}(\\operatorname{div}\\mathbf V(\\nabla T\\cdot\\nabla\\tilde T) - (\\nabla T\\cdot(\\nabla\\tilde T\\cdot\\nabla\\mathbf V)) - (\\nabla\\tilde T\\cdot(\\nabla T\\cdot\\nabla\\mathbf V)))k\\,dx + \\partial_t J(\\mathbf V,\\mathbf u) + \\int_{\\Gamma_D}\\beta\\operatorname{div}\\mathbf V(\\mathbf u\\cdot\\tilde{\\mathbf u})\\,ds_x - \\int_{\\Gamma_D}\\beta(\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla\\mathbf V))(\\mathbf u\\cdot\\tilde{\\mathbf u})\\,ds_x + \\int_{\\Gamma_N}q\\operatorname{div}\\mathbf V(\\mathbf e_y\\cdot\\tilde{\\mathbf u})\\,ds_x - \\int_{\\Gamma_N}q(\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla\\mathbf V))(\\mathbf e_y\\cdot\\tilde{\\mathbf u})\\,ds_x + \\int_{D}\\rho g\\raisebox{\\depth}{$\\chi$}\\operatorname{div}\\mathbf V(\\mathbf e_y\\cdot\\tilde{\\mathbf u})\\,dx + \\int_{D}[\\operatorname{div}\\mathbf V(\\pmb\\sigma(T,\\mathbf u):\\pmb\\varepsilon(\\tilde{\\mathbf u})^\\top) + (\\partial_t\\pmb\\sigma(\\mathbf V,\\mathbf u):\\pmb\\varepsilon(\\tilde{\\mathbf u})^\\top) + (\\pmb\\sigma(T,\\mathbf u):\\partial_t\\pmb\\varepsilon(\\tilde{\\mathbf u},\\mathbf V)^\\top)]\\,dx",
+        "source": "extracted"
+      },
+      "perturbed_lagrangian": {
+        "perturbation_map": "\\mathbf x = T_t(\\mathbf X) = \\mathbf X + t \\mathbf V(\\mathbf X)",
+        "perturbation_map_source": "extracted",
+        "latex": "\\mathcal G(t,[T,\\mathbf u]^{L},[\\delta T,\\delta\\mathbf u]^{L}) = -\\int_{\\Gamma_{T}}\\beta_{T} g_{T}(T_t(x))\\operatorname{det}\\mathbf F(t)\\sqrt{(\\mathbf n \\cdot \\mathbf F^{-1}(t)) \\cdot (\\mathbf n \\cdot \\mathbf F^{-1}(t))}\\delta T\\,ds_x + \\int_{\\Gamma_{T}}\\beta_{T}\\operatorname{det}\\mathbf F(t)\\sqrt{(\\mathbf n \\cdot \\mathbf F^{-1}(t)) \\cdot (\\mathbf n \\cdot \\mathbf F^{-1}(t))}T\\delta T\\,ds_x + \\int_{D} k\\operatorname{det}\\mathbf F(t)((\\nabla T \\cdot \\mathbf F^{-1}(t)) \\cdot (\\nabla\\delta T \\cdot \\mathbf F^{-1}(t)))\\,dx + \\mathcal V(J) + \\int_{\\Gamma_D}\\beta\\operatorname{det}\\mathbf F(t)\\sqrt{(\\mathbf n \\cdot \\mathbf F^{-1}(t)) \\cdot (\\mathbf n \\cdot \\mathbf F^{-1}(t))}(\\mathbf u \\cdot \\delta\\mathbf u)\\,ds_x + \\int_{\\Gamma_N} q\\operatorname{det}\\mathbf F(t)\\sqrt{(\\mathbf n \\cdot \\mathbf F^{-1}(t)) \\cdot (\\mathbf n \\cdot \\mathbf F^{-1}(t))}(\\mathbf e_y \\cdot \\delta\\mathbf u)\\,ds_x + \\int_{D}\\operatorname{det}\\mathbf F(t)(\\mathcal V(\\pmb\\sigma) : \\mathcal V(\\pmb\\varepsilon)^\\top)\\,dx + \\int_{D}\\rho g \\raisebox{\\depth}{$\\chi$}\\operatorname{det}\\mathbf F(t)(\\mathbf e_y \\cdot \\delta\\mathbf u)\\,dx",
+        "latex_source": "extracted",
+        "perturbed_quantities": [
+          {
+            "name": "V_epsilon_u",
+            "latex": "\\mathcal V(\\pmb\\varepsilon) = \\frac{(\\nabla\\mathbf u \\cdot \\mathbf F^{-1}(t)) + ((\\nabla\\mathbf u \\cdot \\mathbf F^{-1}(t)))^\\top}{2}",
+            "source": "extracted"
+          },
+          {
+            "name": "V_epsilon_e",
+            "latex": "\\mathcal V(\\pmb\\varepsilon_{e}) = -\\mathbf I \\alpha_{T} T + \\mathcal V(\\pmb\\varepsilon)",
+            "source": "extracted"
+          },
+          {
+            "name": "V_sigma",
+            "latex": "\\mathcal V(\\pmb\\sigma) = \\mathbf I \\lambda \\operatorname{tr}(\\mathcal V(\\pmb\\varepsilon_{e})) + 2\\mu \\mathcal V(\\pmb\\varepsilon_{e})",
+            "source": "extracted"
+          },
+          {
+            "name": "V_epsilon_delta_u",
+            "latex": "\\mathcal V(\\pmb\\varepsilon) = \\frac{(\\nabla\\delta\\mathbf u \\cdot \\mathbf F^{-1}(t)) + ((\\nabla\\delta\\mathbf u \\cdot \\mathbf F^{-1}(t)))^\\top}{2}",
+            "source": "extracted"
+          },
+          {
+            "name": "V_J",
+            "latex": "\\mathcal V(J) = \\int_{D} \\ell \\raisebox{\\depth}{$\\chi$}\\operatorname{det}\\mathbf F(t)\\,dx + \\int_{\\Gamma_D}\\beta\\operatorname{det}\\mathbf F(t)\\sqrt{(\\mathbf n \\cdot \\mathbf F^{-1}(t)) \\cdot (\\mathbf n \\cdot \\mathbf F^{-1}(t))}(\\mathbf e_x \\cdot \\mathbf u)^{2}\\,ds_x - \\int_{\\Gamma_N}\\gamma\\operatorname{det}\\mathbf F(t)\\sqrt{(\\mathbf n \\cdot \\mathbf F^{-1}(t)) \\cdot (\\mathbf n \\cdot \\mathbf F^{-1}(t))}(\\mathbf e_y \\cdot \\mathbf u)\\,ds_x",
+            "source": "extracted"
+          },
+          {
+            "name": "g_T",
+            "latex": "g_{T} = 30 y",
+            "source": "extracted"
+          }
+        ],
+        "source": "extracted"
+      }
     },
-    "state_equation": {
-      "description": "Linear coupled state equations for temperature T and displacement u",
-      "weak_form_lhs": "\\left(-\\int_{\\Gamma_T} \\beta_T g_T(x)\\delta T\\,ds + \\int_{\\Gamma_T} \\beta_T T\\delta T\\,ds + \\int_D k(\\nabla T\\cdot\\nabla\\delta T)\\,dx\\right) + \\left(\\int_{\\Gamma_D} \\beta(\\mathbf{u}\\cdot\\delta\\mathbf{u})\\,ds + \\int_{\\Gamma_N} q(\\mathbf{e}_y\\cdot\\delta\\mathbf{u})\\,ds + \\int_D \\rho g\\chi(\\mathbf{e}_y\\cdot\\delta\\mathbf{u})\\,dx + \\int_D(\\pmb\\sigma(T,\\mathbf{u}):\\pmb\\varepsilon(\\delta\\mathbf{u})^\\top)\\,dx\\right)",
-      "weak_form_rhs": "0",
-      "is_nonlinear": false
-    },
-    "adjoint_equation": {
-      "description": "Adjoint equations for \\tilde T and \\tilde{\\mathbf{u}}",
-      "weak_form_lhs": "\\left(\\int_{\\Gamma_T} \\beta_T \\delta T \\tilde T\\,ds + \\int_D k(\\nabla\\delta T\\cdot\\nabla\\tilde T)\\,dx + \\int_D(\\partial_{(T,\\delta T)}\\pmb\\sigma(\\delta T):\\pmb\\varepsilon(\\tilde{\\mathbf{u}})^\\top)\\,dx\\right) + \\left(\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}J(\\delta\\mathbf{u},\\mathbf{u}) + \\int_{\\Gamma_D} \\beta(\\delta\\mathbf{u}\\cdot\\tilde{\\mathbf{u}})\\,ds + \\int_D(\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}\\pmb\\sigma(\\delta\\mathbf{u}):\\pmb\\varepsilon(\\tilde{\\mathbf{u}})^\\top)\\,dx\\right)",
-      "weak_form_rhs": "0"
-    },
-    "shape_derivative": {
-      "volume_expression": "-\\int_{\\Gamma_T} \\beta_T (\\nabla g_T(x)\\cdot\\mathbf{V})\\tilde T\\,ds - \\int_{\\Gamma_T} \\beta_T g_T(x)\\operatorname{div}\\mathbf{V}\\tilde T\\,ds + \\int_{\\Gamma_T} \\beta_T g_T(x)(\\mathbf{n}\\cdot(\\mathbf{n}\\cdot\\nabla\\mathbf{V}))\\tilde T\\,ds + \\int_{\\Gamma_T} \\beta_T \\operatorname{div}\\mathbf{V} T\\tilde T\\,ds - \\int_{\\Gamma_T} \\beta_T (\\mathbf{n}\\cdot(\\mathbf{n}\\cdot\\nabla\\mathbf{V})) T\\tilde T\\,ds + \\int_D (\\operatorname{div}\\mathbf{V}(\\nabla T\\cdot\\nabla\\tilde T) - (\\nabla T\\cdot(\\nabla\\tilde T\\cdot\\nabla\\mathbf{V})) - (\\nabla\\tilde T\\cdot(\\nabla T\\cdot\\nabla\\mathbf{V})))k\\,dx + \\partial_t J(\\mathbf{V},\\mathbf{u}) + \\int_{\\Gamma_D} \\beta\\operatorname{div}\\mathbf{V}(\\mathbf{u}\\cdot\\tilde{\\mathbf{u}})\\,ds - \\int_{\\Gamma_D} \\beta(\\mathbf{n}\\cdot(\\mathbf{n}\\cdot\\nabla\\mathbf{V}))(\\mathbf{u}\\cdot\\tilde{\\mathbf{u}})\\,ds + \\int_{\\Gamma_N} q\\operatorname{div}\\mathbf{V}(\\mathbf{e}_y\\cdot\\tilde{\\mathbf{u}})\\,ds - \\int_{\\Gamma_N} q(\\mathbf{n}\\cdot(\\mathbf{n}\\cdot\\nabla\\mathbf{V}))(\\mathbf{e}_y\\cdot\\tilde{\\mathbf{u}})\\,ds + \\int_D \\rho g\\chi\\operatorname{div}\\mathbf{V}(\\mathbf{e}_y\\cdot\\tilde{\\mathbf{u}})\\,dx + \\int_D \\left(\\operatorname{div}\\mathbf{V}(\\pmb\\sigma(T,\\mathbf{u}):\\pmb\\varepsilon(\\tilde{\\mathbf{u}})^\\top) + (\\partial_t\\pmb\\sigma(\\mathbf{V},\\mathbf{u}):\\pmb\\varepsilon(\\tilde{\\mathbf{u}})^\\top) + (\\pmb\\sigma(T,\\mathbf{u}):\\partial_t\\pmb\\varepsilon(\\tilde{\\mathbf{u}},\\mathbf{V})^\\top)\\right)\\,dx"
-    }
+    "extra_requirements": [],
+    "mesh_labels_used_source": "extracted"
   },
   "designed": {
-    "problem_type": "topology_optimization",
+    "problem_type": "shape_optimization",
     "problem_type_source": "extracted",
-    "problem_name": "run_thermoElasticRobin",
+    "problem_name": "thermoElasticRobin",
     "problem_name_source": "extracted",
     "dimension": 2,
     "dimension_source": "extracted",
+    "state_is_nonlinear": false,
+    "state_is_nonlinear_source": "designed",
+    "state_is_nonlinear_rationale": "source states the state problem is linear.",
     "domain_name": "D",
     "domain_name_source": "extracted",
-    "mesh_variable": "Th",
-    "mesh_variable_source": "extracted",
-    "mesh_file": "Mesh1.mesh",
-    "mesh_file_source": "extracted",
-    "objective_name": "J",
-    "objective_name_source": "extracted",
-    "objective_description": "Cost functional for the thermo-elastic problem",
-    "objective_description_source": "extracted",
-    "objective_terms": [
-      "\\int_D \\ell \\chi \\, dx : material cost",
-      "\\int_{\\Gamma_D} \\beta (\\mathbf{e}_x \\cdot \\mathbf{u})^2 \\, ds : penalty on horizontal displacement on \\Gamma_D",
-      "-\\int_{\\Gamma_N} \\gamma (\\mathbf{e}_y \\cdot \\mathbf{u}) \\, ds : weighted vertical displacement on \\Gamma_N"
-    ],
-    "objective_terms_source": [
-      "extracted",
-      "extracted",
-      "extracted"
-    ],
-    "state_description": "Linear coupled state equations for temperature T and displacement u",
-    "state_description_source": "extracted",
-    "state_weak_lhs": "\\left(-\\int_{\\Gamma_T} \\beta_T g_T(x)\\delta T\\,ds + \\int_{\\Gamma_T} \\beta_T T\\delta T\\,ds + \\int_D k(\\nabla T\\cdot\\nabla\\delta T)\\,dx\\right) + \\left(\\int_{\\Gamma_D} \\beta(\\mathbf{u}\\cdot\\delta\\mathbf{u})\\,ds + \\int_{\\Gamma_N} q(\\mathbf{e}_y\\cdot\\delta\\mathbf{u})\\,ds + \\int_D \\rho g\\chi(\\mathbf{e}_y\\cdot\\delta\\mathbf{u})\\,dx + \\int_D(\\pmb\\sigma(T,\\mathbf{u}):\\pmb\\varepsilon(\\delta\\mathbf{u})^\\top)\\,dx\\right)",
-    "state_weak_lhs_source": "extracted",
-    "state_weak_rhs": "0",
-    "state_weak_rhs_source": "extracted",
-    "state_is_nonlinear": false,
-    "state_is_nonlinear_source": "extracted",
-    "newton_description": null,
-    "newton_description_source": "not_applicable",
-    "newton_weak_form": null,
-    "newton_weak_form_source": "not_applicable",
-    "newton_source": "not_applicable",
-    "adjoint_description": "Adjoint equations for \\tilde T and \\tilde{\\mathbf{u}}",
-    "adjoint_description_source": "extracted",
-    "adjoint_weak_lhs": "\\left(\\int_{\\Gamma_T} \\beta_T \\delta T \\tilde T\\,ds + \\int_D k(\\nabla\\delta T\\cdot\\nabla\\tilde T)\\,dx + \\int_D(\\partial_{(T,\\delta T)}\\pmb\\sigma(\\delta T):\\pmb\\varepsilon(\\tilde{\\mathbf{u}})^\\top)\\,dx\\right) + \\left(\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}J(\\delta\\mathbf{u},\\mathbf{u}) + \\int_{\\Gamma_D} \\beta(\\delta\\mathbf{u}\\cdot\\tilde{\\mathbf{u}})\\,ds + \\int_D(\\partial_{(\\mathbf{u},\\delta\\mathbf{u})}\\pmb\\sigma(\\delta\\mathbf{u}):\\pmb\\varepsilon(\\tilde{\\mathbf{u}})^\\top)\\,dx\\right)",
-    "adjoint_weak_lhs_source": "extracted",
-    "adjoint_weak_rhs": "0",
-    "adjoint_weak_rhs_source": "extracted",
-    "shape_derivative_volume": "-\\int_{\\Gamma_T} \\beta_T (\\nabla g_T(x)\\cdot\\mathbf{V})\\tilde T\\,ds - \\int_{\\Gamma_T} \\beta_T g_T(x)\\operatorname{div}\\mathbf{V}\\tilde T\\,ds + \\int_{\\Gamma_T} \\beta_T g_T(x)(\\mathbf{n}\\cdot(\\mathbf{n}\\cdot\\nabla\\mathbf{V}))\\tilde T\\,ds + \\int_{\\Gamma_T} \\beta_T \\operatorname{div}\\mathbf{V} T\\tilde T\\,ds - \\int_{\\Gamma_T} \\beta_T (\\mathbf{n}\\cdot(\\mathbf{n}\\cdot\\nabla\\mathbf{V})) T\\tilde T\\,ds + \\int_D (\\operatorname{div}\\mathbf{V}(\\nabla T\\cdot\\nabla\\tilde T) - (\\nabla T\\cdot(\\nabla\\tilde T\\cdot\\nabla\\mathbf{V})) - (\\nabla\\tilde T\\cdot(\\nabla T\\cdot\\nabla\\mathbf{V})))k\\,dx + \\partial_t J(\\mathbf{V},\\mathbf{u}) + \\int_{\\Gamma_D} \\beta\\operatorname{div}\\mathbf{V}(\\mathbf{u}\\cdot\\tilde{\\mathbf{u}})\\,ds - \\int_{\\Gamma_D} \\beta(\\mathbf{n}\\cdot(\\mathbf{n}\\cdot\\nabla\\mathbf{V}))(\\mathbf{u}\\cdot\\tilde{\\mathbf{u}})\\,ds + \\int_{\\Gamma_N} q\\operatorname{div}\\mathbf{V}(\\mathbf{e}_y\\cdot\\tilde{\\mathbf{u}})\\,ds - \\int_{\\Gamma_N} q(\\mathbf{n}\\cdot(\\mathbf{n}\\cdot\\nabla\\mathbf{V}))(\\mathbf{e}_y\\cdot\\tilde{\\mathbf{u}})\\,ds + \\int_D \\rho g\\chi\\operatorname{div}\\mathbf{V}(\\mathbf{e}_y\\cdot\\tilde{\\mathbf{u}})\\,dx + \\int_D \\left(\\operatorname{div}\\mathbf{V}(\\pmb\\sigma(T,\\mathbf{u}):\\pmb\\varepsilon(\\tilde{\\mathbf{u}})^\\top) + (\\partial_t\\pmb\\sigma(\\mathbf{V},\\mathbf{u}):\\pmb\\varepsilon(\\tilde{\\mathbf{u}})^\\top) + (\\pmb\\sigma(T,\\mathbf{u}):\\partial_t\\pmb\\varepsilon(\\tilde{\\mathbf{u}},\\mathbf{V})^\\top)\\right)\\,dx",
-    "shape_derivative_volume_source": "extracted",
-    "shape_derivative_boundary": "0",
-    "shape_derivative_boundary_source": "designed",
-    "shape_derivative_boundary_rationale": "No separate boundary expression was extracted; all boundary contributions are already included in the volume expression.",
-    "shape_derivative_source": "extracted",
+    "domain_description": "rectangle [0,4] x [0,1]",
+    "domain_description_source": "designed",
+    "domain_description_rationale": "mesh line square(4*n,n,[4*x,y]) maps the unit square onto [0,4]x[0,1].",
     "boundaries": [
       {
-        "name": "\\Gamma_T",
+        "name": "Gamma_D",
+        "definition": "left edge x = 0",
+        "kind": "Dirichlet",
+        "design_role": "fixed",
         "label": "4",
-        "kind": "Dirichlet",
-        "description": "temperature boundary with prescribed temperature g_T(x) via penalty",
         "source": "designed",
-        "rationale": "Boundary name and condition extracted; mesh label 4 assigned as the left temperature boundary from geometric reasoning with five mesh labels."
+        "rationale": "clamped support carrying the Dirichlet penalty int_{Gamma_D} beta (u.delta u)."
       },
       {
-        "name": "\\Gamma_D",
-        "label": "1",
-        "kind": "Dirichlet",
-        "description": "displacement boundary with zero displacement penalized by beta",
-        "source": "designed",
-        "rationale": "Boundary name and condition extracted; mesh label 1 assigned as the bottom fixed displacement boundary from geometric reasoning."
-      },
-      {
-        "name": "\\Gamma_N",
-        "label": "3",
+        "name": "Gamma_N",
+        "definition": "right edge x = 4",
         "kind": "Neumann",
-        "description": "loaded boundary with vertical traction q",
-        "source": "designed",
-        "rationale": "Boundary name and condition extracted; mesh label 3 assigned as the top loaded boundary from geometric reasoning."
-      },
-      {
-        "name": "\\Gamma_{\\mathrm{free}}",
+        "design_role": "fixed",
         "label": "2",
-        "kind": "Neumann",
-        "description": "free boundary with homogeneous natural condition",
         "source": "designed",
-        "rationale": "Remaining mesh label 2 assigned to the free right edge of the design domain."
+        "rationale": "loaded edge (q e_y); its position is prescribed so it is frozen."
       },
       {
-        "name": "\\Gamma_{\\mathrm{hole}}",
-        "label": "5",
-        "kind": "Neumann",
-        "description": "initial hole or free internal boundary",
+        "name": "Gamma_T",
+        "definition": "top edge y = 1",
+        "kind": "Robin",
+        "design_role": "design",
+        "label": "3",
         "source": "designed",
-        "rationale": "Remaining mesh label 5 assigned to the initial hole boundary."
+        "rationale": "Robin convection boundary beta_T(T - g_T); movable."
+      },
+      {
+        "name": "Gamma_free",
+        "definition": "bottom edge y = 0",
+        "kind": "Neumann",
+        "design_role": "design",
+        "label": "1",
+        "source": "designed",
+        "rationale": "unloaded boundary, free traction (Neumann) so movable."
       }
     ],
     "fields": [
       {
         "name": "T",
-        "latex": "T",
         "type": "scalar",
         "fe_space": "P2",
+        "domain": "D",
         "unit": "kelvin",
-        "dirichlet_value": "g_T(x) = 30 y",
-        "dirichlet_labels": [
-          "4"
-        ],
-        "source": "extracted",
-        "rationale": "Temperature field extracted; kelvin unit and label 4 tied to Gamma_T assigned for completeness."
+        "source": "designed",
+        "rationale": "temperature field, P2 as stated.",
+        "dirichlet_labels": null
       },
       {
         "name": "u",
-        "latex": "\\mathbf{u}",
         "type": "vector",
         "fe_space": "P2",
+        "domain": "D",
         "unit": "meter",
-        "dirichlet_value": "0 (weakly enforced on Gamma_D)",
-        "dirichlet_labels": [
-          "1"
-        ],
         "source": "designed",
-        "rationale": "Displacement field extracted; meter unit and penalized zero displacement target/label assigned because zero displacement is enforced weakly on Gamma_D."
-      }
-    ],
-    "test_functions": [
-      {
-        "name": "delta_T",
-        "latex": "\\delta T",
-        "type": "scalar",
-        "fe_space": "P2",
-        "source": "extracted"
+        "rationale": "displacement, clamped on the fixed left edge.",
+        "dirichlet_labels": null
       },
       {
-        "name": "delta_u",
-        "latex": "\\delta\\mathbf{u}",
+        "name": "T_tilde",
+        "type": "scalar",
+        "fe_space": "P2",
+        "domain": "D",
+        "unit": "kelvin",
+        "source": "designed",
+        "rationale": "adjoint temperature in V_delta_T.",
+        "dirichlet_labels": null
+      },
+      {
+        "name": "u_tilde",
         "type": "vector",
         "fe_space": "P2",
-        "source": "extracted"
+        "domain": "D",
+        "unit": "meter",
+        "source": "designed",
+        "rationale": "adjoint displacement in V_delta_u, homogenous Dirichlet on Gamma_D.",
+        "dirichlet_labels": null
       }
     ],
     "constants": [
       {
         "name": "nu",
         "latex": "\\nu",
-        "value": 0.23,
+        "value": "0.23",
         "description": "Poisson's ratio",
-        "unit": "-",
+        "unit": "$-$",
+        "unit_source": "extracted",
         "source": "extracted"
       },
       {
-        "name": "E0",
-        "latex": "E_0",
-        "value": 32000000.0,
+        "name": "E_0",
+        "latex": "E_{0}",
+        "value": "3.20e+07",
         "description": "Young's modulus",
-        "unit": "N/m^2",
+        "unit": "$\\frac{N}{m^2}$",
+        "unit_source": "extracted",
         "source": "extracted"
       },
       {
         "name": "rho",
         "latex": "\\rho",
-        "value": 2500.0,
+        "value": "2.50e+03",
         "description": "density",
-        "unit": "kg/m^3",
+        "unit": "$\\frac{kg}{m^3}$",
+        "unit_source": "extracted",
         "source": "extracted"
       },
       {
         "name": "gamma",
         "latex": "\\gamma",
-        "value": 100,
-        "description": "displacement cost factor",
-        "unit": "N/m^2",
+        "value": "100",
+        "description": "disp. cost factor",
+        "unit": "$\\frac{N}{m^2}$",
+        "unit_source": "extracted",
         "source": "extracted"
       },
       {
         "name": "g",
         "latex": "g",
-        "value": 9.81,
-        "description": "gravitational acceleration",
-        "unit": "m/s^2",
+        "value": "9.81",
+        "description": "gravitational acc.",
+        "unit": "$\\frac{m}{s^2}$",
+        "unit_source": "extracted",
         "source": "extracted"
       },
       {
         "name": "ell",
         "latex": "\\ell",
-        "value": 1,
+        "value": "1",
         "description": "material cost",
-        "unit": "N/m^2",
+        "unit": "$\\frac{N}{m^2}$",
+        "unit_source": "extracted",
         "source": "extracted"
       },
       {
         "name": "beta_T",
-        "latex": "\\beta_T",
-        "value": 100000000000.0,
-        "description": "penalty parameter for temperature boundary",
-        "unit": "W/(K m^2)",
+        "latex": "\\beta_{T}",
+        "value": "1.00e+11",
+        "description": "penalty parameter",
+        "unit": "$\\frac{W}{K m^2}$",
+        "unit_source": "extracted",
         "source": "extracted"
       },
       {
         "name": "beta",
         "latex": "\\beta",
-        "value": 100000000000.0,
-        "description": "penalty parameter for displacement boundary",
-        "unit": "N/m^3",
+        "value": "1.00e+11",
+        "description": "penalty parameter",
+        "unit": "$\\frac{N}{m^3}$",
+        "unit_source": "extracted",
         "source": "extracted"
       },
       {
-        "name": "k0",
-        "latex": "k_0",
-        "value": 1.25,
-        "description": "thermal conductivity",
-        "unit": "W/(K m)",
+        "name": "k_0",
+        "latex": "k_{0}",
+        "value": "1.25",
+        "description": "ther. conductivity",
+        "unit": "$\\frac{W}{K m}$",
+        "unit_source": "extracted",
         "source": "extracted"
       },
       {
         "name": "alpha_T",
-        "latex": "\\alpha_T",
-        "value": 3.6e-05,
-        "description": "thermal expansion coefficient",
-        "unit": "1/K",
+        "latex": "\\alpha_{T}",
+        "value": "3.60e-05",
+        "description": "ther. expansion coeff.",
+        "unit": "$\\frac{1}{K}$",
+        "unit_source": "extracted",
         "source": "extracted"
       },
       {
         "name": "q",
         "latex": "q",
-        "value": 5000.0,
-        "description": "vertical load component",
-        "unit": "N/m^2",
-        "source": "extracted"
-      }
-    ],
-    "expressions": [
-      {
-        "name": "k",
-        "latex": "k(x)",
-        "formula": "k_0 if phi(x) < 0; k_0/1000 if phi(x) >= 0",
-        "source": "extracted"
-      },
-      {
-        "name": "E",
-        "latex": "E(x)",
-        "formula": "E_0 if phi(x) < 0; E_0/1000 if phi(x) >= 0",
-        "source": "extracted"
-      },
-      {
-        "name": "alpha_T",
-        "latex": "\\alpha_T(x)",
-        "formula": "\\alpha_T if phi(x) < 0; \\alpha_T/1000 if phi(x) >= 0",
-        "source": "extracted"
-      },
-      {
-        "name": "epsilon",
-        "latex": "\\pmb\\varepsilon(\\mathbf{u})",
-        "formula": "\\frac{\\nabla \\mathbf{u} + (\\nabla \\mathbf{u})^\\top}{2}",
-        "source": "extracted"
-      },
-      {
-        "name": "epsilon_e",
-        "latex": "\\pmb\\varepsilon_e(T,\\mathbf{u})",
-        "formula": "-\\mathbf{I} \\alpha_T T + \\pmb\\varepsilon(\\mathbf{u})",
-        "source": "extracted"
-      },
-      {
-        "name": "mu",
-        "latex": "\\mu",
-        "formula": "\\frac{E}{2(\\nu+1)}",
-        "source": "extracted"
-      },
-      {
-        "name": "sigma",
-        "latex": "\\pmb\\sigma(T,\\mathbf{u})",
-        "formula": "\\mathbf{I}\\lambda\\,\\operatorname{tr}(\\pmb\\varepsilon_e(T,\\mathbf{u})) + 2\\mu\\pmb\\varepsilon_e(T,\\mathbf{u})",
-        "source": "extracted"
-      },
-      {
-        "name": "lambda",
-        "latex": "\\lambda",
-        "formula": "\\frac{\\nu E}{(1-2\\nu)(\\nu+1)}",
-        "source": "extracted"
-      },
-      {
-        "name": "J",
-        "latex": "J(\\mathbf{u})",
-        "formula": "\\int_D \\ell \\chi\\, dx + \\int_{\\Gamma_D} \\beta(\\mathbf{e}_x\\cdot\\mathbf{u})^2\\, ds - \\int_{\\Gamma_N} \\gamma(\\mathbf{e}_y\\cdot\\mathbf{u})\\, ds",
-        "source": "extracted"
-      },
-      {
-        "name": "g_T",
-        "latex": "g_T(x)",
-        "formula": "30 y",
-        "source": "extracted"
-      },
-      {
-        "name": "dJ_du",
-        "latex": "\\partial_{(\\mathbf{u},\\delta\\mathbf{u})} J(\\delta\\mathbf{u},\\mathbf{u})",
-        "formula": "-\\int_{\\Gamma_N} \\gamma(\\mathbf{e}_y\\cdot\\delta\\mathbf{u})\\, ds + \\int_{\\Gamma_D} 2\\beta(\\mathbf{e}_x\\cdot\\mathbf{u})^2(\\mathbf{e}_x\\cdot\\delta\\mathbf{u})(\\mathbf{e}_x\\cdot\\mathbf{u})^{-1}\\, ds",
+        "value": "5.00e+03",
+        "description": "vert. load comp.",
+        "unit": "$\\frac{N}{m^2}$",
+        "unit_source": "extracted",
         "source": "extracted"
       }
     ],
     "characteristic_function": {
-      "latex": "\\chi(x)",
-      "strong_value": "1 if phi(x) < 0; 0 if phi(x) >= 0",
-      "weak_value": "1/100",
-      "source": "designed",
-      "rationale": "Strong form extracted; weak value default 1/100 chosen for the ersatz material model in this solid-mechanics topology optimization."
+      "latex": "\\raisebox{\\depth}{$\\chi$}",
+      "latex_source": "designed",
+      "latex_rationale": "full decoration required for the characteristic function.",
+      "condition": "chi = 1 if phi(x) < 0 and chi = 0 if phi(x) >= 0",
+      "condition_source": "extracted",
+      "strong_value": "1",
+      "strong_value_source": "designed",
+      "strong_value_rationale": "solid side is the larger value.",
+      "weak_value": "0",
+      "weak_value_source": "extracted",
+      "weak_value_rationale": "source defines chi = 0 in the void, preserved.",
+      "source": "designed"
+    },
+    "expressions": [
+      {
+        "name": "k_of_x",
+        "latex": "k(x) = k_0 \\text{ if } \\phi(x) < 0, \\quad k(x) = k_0/1000 \\text{ if } \\phi(x) \\ge 0",
+        "source": "extracted"
+      },
+      {
+        "name": "E_of_x",
+        "latex": "E(x) = E_0 \\text{ if } \\phi(x) < 0, \\quad E(x) = E_0/1000 \\text{ if } \\phi(x) \\ge 0",
+        "source": "extracted"
+      },
+      {
+        "name": "alpha_T_of_x",
+        "latex": "\\alpha_{T}(x) = \\alpha_{T} \\text{ if } \\phi(x) < 0, \\quad \\alpha_{T}(x) = \\alpha_{T}/1000 \\text{ if } \\phi(x) \\ge 0",
+        "source": "extracted"
+      },
+      {
+        "name": "epsilon_u",
+        "latex": "\\pmb\\varepsilon(\\mathbf u) = \\frac{\\nabla \\mathbf u + \\nabla \\mathbf u^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "epsilon_delta_u",
+        "latex": "\\pmb\\varepsilon(\\delta\\mathbf u) = \\frac{\\nabla \\delta\\mathbf u + \\nabla \\delta\\mathbf u^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "epsilon_e",
+        "latex": "\\pmb\\varepsilon_{e}(T,\\mathbf u) = -\\mathbf I \\alpha_{T} T + \\pmb\\varepsilon(\\mathbf u)",
+        "source": "extracted"
+      },
+      {
+        "name": "lambda",
+        "latex": "\\lambda = \\frac{\\nu E}{(1-2\\nu)(\\nu+1)}",
+        "source": "extracted"
+      },
+      {
+        "name": "mu",
+        "latex": "\\mu = \\frac{E}{2(\\nu+1)}",
+        "source": "extracted"
+      },
+      {
+        "name": "sigma",
+        "latex": "\\pmb\\sigma(T,\\mathbf u) = \\mathbf I \\lambda \\operatorname{tr}(\\pmb\\varepsilon_{e}(T,\\mathbf u)) + 2\\mu\\pmb\\varepsilon_{e}(T,\\mathbf u)",
+        "source": "extracted"
+      },
+      {
+        "name": "J",
+        "latex": "J(\\mathbf u) = \\int_D \\ell \\chi\\,dx + \\int_{label\\,4} \\beta(\\mathbf e_x\\cdot\\mathbf u)^2\\,ds - \\int_{label\\,2} \\gamma(\\mathbf e_y\\cdot\\mathbf u)\\,ds",
+        "source": "designed",
+        "rationale": "source objective with Gamma_D, Gamma_N resolved to mesh labels 4 and 2."
+      },
+      {
+        "name": "g_T",
+        "latex": "g_{T}(x) = 30 y",
+        "source": "extracted"
+      },
+      {
+        "name": "dJ_partial",
+        "latex": "\\partial_{(\\mathbf u,\\delta\\mathbf u)}J = -\\int_{label\\,2}\\gamma(\\mathbf e_y\\cdot\\delta\\mathbf u)\\,ds + \\int_{label\\,4}2\\beta(\\mathbf e_x\\cdot\\mathbf u)(\\mathbf e_x\\cdot\\delta\\mathbf u)\\,ds",
+        "source": "designed",
+        "rationale": "source derivative of J with the (e_x.u)^-1 factor cancelled."
+      },
+      {
+        "name": "strain_rate",
+        "latex": "\\partial_t\\pmb\\varepsilon(\\mathbf V,\\mathbf u) = -((\\nabla\\mathbf u\\cdot\\nabla\\mathbf V) + (\\nabla\\mathbf u\\cdot\\nabla\\mathbf V)^\\top)/2",
+        "source": "designed"
+      },
+      {
+        "name": "strain_rate_tilde",
+        "latex": "\\partial_t\\pmb\\varepsilon(\\tilde{\\mathbf u},\\mathbf V) = -((\\nabla\\tilde{\\mathbf u}\\cdot\\nabla\\mathbf V) + (\\nabla\\tilde{\\mathbf u}\\cdot\\nabla\\mathbf V)^\\top)/2",
+        "source": "designed"
+      },
+      {
+        "name": "dt_J",
+        "latex": "\\partial_t J(\\mathbf V,\\mathbf u) = \\int_D \\ell\\chi\\operatorname{div}\\mathbf V\\,dx - \\int_{label\\,2}\\gamma\\operatorname{div}\\mathbf V(\\mathbf e_y\\cdot\\mathbf u)\\,ds + \\int_{label\\,2}\\gamma(\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla\\mathbf V))(\\mathbf e_y\\cdot\\mathbf u)\\,ds + \\int_{label\\,4}\\beta\\operatorname{div}\\mathbf V(\\mathbf e_x\\cdot\\mathbf u)^2\\,ds - \\int_{label\\,4}\\beta(\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla\\mathbf V))(\\mathbf e_x\\cdot\\mathbf u)^2\\,ds",
+        "source": "designed",
+        "rationale": "source material-time derivative of J with boundary labels resolved."
+      },
+      {
+        "name": "lambda_alt",
+        "latex": "\\lambda = -\\frac{\\nu E}{(\\nu+1)(2\\nu-1)}",
+        "source": "extracted"
+      },
+      {
+        "name": "d_sigma_du",
+        "latex": "\\partial_{(\\mathbf u,\\delta\\mathbf u)}\\pmb\\sigma(\\delta\\mathbf u) = \\mathbf I \\lambda \\operatorname{tr}(\\partial_{(\\mathbf u,\\delta\\mathbf u)}\\pmb\\varepsilon_e(\\delta\\mathbf u)) + 2\\mu \\partial_{(\\mathbf u,\\delta\\mathbf u)}\\pmb\\varepsilon_e(\\delta\\mathbf u)",
+        "source": "extracted"
+      },
+      {
+        "name": "d_sigma_dT",
+        "latex": "\\partial_{(T,\\delta T)}\\pmb\\sigma(\\delta T) = \\mathbf I \\lambda \\operatorname{tr}(\\partial_{(T,\\delta T)}\\pmb\\varepsilon_e(\\delta T)) + 2\\mu \\partial_{(T,\\delta T)}\\pmb\\varepsilon_e(\\delta T)",
+        "source": "extracted"
+      },
+      {
+        "name": "d_eps_e_du",
+        "latex": "\\partial_{(\\mathbf u,\\delta\\mathbf u)}\\pmb\\varepsilon_e(\\delta\\mathbf u) = \\pmb\\varepsilon(\\delta\\mathbf u)",
+        "source": "extracted"
+      },
+      {
+        "name": "d_eps_e_dT",
+        "latex": "\\partial_{(T,\\delta T)}\\pmb\\varepsilon_e(\\delta T) = -\\mathbf I \\alpha_{T}\\delta T",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_sigma",
+        "latex": "\\partial_t\\pmb\\sigma(\\mathbf V,\\mathbf u) = \\mathbf I \\lambda \\operatorname{tr}(\\partial_t\\pmb\\varepsilon_e(\\mathbf V,\\mathbf u)) + 2\\mu \\partial_t\\pmb\\varepsilon_e(\\mathbf V,\\mathbf u)",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_eps",
+        "latex": "\\partial_t\\pmb\\varepsilon(\\mathbf V,\\mathbf u) = -\\frac{(\\nabla\\mathbf u \\cdot \\nabla\\mathbf V) + ((\\nabla\\mathbf u \\cdot \\nabla\\mathbf V))^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_eps_tilde",
+        "latex": "\\partial_t\\pmb\\varepsilon(\\tilde{\\mathbf u},\\mathbf V) = -\\frac{(\\nabla\\tilde{\\mathbf u} \\cdot \\nabla\\mathbf V) + ((\\nabla\\tilde{\\mathbf u} \\cdot \\nabla\\mathbf V))^\\top}{2}",
+        "source": "extracted"
+      },
+      {
+        "name": "dt_eps_e",
+        "latex": "\\partial_t\\pmb\\varepsilon_e(\\mathbf V,\\mathbf u) = \\partial_t\\pmb\\varepsilon(\\mathbf V,\\mathbf u)",
+        "source": "extracted"
+      }
+    ],
+    "lagrangian": {
+      "objective_name": "J",
+      "objective_name_source": "extracted",
+      "objective_description": "weighted material cost plus a penalisation of horizontal displacement on Gamma_D minus a weighted vertical displacement on Gamma_N",
+      "objective_description_source": "designed",
+      "objective_description_rationale": "summary of the three objective terms.",
+      "objective_terms": [
+        {
+          "latex": "\\int_D \\ell \\chi\\,dx",
+          "source": "extracted"
+        },
+        {
+          "latex": "\\int_{label\\,4} \\beta(\\mathbf e_x\\cdot\\mathbf u)^2\\,ds",
+          "source": "designed",
+          "rationale": "Gamma_D resolved to label 4."
+        },
+        {
+          "latex": "-\\int_{label\\,2} \\gamma(\\mathbf e_y\\cdot\\mathbf u)\\,ds",
+          "source": "designed",
+          "rationale": "Gamma_N resolved to label 2."
+        }
+      ],
+      "state_equation": [
+        {
+          "description": "thermal state: k grad(T).grad(dT) plus Robin mass term equals Robin data",
+          "weak_form_lhs": "\\int_D k(\\nabla T\\cdot\\nabla\\delta T)\\,dx + \\int_{label\\,3}\\beta_T T\\delta T\\,ds",
+          "weak_form_rhs": "\\int_{label\\,3}\\beta_T g_T(x)\\delta T\\,ds",
+          "source": "designed",
+          "rationale": "source thermal equation with Gamma_T resolved to mesh label 3 and the Robin data moved to the right-hand side."
+        },
+        {
+          "description": "mechanical state: elasticity bilinear form plus the Dirichlet penalty on Gamma_D equals the vertical body/boundary loads",
+          "weak_form_lhs": "\\int_D (\\pmb\\sigma(T,\\mathbf u):\\pmb\\varepsilon(\\delta\\mathbf u)^\\top)\\,dx + \\int_{label\\,4}\\beta(\\mathbf u\\cdot\\delta\\mathbf u)\\,ds",
+          "weak_form_rhs": "-\\int_{label\\,2} q(\\mathbf e_y\\cdot\\delta\\mathbf u)\\,ds - \\int_D \\rho g\\chi(\\mathbf e_y\\cdot\\delta\\mathbf u)\\,dx",
+          "source": "designed",
+          "rationale": "source mechanical equation; load terms moved to the right-hand side with flipped sign, Gamma_D/Gamma_N resolved to labels 4 and 2."
+        }
+      ],
+      "adjoint_equation": [
+        {
+          "description": "thermal adjoint: Robin term, conduction term and the thermo-elastic coupling term",
+          "weak_form_lhs": "\\int_{label\\,3}\\beta_T\\delta T\\tilde T\\,ds + \\int_D k(\\nabla\\delta T\\cdot\\nabla\\tilde T)\\,dx + \\int_D(\\partial_{(T,\\delta T)}\\pmb\\sigma(\\delta T):\\pmb\\varepsilon(\\tilde{\\mathbf u})^\\top)\\,dx",
+          "weak_form_rhs": "0",
+          "source": "designed",
+          "rationale": "source adjoint with Gamma_T resolved to label 3."
+        },
+        {
+          "description": "mechanical adjoint: derivative of J plus Dirichlet penalty plus elasticity term",
+          "weak_form_lhs": "\\int_{label\\,4}\\beta(\\delta\\mathbf u\\cdot\\tilde{\\mathbf u})\\,ds + \\int_D(\\partial_{(\\mathbf u,\\delta\\mathbf u)}\\pmb\\sigma(\\delta\\mathbf u):\\pmb\\varepsilon(\\tilde{\\mathbf u})^\\top)\\,dx",
+          "weak_form_rhs": "-\\partial_{(\\mathbf u,\\delta\\mathbf u)}J(\\delta\\mathbf u,\\mathbf u)",
+          "source": "designed",
+          "rationale": "source adjoint with the J-derivative moved to the right-hand side."
+        }
+      ],
+      "shape_derivative": "DJ(\\Omega)(\\mathbf V) = -\\int_{label\\,3}\\beta_T(\\nabla g_T\\cdot\\mathbf V)\\tilde T\\,ds - \\int_{label\\,3}\\beta_T g_T\\operatorname{div}\\mathbf V\\tilde T\\,ds + \\int_{label\\,3}\\beta_T g_T(\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla\\mathbf V))\\tilde T\\,ds + \\int_{label\\,3}\\beta_T\\operatorname{div}\\mathbf V T\\tilde T\\,ds - \\int_{label\\,3}\\beta_T(\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla\\mathbf V))T\\tilde T\\,ds + \\int_D(\\operatorname{div}\\mathbf V(\\nabla T\\cdot\\nabla\\tilde T) - (\\nabla T\\cdot(\\nabla\\tilde T\\cdot\\nabla\\mathbf V)) - (\\nabla\\tilde T\\cdot(\\nabla T\\cdot\\nabla\\mathbf V)))k\\,dx + \\partial_t J + \\int_{label\\,4}\\beta\\operatorname{div}\\mathbf V(\\mathbf u\\cdot\\tilde{\\mathbf u})\\,ds - \\int_{label\\,4}\\beta(\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla\\mathbf V))(\\mathbf u\\cdot\\tilde{\\mathbf u})\\,ds + \\int_{label\\,2}q\\operatorname{div}\\mathbf V(\\mathbf e_y\\cdot\\tilde{\\mathbf u})\\,ds - \\int_{label\\,2}q(\\mathbf n\\cdot(\\mathbf n\\cdot\\nabla\\mathbf V))(\\mathbf e_y\\cdot\\tilde{\\mathbf u})\\,ds + \\int_D\\rho g\\chi\\operatorname{div}\\mathbf V(\\mathbf e_y\\cdot\\tilde{\\mathbf u})\\,dx + \\int_D[\\operatorname{div}\\mathbf V(\\pmb\\sigma(T,\\mathbf u):\\pmb\\varepsilon(\\tilde{\\mathbf u})^\\top) + (\\partial_t\\pmb\\sigma(\\mathbf V,\\mathbf u):\\pmb\\varepsilon(\\tilde{\\mathbf u})^\\top) + (\\pmb\\sigma(T,\\mathbf u):\\partial_t\\pmb\\varepsilon(\\tilde{\\mathbf u},\\mathbf V)^\\top)]\\,dx",
+      "shape_derivative_source": "designed",
+      "shape_derivative_rationale": "source volume expression with every boundary integral resolved to its concrete mesh label.",
+      "perturbed_lagrangian": {
+        "perturbation_map": "\\mathbf x = T_t(\\mathbf X) = \\mathbf X + t \\mathbf V(\\mathbf X)",
+        "perturbation_map_source": "extracted",
+        "latex": "\\mathcal G(t,[T,\\mathbf u]^{L},[\\delta T,\\delta\\mathbf u]^{L}) = -\\int_{label\\,3}\\beta_{T} g_{T}(T_t(x))\\operatorname{det}\\mathbf F(t)\\sqrt{(\\mathbf n \\cdot \\mathbf F^{-1}(t)) \\cdot (\\mathbf n \\cdot \\mathbf F^{-1}(t))}\\delta T\\,ds_x + \\int_{label\\,3}\\beta_{T}\\operatorname{det}\\mathbf F(t)\\sqrt{(\\mathbf n \\cdot \\mathbf F^{-1}(t)) \\cdot (\\mathbf n \\cdot \\mathbf F^{-1}(t))}T\\delta T\\,ds_x + \\int_{D} k\\operatorname{det}\\mathbf F(t)((\\nabla T \\cdot \\mathbf F^{-1}(t)) \\cdot (\\nabla\\delta T \\cdot \\mathbf F^{-1}(t)))\\,dx + \\mathcal V(J) + \\int_{label\\,4}\\beta\\operatorname{det}\\mathbf F(t)\\sqrt{(\\mathbf n \\cdot \\mathbf F^{-1}(t)) \\cdot (\\mathbf n \\cdot \\mathbf F^{-1}(t))}(\\mathbf u \\cdot \\delta\\mathbf u)\\,ds_x + \\int_{label\\,2} q\\operatorname{det}\\mathbf F(t)\\sqrt{(\\mathbf n \\cdot \\mathbf F^{-1}(t)) \\cdot (\\mathbf n \\cdot \\mathbf F^{-1}(t))}(\\mathbf e_y \\cdot \\delta\\mathbf u)\\,ds_x + \\int_{D}\\operatorname{det}\\mathbf F(t)(\\mathcal V(\\pmb\\sigma) : \\mathcal V(\\pmb\\varepsilon)^\\top)\\,dx + \\int_{D}\\rho g \\raisebox{\\depth}{$\\chi$}\\operatorname{det}\\mathbf F(t)(\\mathbf e_y \\cdot \\delta\\mathbf u)\\,dx",
+        "latex_source": "designed",
+        "latex_rationale": "source perturbed Lagrangian with Gamma_T, Gamma_D and Gamma_N resolved to mesh labels 3, 4 and 2.",
+        "perturbed_quantities": [
+          {
+            "name": "V_epsilon_u",
+            "latex": "\\mathcal V(\\pmb\\varepsilon) = \\frac{(\\nabla\\mathbf u \\cdot \\mathbf F^{-1}(t)) + ((\\nabla\\mathbf u \\cdot \\mathbf F^{-1}(t)))^\\top}{2}",
+            "source": "extracted"
+          },
+          {
+            "name": "V_epsilon_e",
+            "latex": "\\mathcal V(\\pmb\\varepsilon_{e}) = -\\mathbf I \\alpha_{T} T + \\mathcal V(\\pmb\\varepsilon)",
+            "source": "extracted"
+          },
+          {
+            "name": "V_sigma",
+            "latex": "\\mathcal V(\\pmb\\sigma) = \\mathbf I \\lambda \\operatorname{tr}(\\mathcal V(\\pmb\\varepsilon_{e})) + 2\\mu \\mathcal V(\\pmb\\varepsilon_{e})",
+            "source": "extracted"
+          },
+          {
+            "name": "V_epsilon_delta_u",
+            "latex": "\\mathcal V(\\pmb\\varepsilon) = \\frac{(\\nabla\\delta\\mathbf u \\cdot \\mathbf F^{-1}(t)) + ((\\nabla\\delta\\mathbf u \\cdot \\mathbf F^{-1}(t)))^\\top}{2}",
+            "source": "extracted"
+          },
+          {
+            "name": "V_J",
+            "latex": "\\mathcal V(J) = \\int_{D} \\ell \\raisebox{\\depth}{$\\chi$}\\operatorname{det}\\mathbf F(t)\\,dx + \\int_{label\\,4}\\beta\\operatorname{det}\\mathbf F(t)\\sqrt{(\\mathbf n \\cdot \\mathbf F^{-1}(t)) \\cdot (\\mathbf n \\cdot \\mathbf F^{-1}(t))}(\\mathbf e_x \\cdot \\mathbf u)^{2}\\,ds_x - \\int_{label\\,2}\\gamma\\operatorname{det}\\mathbf F(t)\\sqrt{(\\mathbf n \\cdot \\mathbf F^{-1}(t)) \\cdot (\\mathbf n \\cdot \\mathbf F^{-1}(t))}(\\mathbf e_y \\cdot \\mathbf u)\\,ds_x",
+            "source": "designed",
+            "rationale": "source V(J) with Gamma_D and Gamma_N resolved to mesh labels 4 and 2."
+          },
+          {
+            "name": "g_T",
+            "latex": "g_{T} = 30 y",
+            "source": "extracted"
+          }
+        ],
+        "source": "designed"
+      },
+      "check_units": true,
+      "newton": null
     },
     "optimization_config": {
-      "mesh_file": "Mesh1.mesh",
+      "mesh_file": "mesh.txt",
+      "mesh_file_source": "extracted",
       "hmin": 0.01,
-      "hmax": 0.1,
-      "diffusion": 0.0001,
-      "v0": 0.001,
-      "iterations": 30,
-      "level_set_initial": "0.3 - sqrt((x-0.5)^2 + (y-0.5)^2)",
+      "hmin_source": "designed",
+      "hmin_rationale": "about half the initial element size so thin members stay resolved.",
+      "hmax": 0.05,
+      "hmax_source": "designed",
+      "hmax_rationale": "about twice the initial element size (mesh is 0.02), fine enough for the 4x1 beam.",
+      "diffusion": 0.001,
+      "diffusion_source": "designed",
+      "diffusion_rationale": "small level-set diffusion, standard for a domain of size 4.",
+      "v0": 0.01,
+      "v0_source": "designed",
+      "v0_rationale": "moderate velocity regularisation at the problem's scale.",
+      "iterations": 100,
+      "iterations_source": "designed",
+      "iterations_rationale": "default iteration count.",
+      "phi": "abs(y - 0.5) - (0.6 - 0.1*x*(4 - x))",
+      "phi_source": "designed",
+      "phi_rationale": "horizontal band whose half-thickness is 0.6 at both ends (x = 0 and x = 4) and narrows to 0.2 at mid-span, so the fixed left edge (label 4) and fixed right edge (label 2) are solid along their entire length while the solid fraction stays about 65%.",
       "boundary_labels": [
         "1",
-        "2",
-        "3",
-        "4",
-        "5"
+        "3"
       ],
+      "boundary_labels_source": "designed",
+      "boundary_labels_rationale": "free bottom edge and Robin top edge are movable.",
       "fixed_labels": [
-        "1",
-        "3",
+        "2",
         "4"
       ],
-      "extra_params": {},
-      "source": "designed",
-      "rationale": "Mesh file extracted; hmin/hmax, diffusion, v0, iterations, initial level set, and fixed labels designed for a unit-square level-set thermoelastic topology optimization. The initial signed-distance field represents a solid square with a central circular hole, with the displacement, load, and temperature boundaries kept fixed."
-    }
+      "fixed_labels_source": "designed",
+      "fixed_labels_rationale": "clamped left edge and loaded right edge are frozen.",
+      "show_weak_material": false,
+      "show_weak_material_source": "designed",
+      "show_weak_material_rationale": "default.",
+      "source": "designed"
+    },
+    "extra_requirements": [],
+    "test_functions": [
+      {
+        "name": "delta_T",
+        "fe_space": "P2",
+        "domain": "D",
+        "source": "designed"
+      },
+      {
+        "name": "delta_u",
+        "fe_space": "P2",
+        "domain": "D",
+        "source": "designed"
+      }
+    ]
   }
 }

@@ -2,7 +2,6 @@ import base64
 import json
 import os
 import warnings
-from datetime import datetime
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage
@@ -10,6 +9,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
 from configs import IMAGE_SAMPLE_HEAD_TAIL, IMAGE_SAMPLE_MIDDLE, MAX_IMAGES_PER_REQUEST
+from history import init_log, record as _record_log
 
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 DASHSCOPE_BASE_URL = os.getenv(
@@ -154,13 +154,12 @@ class CodeWriter:
 
 
 class CodeAgent:
-    _HISTORY_TEXT_LIMIT = 20_000  # chars per input/output record
-
     def __init__(self):
         self.model_name = None
         self.writer = None
         self.prompt_list = []
         self.history_log = None  # Path to results/<problem>/history.txt
+        self.history_label = ""  # stage/round context for every record
 
     # ── operation log (results/<problem>/history.txt) ──────────────
 
@@ -168,76 +167,53 @@ class CodeAgent:
         """Redirect the operation log to *history_path*.
 
         Called once per problem from main.py; every subsequent
-        invoke/invoke_multimodal appends one record (time, operation,
-        input, output) to the file.
+        invoke/invoke_multimodal appends one record (time, kind, label,
+        FULL prompt + input values + output) to the file.
 
         ``write_header=False`` only points the log (used by the router's
-        vision agent — the text agent already created the file and wrote
-        the header, so a second write would both duplicate the header
-        and truncate the records).
+        vision agent and the reflection probe agents — the header is
+        created once, and a second write would truncate the records).
         """
         self.history_log = Path(history_path)
         if not write_header:
             return
-        try:
-            self.history_log.parent.mkdir(parents=True, exist_ok=True)
-            # "w": one pipeline run = one log.  Re-running the same
-            # problem starts fresh (like reflection.txt) instead of
-            # accumulating stale records from the previous run.
-            with open(self.history_log, "w", encoding="utf-8") as f:
-                f.write(f"{'=' * 70}\n")
-                f.write(f"OPERATION LOG — {self.history_log.parent.name}\n")
-                f.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write(f"{'=' * 70}\n")
-        except OSError as e:
-            warnings.warn(f"history log init failed: {e}")
-            self.history_log = None
-
-    def _system_hint(self) -> str:
-        """First line of the system prompt — names the operation."""
-        for m in self.prompt_list:
-            if isinstance(m, dict) and m.get("role") == "system":
-                return " ".join(str(m.get("content", "")).split())[:160]
-        return ""
+        init_log(self.history_log, self.history_log.parent.name)
 
     def _record_history(self, kind: str, full_text: str, function_dict=None, images=None) -> None:
-        """Append one human-readable record to history.txt (best effort).
+        """Append one record to history.txt (best effort, full content).
 
-        Records: the operation kind, the prompt template, the values
-        actually passed (function_dict), attached image names, and the
-        model output.
+        Records: the operation kind, the stage/round label, the COMPLETE
+        prompt templates, the values actually passed (function_dict),
+        attached image names, and the model output — the log is a
+        complete record of the pipeline's work and may grow large by
+        design (no truncation).
         """
         if self.history_log is None:
             return
-        try:
-            stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            # default=str: some callers pass small non-serializable values
-            # (Path, sets) — the log must never break an invoke.
-            values = json.dumps(function_dict or {}, ensure_ascii=False, indent=2, default=str)
-            if len(values) > self._HISTORY_TEXT_LIMIT:
-                values = values[: self._HISTORY_TEXT_LIMIT] + "\n... [truncated]"
-            out = str(full_text)
-            if len(out) > self._HISTORY_TEXT_LIMIT:
-                out = out[: self._HISTORY_TEXT_LIMIT] + "\n... [truncated]"
-            with open(self.history_log, "a", encoding="utf-8") as f:
-                f.write(f"\n=== {stamp} | {kind} | {self._system_hint()} ===\n")
-                f.write("--- input values ---\n")
-                f.write(values + "\n")
-                if images:
-                    names = [Path(p).name for p in images[:5]]
-                    f.write(
-                        f"--- images ---\n{len(images)} image(s): {names}"
-                        f"{' ...' if len(images) > 5 else ''}\n"
-                    )
-                f.write("--- output ---\n")
-                f.write(out + "\n")
-        except (OSError, TypeError) as e:
-            warnings.warn(f"history log write failed: {e}")
+        prompt_text = ""
+        for m in self.prompt_list or []:
+            if isinstance(m, dict) and m.get("content"):
+                prompt_text += (
+                    f"\n--- {m.get('role', '?')} prompt ---\n"
+                    f"{m.get('content', '')}\n"
+                )
+        # default=str: some callers pass small non-serializable values
+        # (Path, sets) — the log must never break an invoke.
+        values = json.dumps(function_dict or {}, ensure_ascii=False, indent=2, default=str)
+        input_text = prompt_text + "\n--- input values ---\n" + values
+        _record_log(
+            self.history_log,
+            kind,
+            label=self.history_label,
+            input_text=input_text,
+            output_text=str(full_text),
+            images=images,
+        )
 
     def invoke(self, function_dict):
         self.writer.initialization(self.prompt_list)
         full_text = self.writer.invoke(function_dict)
-        self._record_history("text", full_text, function_dict)
+        self._record_history("LLM text", full_text, function_dict)
         return full_text
 
     def invoke_multimodal(self, function_dict, images=None):
@@ -247,13 +223,33 @@ class CodeAgent:
         self.writer.initialization(self.prompt_list)
         full_text = self.writer.invoke_multimodal(function_dict, images=images)
         # No images is just a text call (the writer falls back) — record
-        # it as "text", not "vision".
-        kind = "vision" if images else "text"
+        # it as "LLM text", not "LLM vision".
+        kind = "LLM vision" if images else "LLM text"
         self._record_history(kind, full_text, function_dict, images=images)
         return full_text
 
     def set_prompt_list(self, prompt_list):
         self.prompt_list = prompt_list
+
+
+def test_connection(agent, attempts: int = 2) -> bool:
+    """Minimal LLM round-trip connectivity test.
+
+    Used at the START of the pipeline and of the reflection loop: an
+    unreachable model ends the run immediately instead of burning
+    repair rounds on connection errors.
+    """
+    agent.set_prompt_list([
+        {"role": "user", "content": "Reply with exactly one word: OK"},
+    ])
+    for _ in range(max(1, attempts)):
+        try:
+            raw = str(agent.invoke({})).strip()
+            if raw:
+                return True
+        except Exception:
+            continue
+    return False
 
 
 class AgentRouter:
@@ -282,6 +278,17 @@ class AgentRouter:
         # truncation of already-appended records).
         self.text_agent.attach_history(history_path, write_header=True)
         self.vision_agent.attach_history(history_path, write_header=False)
+
+    @property
+    def history_label(self) -> str:
+        """The stage/round label both underlying agents record."""
+        return self.vision_agent.history_label
+
+    @history_label.setter
+    def history_label(self, value: str) -> None:
+        # set on BOTH — either agent may handle the next call
+        self.text_agent.history_label = value
+        self.vision_agent.history_label = value
 
     def invoke(self, function_dict):
         return self.text_agent.invoke(function_dict)

@@ -1,7 +1,0 @@
---- Iteration 1 [00:15:55] ---
-Coarse:  afac_calibrate
-Fine:    -
-Action:  -
-Fix:     afac calibrated: ell 90000 -> 9000 (knee of the solid-fraction scan: 900:0.996, 9000:0.883, 90000:0.250, 900000:0.000*, 9e+06:0.001*)
-Outcome: solid fractions: 900:0.996, 9000:0.883, 90000:0.250, 900000:0.000*, 9e+06:0.001*
-

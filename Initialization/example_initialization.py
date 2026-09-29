@@ -1,8 +1,9 @@
 """
-Pre-compute ProblemSpec + mesh for database examples.
+Pre-compute ProblemSpec + mesh spec for database examples.
 
-Scans database/freefem_examples/ and runs parse_problem / handle_mesh
-on any folder missing initial.json or mesh.json.
+Scans database/freefem_examples/ and runs the one-loop spec generation
+(generate -> review -> repair) on any folder missing initial.json or
+mesh.json, writing BOTH files together once the loop passes.
 """
 
 import json
@@ -10,12 +11,17 @@ import os
 import sys
 from pathlib import Path
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from API import DeepSeekCodeAgentV4Flash  # noqa: E402
-from Initialization import collect_input_files, handle_mesh, parse_problem  # noqa: E402
+from Initialization import collect_input_files, run_spec_generation  # noqa: E402
 
 
 def run_example_initialization(agent=None):
@@ -45,56 +51,46 @@ def run_example_initialization(agent=None):
         # Collect non-.py input files
         input_files = collect_input_files(folder)
 
-        # Run parse_problem if needed
-        if need_initial:
-            print("  -> running parse_problem...", end=" ", flush=True)
-            result = parse_problem(agent, input_files, problem_name=name)
-            if not isinstance(result, dict) or not result or result.get("_error") or not result.get("designed"):
-                # `not result` catches the {} path (empty/all-excluded
-                # inputs) and `not result.get("designed")` catches a
-                # parsed-but-design-failed spec (parse_problem returns
-                # {"extracted": ..., "designed": {}} without _error) —
-                # an empty spec must never bake in as a reference.
-                err = (result or {}).get("_error", "non-dict or empty result") if isinstance(result, dict) else "non-dict result"
-                print(f"FAILED: {err}", flush=True)
-                # A previous partial run must not bake in an invalid spec
-                # — remove stale success artifacts so the next run retries
-                # BOTH phases (mesh depends on the parsed spec).
-                for stale_name in ("initial.json", "mesh.json"):
-                    stale = folder / stale_name
-                    if stale.exists():
-                        stale.unlink()
-                continue
-            with open(folder / "initial.json", "w", encoding="utf-8") as f:
-                json.dump(result, f, indent=2, ensure_ascii=False)
-            ds = result.get("designed", {})
-            print(f"OK ({ds.get('problem_type', '?')}, {ds.get('dimension', '?')}D)", flush=True)
+        # One-loop generation: BOTH specs together, reviewed together,
+        # repaired together until the review passes or the fix budget is
+        # exhausted.
+        print("  -> running spec generation...", flush=True)
+        specs = run_spec_generation(
+            agent, input_files, problem_name=name, output_dir=folder,
+        )
+        initial = specs.get("initial") or {}
+        mesh = specs.get("mesh") or {}
+        ok_initial = bool(initial.get("designed"))
+        ok_mesh = bool(mesh.get("designed"))
+        passed = specs.get("_passed") is True and ok_initial and ok_mesh
 
-        # Run handle_mesh if needed
-        if need_mesh:
-            print("  -> running handle_mesh...", end=" ", flush=True)
-            ctx = result.get("designed") if need_initial else None
-            if not need_initial and (folder / "initial.json").exists():
-                with open(folder / "initial.json", "r", encoding="utf-8") as f:
-                    ctx = json.load(f).get("designed")
-
-            mesh_result = handle_mesh(agent, input_files, problem_context=ctx)
-            if not isinstance(mesh_result, dict) or not mesh_result or mesh_result.get("_error"):
-                # `not mesh_result` catches the {} empty-input path.
-                err = (mesh_result or {}).get("_error", "non-dict or empty result") if isinstance(mesh_result, dict) else "non-dict result"
-                print(f"FAILED: {err}", flush=True)
-                # A failed mesh spec must not become the reference example.
-                stale = folder / "mesh.json"
-                if stale.exists():
-                    stale.unlink()
-                continue
-            with open(folder / "mesh.json", "w", encoding="utf-8") as f:
-                json.dump(mesh_result, f, indent=2, ensure_ascii=False)
-            ds = mesh_result.get("designed", {})
+        if not passed:
             print(
-                f"OK (src={ds.get('mesh_code_source', '?')}, {ds.get('dimension', '?')}D)",
+                f"  -> FAILED: designed empty (initial={ok_initial}, mesh={ok_mesh})",
                 flush=True,
             )
+            # A partial/failed run must not bake in an invalid spec — remove
+            # stale artifacts so the next run retries the WHOLE case.
+            for stale_name in ("initial.json", "mesh.json"):
+                stale = folder / stale_name
+                if stale.exists():
+                    stale.unlink()
+            continue
+
+        # Write BOTH files together (they were generated and reviewed as
+        # one unit).
+        with open(folder / "initial.json", "w", encoding="utf-8") as f:
+            json.dump(initial, f, indent=2, ensure_ascii=False)
+        with open(folder / "mesh.json", "w", encoding="utf-8") as f:
+            json.dump(mesh, f, indent=2, ensure_ascii=False)
+
+        ds = initial.get("designed", {})
+        mds = mesh.get("designed", {})
+        print(
+            f"  -> OK ({ds.get('problem_type', '?')}, {ds.get('dimension', '?')}D; "
+            f"mesh src={mds.get('mesh_code_source', '?')})",
+            flush=True,
+        )
 
     print("\nDone.")
 

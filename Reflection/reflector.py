@@ -2,16 +2,26 @@
 Top-level orchestrator for the Reflection module (Stage 7).
 
 Responsibilities:
-1. Collect all files under results/<name>/ using a blacklist strategy.
-2. Orchestrate the detect → classify → decide → probe → synthesise →
-   re-execute loop.  Each round tests up to ``REFLECTION_PARALLEL_MAX``
+1. Collect all files under results/<name>/ using a blacklist strategy
+   and assemble them into a structured context (问题 / py代码 /
+   freefem代码 / 结果).
+2. Orchestrate the detect → classify → fix → re-execute loop over the
+   five fix types (syntax_fix / formula_fix / design_fix / fe_param_fix
+   / free_fix), all sharing ``MAX_REFLECTION_TIMES`` rounds.  The
+   repair MODEL follows the category: syntax_error rounds repair with
+   the TEXT model, fe_parameter_error with the VISION model, and the
+   formula / design / other paths use VISION when design images exist
+   and TEXT otherwise.  formula_fix / design_fix / fe_param_fix test
+   up to ``MAX_FIX_CANDIDATES``
    candidate fixes IN PARALLEL under ``results/<name>/temp/``, each with
-   a short probe run (``REFLECTION_PROBE_MIN_EPOCHS`` ..
-   ``REFLECTION_PROBE_MAX_EPOCHS`` epochs); an LLM synthesiser then
-   merges the probe evidence into ONE next-step code for the formal run.
-3. Write and read reflection.txt (repair history) to prevent oscillation.
-4. Remove the temp directory when the process ends (pass / give_up) —
-   never mid-process.
+   a short probe run (``REFLECTION_PROBE_EPOCHS`` epochs); an LLM
+   synthesiser then merges the probe evidence (objective + design
+   images) into ONE next-step code for the formal run.
+3. Maintain IN-MEMORY repair records (round 0 = the initial execution's
+   console evidence; each round records its target and the added /
+   deleted / modified parts) and write reflection.txt (repair history).
+4. temp/ survives the process (a record of the attempts); each attempt
+   only loses its results/, tex/, tmp/ subdirectories.
 """
 
 import glob
@@ -27,20 +37,32 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from Generation.symmetry import detect_symmetry, mesh_dims
+from history import record as record_history, set_label
+from Initialization.phi_rules import detect_symmetry, mesh_dims
 from utils import code_masked_positions
 
 from .classifier import (
     MINTH_RENDER_SUMMARY_HEADER,
+    available_fix_types,
+    available_types_text,
     coarse_classify,
-    fine_classify,
+    fix_type_for,
     quality_check,
 )
-from .escalation import decide as escalation_decide
-from .fixer import apply as fixer_apply
+from .fixer import (
+    build_design_permission,
+    build_fe_param_permission,
+    design_enforce,
+    design_fix,
+    fe_param_enforce,
+    fe_param_fix,
+    formula_fix,
+    free_fix,
+    permission_text,
+)
 from .renderer import (
     render_and_summarize,
-    render_iteration_labels_composite,
+    render_snapshot_label_png,
 )
 
 # ======================================================================
@@ -48,23 +70,25 @@ from .renderer import (
 # ======================================================================
 
 # File patterns to EXCLUDE (binary, intermediate, or too numerous).
-_BLACKLIST_SUFFIXES = {".pdf", ".mesh", ".sol", ".mmg2d", ".mshdist", ".png"}
-
-_BLACKLIST_CONTAINS = {".mesh.gmsh"}
+# Per the collection policy: .pdf, results/, tex/, tmp/, *.gmsh, *.mesh,
+# history.txt — plus the binary/own-scratch leftovers.
+_BLACKLIST_SUFFIXES = {
+    ".pdf", ".png", ".sol", ".mmg2d", ".mshdist", ".mesh", ".gmsh",
+}
 
 # Pipeline operation log — for HUMAN debugging, not LLM evidence.  It
 # holds the pipeline's own LLM inputs/outputs and would bloat (and
 # bias) the reflection context if collected.  The reflection log is
-# excluded for the same reason: it is the repair history, which
-# reaches the fixer through the dedicated reflection_history argument.
+# excluded for the same reason: the repair history reaches the fixer
+# through the dedicated in-memory repair records.
 _BLACKLIST_NAMES = {"history.txt", "reflection.txt"}
 
-# tmp/ (execution scratch) and temp/ (parallel probe candidates) are
-# working directories of the pipeline itself — never reflection evidence.
-# Under results/<name>/results/: exclude everything (MinTh.vtu existence
-# is checked via _find_minth_vtu — hard rule; VTU content goes ONLY to
-# the renderer, never to the LLM).
-_BLACKLIST_DIRS = {"tmp", "temp"}
+# tmp/ (execution scratch), temp/ (parallel probe candidates — the
+# attempts are a record, never reflection evidence), tex/ (duplicate
+# copies of the problem .tex files — the root-level ones are collected)
+# and results/ (iteration snapshots; MinTh.vtu existence is checked via
+# _find_minth_vtu — hard rule, its content goes ONLY to the renderer).
+_BLACKLIST_DIRS = {"tmp", "temp", "tex", "results"}
 
 
 def _is_blacklisted(rel_path: str) -> bool:
@@ -80,22 +104,14 @@ def _is_blacklisted(rel_path: str) -> bool:
         if p.endswith(suffix):
             return True
 
-    # Exclude by substring
-    for needle in _BLACKLIST_CONTAINS:
-        if needle in p:
-            return True
-
-    # Exclude tmp/ and temp/ entirely (case-insensitive — a hand-made
-    # TEMP directory must not leak into the context either)
+    # Exclude the blacklisted directories entirely (case-insensitive — a
+    # hand-made TEMP directory must not leak into the context either).
+    # The include/ subtree (generated .idp/.edp includes) stays
+    # collected.
     parts = Path(rel_path).parts
     for part in parts:
         if part.lower() in _BLACKLIST_DIRS:
             return True
-
-    # Under results/ subdir — exclude everything (MinTh.vtu is read
-    # separately by the renderer; its XML content never goes to the LLM)
-    if len(parts) >= 2 and parts[0] == "results":
-        return True
 
     return False
 
@@ -144,38 +160,69 @@ def collect_files(results_dir: Path) -> dict[str, str]:
 
 
 # ======================================================================
-# context assembly
+# context assembly — structured sections (问题 / py代码 / freefem代码 / 结果)
 # ======================================================================
 
+# Stable section headers (tests and prompts reference these strings).
+SECTION_PROBLEM = "== 问题 (Problem) =="
+SECTION_PY_CODE = "== py代码 (Python code) =="
+SECTION_FF_CODE = "== freefem代码 (FreeFEM code) =="
+SECTION_RESULTS = "== 结果 (Results) =="
 
-def _assemble_context_text(files: dict[str, str], max_file_chars: int = 50000) -> str:
-    """
-    Build a single text block from collected files.
 
-    Each file is prefixed with its relative path.
-    Content is truncated per-file to max_file_chars.
+def _assemble_context_text(files: dict[str, str]) -> str:
     """
+    Build the structured context block from collected files.
+
+    Files are routed into four sections:
+      * 问题 — the problem description (.tex) and the spec artifacts
+        (initial.json, mesh.json, examples.txt);
+      * py代码 — the generated Python code (main.py);
+      * freefem代码 — the generated FreeFEM code (.edp + include/*.idp);
+      * 结果 — everything else (run_result.json, objective/convergence
+        logs, other text outputs).
+    NO truncation anywhere — the FreeFEM console was already truncated
+    at the source (Execution/runner.py).
+    """
+    sections = {
+        SECTION_PROBLEM: [],
+        SECTION_PY_CODE: [],
+        SECTION_FF_CODE: [],
+        SECTION_RESULTS: [],
+    }
+
+    def _add(section: str, rel: str, content: str) -> None:
+        sections[section].append(f"--- FILE: {rel} ---\n{content}\n")
+
+    for rel in sorted(files):
+        content = files[rel]
+        filename = Path(rel).name
+        if filename.endswith(".tex") or filename in (
+            "initial.json", "mesh.json", "examples.txt",
+        ):
+            _add(SECTION_PROBLEM, rel, content)
+        elif filename.endswith(".py"):
+            _add(SECTION_PY_CODE, rel, content)
+        elif filename.endswith(".edp") or filename.endswith(".idp"):
+            _add(SECTION_FF_CODE, rel, content)
+        else:
+            _add(SECTION_RESULTS, rel, content)
+
     parts = []
-    for rel, content in sorted(files.items()):
-        truncated = (
-            content
-            if len(content) <= max_file_chars
-            else (content[:max_file_chars] + f"\n\n... [truncated, {len(content)} chars total]")
-        )
-        parts.append(f"=== FILE: {rel} ===\n{truncated}\n")
+    for header in (SECTION_PROBLEM, SECTION_PY_CODE, SECTION_FF_CODE, SECTION_RESULTS):
+        if not sections[header]:
+            continue
+        parts.append(header)
+        parts.extend(sections[header])
     return "\n".join(parts)
 
 
-def _extract_key_files(files: dict[str, str], evidence_chars: int = None) -> dict[str, str]:
+def _extract_key_files(files: dict[str, str]) -> dict[str, str]:
     """Extract individual key files from the collected files dict.
 
-    *evidence_chars* defaults to ``configs.REFLECTION_EVIDENCE_CHARS`` —
-    no hard-coded numbers, so a config change cannot drift out of sync.
+    NO truncation anywhere — the FreeFEM console was already truncated
+    at the source (Execution/runner.py).
     """
-    if evidence_chars is None:
-        from configs import REFLECTION_EVIDENCE_CHARS
-
-        evidence_chars = REFLECTION_EVIDENCE_CHARS
     result = {
         "main_py": "",
         "mesh_txt": "",
@@ -195,29 +242,19 @@ def _extract_key_files(files: dict[str, str], evidence_chars: int = None) -> dic
         elif filename == "mesh.txt":
             result["mesh_txt"] = content
         elif filename == "run_result.json":
-            # The full run result embeds the ENTIRE Python + FreeFEM
-            # stdout/stderr, which grows unbounded on verbose runs —
-            # truncate to the same evidence budget as every other
-            # stream before it reaches the LLM.
-            if len(content) > evidence_chars:
-                result["run_result_json"] = (
-                    content[:evidence_chars]
-                    + f"\n\n... [truncated, {len(content)} chars total]"
-                )
-            else:
-                result["run_result_json"] = content
+            result["run_result_json"] = content
         elif filename.startswith("objective") and filename.endswith(".txt"):
-            result["objective_data"] += f"=== {rel} ===\n{content[:evidence_chars]}\n\n"
+            result["objective_data"] += f"=== {rel} ===\n{content}\n\n"
         elif "convergence" in path_lower and filename.endswith(".txt"):
-            result["convergence_data"] += f"=== {rel} ===\n{content[:evidence_chars]}\n\n"
+            result["convergence_data"] += f"=== {rel} ===\n{content}\n\n"
         elif filename.endswith(".edp"):
-            result["edp_code"] += f"=== {rel} ===\n{content[:evidence_chars]}\n\n"
+            result["edp_code"] += f"=== {rel} ===\n{content}\n\n"
         elif filename.endswith(".tex"):
             result["problem_description"] += f"=== {rel} ===\n{content}\n\n"
         elif filename.endswith(".txt") and "mesh" not in path_lower:
             # The repair history (reflection.txt) is NOT part of the
             # original problem description — it reaches the fixer through
-            # the dedicated reflection_history argument instead.
+            # the dedicated in-memory repair records instead.
             if filename == "reflection.txt":
                 continue
             result["problem_description"] += f"=== {rel} ===\n{content}\n\n"
@@ -225,7 +262,7 @@ def _extract_key_files(files: dict[str, str], evidence_chars: int = None) -> dic
     # Also include idp files under include/
     for rel, content in files.items():
         if rel.endswith(".idp"):
-            result["edp_code"] += f"=== {rel} ===\n{content[:evidence_chars]}\n\n"
+            result["edp_code"] += f"=== {rel} ===\n{content}\n\n"
 
     return result
 
@@ -281,14 +318,6 @@ def _append_final_status(results_dir: Path, status: str, iterations: int) -> Non
         f.write(footer)
 
 
-def _read_reflection_log(results_dir: Path) -> str:
-    """Read the full reflection history."""
-    log_path = _reflection_log_path(results_dir)
-    if log_path.exists():
-        return log_path.read_text(encoding="utf-8", errors="replace")
-    return ""
-
-
 def _load_run_result(results_dir: Path) -> dict:
     """Load the full run_result.json from disk (untruncated), or {} when absent."""
     try:
@@ -307,10 +336,18 @@ def _format_outcome(result: dict, minth_exists: bool) -> str:
     """Format the post-execution outcome line of a reflection record."""
     py_rc = result.get("autofreefem", {}).get("python", {}).get("return_code", "?")
     edp_files = result.get("autofreefem", {}).get("edp_files", [])
-    ff_rcs = [f.get("return_code", "?") for f in result.get("freefem", [])]
+    ff_records = result.get("freefem", [])
+    ff_rcs_raw = [f.get("return_code", "?") for f in ff_records]
+    # A console_err_code on an rc=0 record is the "err code appeared
+    # after loop completion" case — surface it so the LLM can weigh it.
+    ff_rcs = [
+        f"{f.get('return_code', '?')}"
+        + (f" (err {f['console_err_code']})" if f.get("console_err_code") is not None else "")
+        for f in ff_records
+    ]
     if minth_exists:
         return f"MinTh.vtu generated [ok] — Python rc={py_rc}, {len(edp_files)} .edp, FreeFEM rcs={ff_rcs}"
-    if edp_files and all(rc == "0" for rc in ff_rcs):
+    if edp_files and all(rc == "0" for rc in ff_rcs_raw):
         return f"FreeFEM OK but no MinTh.vtu — Python rc={py_rc}, {len(edp_files)} .edp, FreeFEM rcs={ff_rcs}"
     if edp_files:
         return f"FreeFEM failed — Python rc={py_rc}, {len(edp_files)} .edp, FreeFEM rcs={ff_rcs}"
@@ -351,30 +388,53 @@ def _render_minth(minth_path: Path) -> str:
     return summary
 
 
-def _vision_context(results_dir: Path) -> tuple[list[str], str]:
-    """Render the iteration-label composite for the multimodal loop.
+def _vision_context(results_dir: Path, config) -> tuple[list[str], str]:
+    """Render the design snapshots for the multimodal loop.
 
-    Returns ``(images, image_section)`` — images is a list of PNG paths
-    (empty when no iteration snapshots exist), image_section the text
-    block describing the attached image for the prompt.
+    The Label field of every iteration snapshot (result*Th<N>.vtu) is
+    rendered into ONE PNG PER SNAPSHOT — the images are passed to the
+    model individually, in iteration order.  At most
+    ``configs.MAX_SNAPSHOT_FRAMES`` images: beyond that count the cap
+    is INTERPOLATED over the WHOLE run (the model sees the entire
+    evolution, not just the tail).  Returns ``(images, image_section)``
+    — images is the ordered list of PNG paths (empty when no snapshots
+    exist), image_section the text block naming them.
     """
-    try:
-        snap_path, snap_summary = render_iteration_labels_composite(
-            results_dir / "results", results_dir
-        )
-    except Exception as e:
-        print(f"    [Reflect] snapshot composite render failed: {e}", flush=True)
+    max_frames = getattr(config, "MAX_SNAPSHOT_FRAMES", 50)
+    snaps = _iteration_snapshots(results_dir)
+    if not snaps:
         return [], ""
-    if snap_path is None:
+    if len(snaps) > max_frames:
+        # uniform interpolation over the whole run (no numpy — pure
+        # integer rounding, de-duplicated and sorted)
+        idxs = sorted({
+            round(i * (len(snaps) - 1) / (max_frames - 1))
+            for i in range(max_frames)
+        })
+        snaps = [snaps[i] for i in idxs]
+    images = []
+    lines = []
+    for p in snaps:
+        m = re.search(r"Th(\d+)\.vtu$", p.name)
+        idx = int(m.group(1)) if m else 0
+        out = results_dir / f"snapshot_Th{idx}_label.png"
+        try:
+            render_snapshot_label_png(p, out)
+        except Exception as e:
+            lines.append(f"Th{idx}: render failed ({e})")
+            continue
+        images.append(str(out))
+        lines.append(f"{out.name} — iteration {idx} design (Label=3 cells)")
+    if not images:
         return [], ""
     image_section = (
-        "\n\n=== ITERATION SNAPSHOTS (image attached) ===\n"
-        + snap_summary
-        + "\nYou CAN see the attached composite image — use the design "
+        "\n\n=== ITERATION SNAPSHOTS (images attached, in iteration order) ===\n"
+        + "\n".join(lines)
+        + "\nYou CAN see the attached design snapshots — use the design "
           "evolution (solid/void distribution per epoch) to judge the "
           "failure and decide the fix.\n"
     )
-    return [snap_path], image_section
+    return images, image_section
 
 
 # ======================================================================
@@ -382,12 +442,13 @@ def _vision_context(results_dir: Path) -> tuple[list[str], str]:
 # ======================================================================
 
 
-def _re_execute(results_dir: Path) -> dict:
+def _re_execute(results_dir: Path, history_label: str = "") -> dict:
     """
     Run main.py through AutoFreeFEM + FreeFEM.
 
     ``run_problem`` persists ``run_result.json`` internally — this
-    function does NOT write it a second time.
+    function does NOT write it a second time.  The execution is recorded
+    in FULL (input code + complete result) into history.txt.
     """
     from Execution.runner import run_problem
 
@@ -402,7 +463,13 @@ def _re_execute(results_dir: Path) -> dict:
 
     print("    [Reflect] re-executing …", end=" ", flush=True)
     t0 = time.time()
-    result = run_problem(main_py, results_dir)
+    history_log = results_dir / "history.txt"
+    result = run_problem(
+        main_py,
+        results_dir,
+        history_log=history_log if history_log.exists() else None,
+        history_label=history_label or "Reflection/_re_execute",
+    )
     dt = time.time() - t0
 
     py_rc = result["autofreefem"]["python"]["return_code"]
@@ -417,32 +484,141 @@ def _re_execute(results_dir: Path) -> dict:
 
 # ======================================================================
 # quality-check diagnostics (shared by pre-fix and post-fix paths)
+#
+# FACTS only — the pass vs wrong_result judgment and the error-category
+# judgment are always the LLM's (no deterministic gates, no fixed
+# symptom-to-category wiring; the measured numbers below are evidence).
 # ======================================================================
+
+
+# The weak-material contrast — the 3rd argument of CharacteristicFunction
+# (1 = solid, '1/100' = void).  Used by the degeneracy readout below.
+_CHI_RE = re.compile(
+    r"CharacteristicFunction\(\s*(?:r?['\"][^'\"]*['\"]|\w+)\s*,\s*[^,]+,\s*"
+    r"r?['\"]([^'\"]+)['\"]"
+)
+
+
+def _chi_value(code: str) -> Optional[str]:
+    """Weak-material value of the CONTRAST CharacteristicFunction.
+
+    Returns the raw string (e.g. '1/100'), or None when no contrast call
+    is found.  Comment/string mentions are skipped via the code mask,
+    like every other code scan of the pipeline.
+    """
+    masked = code_masked_positions(code)
+    for m in _CHI_RE.finditer(code):
+        if m.start() in masked:
+            continue
+        return m.group(1)
+    return None
+
+
+def _iteration_snapshots(results_dir: Path) -> list[Path]:
+    """Numeric ``result*Th<N>.vtu`` snapshots, in iteration order.
+
+    MinTh.vtu is excluded by the numeric-suffix requirement — it is the
+    best-objective design, not a step of the evolution.
+    """
+    snaps = []
+    for p in (results_dir / "results").glob("result*Th*.vtu"):
+        m = re.search(r"Th(\d+)\.vtu$", p.name)
+        if m:
+            snaps.append((int(m.group(1)), p))
+    snaps.sort(key=lambda t: t[0])
+    return [p for _, p in snaps]
+
+
+def _solid_area_from_vtu(path: Path) -> Optional[float]:
+    """Total triangle area of a design snapshot (m^2), or None.
+
+    The iteration meshes are the SOLID region only (the design mesh is
+    truncated before every save), so this area IS the material area the
+    volume term ``ell*V`` of the objective charges for.  meshio/numpy
+    are imported lazily — the diagnostic must never make the reflection
+    loop unusable in their absence.
+    """
+    try:
+        import meshio
+        import numpy as np
+    except Exception:
+        return None
+    try:
+        mesh = meshio.read(str(path))
+    except Exception:
+        return None
+    tris = [cb.data for cb in mesh.cells if cb.type == "triangle"]
+    if not tris:
+        return None
+    tri = np.vstack(tris)
+    p = mesh.points
+    area = 0.5 * np.abs(
+        (p[tri[:, 1], 0] - p[tri[:, 0], 0]) * (p[tri[:, 2], 1] - p[tri[:, 0], 1])
+        - (p[tri[:, 2], 0] - p[tri[:, 0], 0]) * (p[tri[:, 1], 1] - p[tri[:, 0], 1])
+    )
+    return float(area.sum())
 
 
 def _quality_diag(results_dir: Path, key: dict) -> dict:
     """Collect the diagnostics that guide the soft quality check.
 
-    *diagnostics* contains ``epochs_completed`` (data rows in
-    objective*.txt) and ``ff_info`` (FreeFEM return codes of the
-    optimize/verify runs).  The FreeFEM codes are parsed from the FULL
-    run_result.json on disk — the LLM-bound copy in *key* is truncated
-    and would never parse.  Pure function — does NOT print or write the
-    reflection log.
+    *diagnostics* contains ``ff_info`` (FreeFEM return code of the
+    optimize run — verify runs are not executed) and the
+    design-degeneracy signals: the last objective value, the balance
+    parameters ``ell`` / ``chi`` read from main.py, and the material
+    area of the first and last iteration snapshots.  Epoch counts need
+    no dedicated signal — the raw objective data (already in the
+    context) carries them as ordinary evidence.  The FreeFEM
+    codes are parsed from the FULL run_result.json on disk — the
+    LLM-bound copy in *key* keeps only the console tail and would not
+    parse.  Pure function — does NOT print or write the reflection log.
     """
-    diag = {"epochs_completed": 0, "ff_info": ""}
+    diag = {
+        "ff_info": "",
+        "objective_last": None,
+        "ell": None,
+        "chi": None,
+        "solid_first": None,
+        "solid_last": None,
+        "domain_area": None,
+        "snapshots": 0,
+    }
 
+    obj_values = []
     obj_text = key.get("objective_data", "")
     if obj_text:
         for line in obj_text.splitlines():
             stripped = line.strip()
             if not stripped or stripped.startswith("iteration"):
                 continue
+            parts = stripped.split(",")
+            if len(parts) < 2:
+                continue
             try:
-                int(stripped.split(",")[0].strip())
+                int(parts[0].strip())
+                obj_values.append(float(parts[1].strip()))
             except ValueError:
                 continue
-            diag["epochs_completed"] += 1
+    if obj_values:
+        diag["objective_last"] = obj_values[-1]
+
+    # ── material balance of the design (degeneracy signals) ──────────
+    main_py = key.get("main_py", "") or ""
+    diag["ell"] = _afac_value(main_py)
+    diag["chi"] = _chi_value(main_py)
+    snaps = _iteration_snapshots(results_dir)
+    diag["snapshots"] = len(snaps)
+    if snaps:
+        diag["solid_first"] = _solid_area_from_vtu(snaps[0])
+        diag["solid_last"] = _solid_area_from_vtu(snaps[-1])
+    try:
+        from Initialization.phi_rules import mesh_dims
+
+        L, H = mesh_dims(key.get("mesh_txt", "") or "")
+        if L and H:
+            diag["domain_area"] = float(L) * float(H)
+    except Exception:
+        pass
 
     rr_data = None
     try:
@@ -453,9 +629,14 @@ def _quality_diag(results_dir: Path, key: dict) -> dict:
         try:
             rr = json.loads(rr_data)
             for ff in rr.get("freefem", []):
+                note = (
+                    f" (console_err_code={ff['console_err_code']})"
+                    if ff.get("console_err_code") is not None
+                    else ""
+                )
                 diag["ff_info"] += (
                     f"FreeFEM {ff.get('edp_file', '?')}: "
-                    f"exit={ff.get('return_code', '?')}\n"
+                    f"exit={ff.get('return_code', '?')}{note}\n"
                 )
         except Exception:
             pass
@@ -465,10 +646,11 @@ def _quality_diag(results_dir: Path, key: dict) -> dict:
 def _expected_epochs(main_py: str, config) -> int:
     """Iterations requested by the problem's own ``setup_optimization``.
 
-    A benchmark may legitimately ask for fewer epochs than the global
-    default — reporting ``MAX_OUTER_ITERATIONS`` then would make a
-    complete 30/30 run look like a crash at 30/100 and bias the quality
-    check toward wrong_result.  Local import mirrors ``_re_execute``.
+    The FORMAL run budget (Step 6 forcing and the synthesis prompt's
+    formal_iterations) must reflect the problem's own ``iterations=`` —
+    a benchmark may legitimately ask for fewer epochs than the global
+    default ``MAX_OUTER_ITERATIONS``.  Local import mirrors
+    ``_re_execute``.
     """
     from Execution.runner import _extract_iterations
 
@@ -521,96 +703,93 @@ def _minth_label_png(results_dir: Path) -> Optional[Path]:
     return png if png.exists() else None
 
 
-def _deterministic_convergence_verdict(diag: dict, key: dict, expected_epochs: int) -> str:
-    """Deterministic convergence pre-check for the soft quality gate.
-
-    The LLM judge reads images and curves well but cannot reliably
-    discriminate a slow monotone drift from a plateau (a coherent-looking
-    design plus a gently descending tail reads as pass).  This check
-    hard-fails the obvious case: the run crashed well before the
-    requested epochs while the objective was STILL strictly decreasing
-    over its final epochs — the design has not converged, and accepting
-    it would report a mid-optimisation design as the final result.
-
-    Returns "" (let the LLM decide) or a verdict message that forces
-    wrong_result and tells the fixer why.
-    """
-    if diag["epochs_completed"] >= expected_epochs:
-        return ""  # completed run: monotone descent to the end is pattern (b)
-    values = []
-    for line in (key.get("objective_data") or "").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("iteration"):
-            continue
-        parts = stripped.split(",")
-        if len(parts) < 2:
-            continue
-        try:
-            values.append(float(parts[1].strip()))
-        except ValueError:
-            continue
-    if len(values) < 4:
-        return ""  # too few epochs for a tail trend — LLM decides
-    tail = values[-5:]
-    decreasing = all(b < a for a, b in zip(tail, tail[1:]))
-    increasing = all(b > a for a, b in zip(tail, tail[1:]))
-    if not (decreasing or increasing):
-        return ""  # oscillating tail — plateau-like, LLM decides
-    if abs(tail[-1]) < 1e-12:
-        return ""  # converged to ~0 objective — the drift ratio below
-        # would divide by zero; the LLM decides
-    rel_drift = abs(tail[0] - tail[-1]) / abs(tail[-1])
-    if rel_drift <= 1e-3:
-        return ""  # drift is noise-level — LLM decides
-    if decreasing:
-        detail = (
-            f"the objective was STILL strictly decreasing over its final "
-            f"{len(tail)} epochs ({tail[0]:.4g} -> {tail[-1]:.4g}, "
-            f"{rel_drift * 100:.3f}% over the tail).  The design has not "
-            f"converged: the optimisation was cut short (typically by mesh "
-            f"degeneration)."
-        )
-    else:
-        detail = (
-            f"the objective was strictly INCREASING over its final "
-            f"{len(tail)} epochs ({tail[0]:.4g} -> {tail[-1]:.4g}, "
-            f"{rel_drift * 100:.3f}% over the tail) — a U-shaped drift "
-            f"after a minimum, the signature of fundamentally wrong "
-            f"parameters or mesh degeneration feeding the gradient."
-        )
-    return (
-        f"\n=== Deterministic convergence pre-check: FAILED ===\n"
-        f"The run crashed after {diag['epochs_completed']} of {expected_epochs} "
-        f"requested epochs while {detail}  The fix must stabilise the "
-        f"numerical parameters (smaller v0, adjusted hmin/diffusion) and "
-        f"re-run so the objective reaches a plateau.\n"
-    )
-
-
-def _quality_guidance(config, diag: dict, expected_epochs: int) -> str:
+def _quality_guidance(diag: dict) -> str:
     """Build the guidance text for the LLM quality check.
 
-    Gives the model the FACTS (expected/completed epochs, FreeFEM exit
-    codes) only — judging success vs premature stop is left entirely to
-    the LLM, using the objective history, the rendered design snapshots,
-    and the return codes.  *expected_epochs* is the problem's own
-    ``iterations=`` value.
+    Gives the model the FACTS (the FreeFEM exit codes and the design
+    diagnostics) only — judging success vs premature stop is left
+    entirely to the LLM, from the objective curve, the rendered design
+    snapshots, and the return codes.  Epoch counts are just ordinary
+    evidence, like any other number.
     """
     return (
         f"\n=== Quality Check Guidance ===\n"
-        f"Expected epochs (iterations= in main.py): {expected_epochs}\n"
-        f"Completed epochs (from objective*.txt): {diag['epochs_completed']}\n"
         f"FreeFEM return codes:\n{diag['ff_info']}"
         f"A nonzero exit does not by itself invalidate the design: if the "
         f"objective history shows convergence before the failure, and the "
         f"failure is a late numerical artifact (e.g. mesh reversal), the "
         f"design can still be pass.\n"
-        f"Imagine how the run proceeded from the completed-epoch count "
-        f"and the objective curve below, and decide yourself whether the "
-        f"run CRASHED EARLY (a real bug — step too large, wrong labels, "
-        f"bad initial phi) or COMPLETED with a usable design (converged "
-        f"before the failure).\n"
+        f"Judge the run from the objective curve below and the design "
+        f"snapshots — whether it CRASHED (a real bug — step too large, "
+        f"wrong labels, bad initial phi) or finished with a usable design "
+        f"(converged before the failure).\n"
+    ) + _degeneracy_text(diag)
+
+
+def _degeneracy_text(diag: dict) -> str:
+    """Material-balance readout of the finished design (deterministic).
+
+    Reports the measured numbers — ``ell``, ``chi``, the material area of
+    the first and last iteration snapshot, and the split of the objective
+    into its volume term ``ell*V`` and the implied compliance C — with
+    the two degenerate outcomes spelled out.  A design that ends with
+    almost no material (the objective dominated by ``ell*V``) or that
+    stays a featureless block has not solved the structural trade-off
+    the problem poses; the volume weight and/or the void contrast are
+    inconsistent with the physics, and such a design must not be
+    reported as a valid optimum.  An ENERGY/BALANCE statement, not a
+    shape classifier: the actual design is judged from the images.
+    """
+    ell = diag.get("ell")
+    chi = diag.get("chi")
+    a0 = diag.get("solid_first")
+    a1 = diag.get("solid_last")
+    dom = diag.get("domain_area")
+    obj = diag.get("objective_last")
+    if ell is None and a1 is None:
+        return ""
+
+    lines = ["\n=== Design diagnostics (deterministic, from the artefacts) ==="]
+    if ell is not None:
+        lines.append(f"Volume weight ell (Afac in main.py): {ell:g}")
+    if chi is not None:
+        lines.append(f"Void contrast chi (CharacteristicFunction weak value): {chi}")
+    if diag.get("snapshots"):
+        lines.append(f"Iteration snapshots found: {diag['snapshots']}")
+    if a0 is not None and a1 is not None:
+        frac = f" ({100.0 * a1 / dom:.1f}% of the domain area {dom:g})" if dom else ""
+        lines.append(
+            f"Material (solid) area: first snapshot {a0:.4g} -> last {a1:.4g}{frac}"
+        )
+    if obj is not None and ell is not None and a1 is not None:
+        vol_term = ell * a1
+        lines.append(
+            f"Objective (last) {obj:.6g} ~ volume term ell*V = {vol_term:.6g}"
+            f" + implied compliance C = {obj - vol_term:.6g}"
+        )
+    lines.append(
+        "Read this as: the material area V is what the volume term pays for, "
+        "C is the stiffness it buys.  SOFT thresholds — guides, NEVER hard "
+        "rules: below ~20% of the domain RAISES the COLLAPSE suspicion, "
+        "above ~80% RAISES the BLOCK suspicion.  The numbers alone do NOT "
+        "decide — a legitimately sparse optimum (a thin conducting path or "
+        "a slender arch) can sit well below 20%.  Cross-check them against "
+        "the design images, for these TWO DEGENERATE OUTCOMES:\n"
+        "  * COLLAPSE — V has fallen low (typically below 20% of the "
+        "domain) AND the images show no load-carrying member: only "
+        "hairlines, beads or patches, with no connected path from the "
+        "source/load to a support/sink.  The balance sits far above what "
+        "the physics supports (the void alone carries the load), so the "
+        "optimiser removed the design instead of shaping it.\n"
+        "  * BLOCK — V stays high (typically above 80% of the domain) and "
+        "the snapshots show a featureless block that barely moved from the "
+        "seed: ell sits far below the balance, material is effectively "
+        "free and the optimiser keeps it.\n"
+        "Neither solved the structural trade-off — classify wrong_result.  "
+        "A thin but CONNECTED member structure is NOT degenerate: judge "
+        "conduction/load-path from the images."
     )
+    return "\n".join(lines) + "\n"
 
 
 # ======================================================================
@@ -624,13 +803,14 @@ def _quality_check_block(
 ) -> tuple[str, str]:
     """Render evidence and ask the LLM to judge pass vs wrong_result.
 
-    Shared by both call sites (Step 3 MinTh branch and Step 10 after a
-    fix) so they cannot diverge again.  *vision_images* may carry the
-    snapshots already captured by the Step 1b/2 renders (same results/
-    state when nothing ran in between — the pre-fix loop would otherwise
-    re-render the composite of an identical state every iteration); when
-    None (post-fix step 10, after ``_re_execute`` regenerated results/)
-    they are refreshed here.
+    Two call sites: Step 3 (pre-fix, MinTh exists — the verdict is
+    EVIDENCE ONLY, the coarse classification that follows is the sole
+    authority for pass) and Step 8 (post-fix — a pass verdict ends the
+    reflection directly, no extra round).  The function enriches
+    *context_text* with the MinTh render summary and the quality
+    guidance (facts) in both cases.  When *vision_images* is None
+    (Step 8, after ``_re_execute`` regenerated results/) the snapshots
+    are refreshed here.
     """
     minth = _find_minth_vtu(results_dir)
     if minth is not None:
@@ -639,21 +819,27 @@ def _quality_check_block(
             context_text += f"\n\n{MINTH_RENDER_SUMMARY_HEADER}\n{vtu_summary}\n"
 
     diag = _quality_diag(results_dir, key)
-    expected = _expected_epochs(key.get("main_py", ""), config)
-    context_text += _quality_guidance(config, diag, expected)
-
-    # Deterministic gate before the LLM judge: a crashed run whose
-    # objective tail is still strictly descending has not converged —
-    # route it to the fixer without an LLM call.
-    verdict = _deterministic_convergence_verdict(diag, key, expected)
-    if verdict:
-        context_text += verdict
-        return "wrong_result", context_text
+    # Console visibility: the material balance is the one number a human
+    # watching the run needs in order to see a degenerate design.
+    if diag.get("solid_last") is not None:
+        frac = ""
+        if diag.get("domain_area"):
+            frac = f" ({100.0 * diag['solid_last'] / diag['domain_area']:.1f}% of domain)"
+        ell_txt = f", ell={diag['ell']:g}" if diag.get("ell") is not None else ""
+        chi_txt = f", chi={diag['chi']}" if diag.get("chi") else ""
+        print(
+            f"    [Reflect] design: material area {diag['solid_last']:.4g}{frac}"
+            f"{ell_txt}{chi_txt}",
+            flush=True,
+        )
+    # Facts only (material balance, return codes) — the pass vs
+    # wrong_result JUDGMENT is always the LLM's (no deterministic gates).
+    context_text += _quality_guidance(diag)
 
     if vision_images is None:
         # Refresh snapshots AFTER the latest execution — never reuse the
-        # composite from an earlier design evolution.
-        vision_images, image_section = _vision_context(results_dir)
+        # snapshots from an earlier design evolution.
+        vision_images, image_section = _vision_context(results_dir, config)
 
     # Symmetry (symmetric problems only): the fact comes from the mesh,
     # the design is judged by the vision model from the image above,
@@ -706,12 +892,12 @@ def _rmtree_force(path: Path) -> None:
 def _force_iterations(code: str, n: int) -> str:
     """Set iterations=n inside the setup_optimization call of *code*.
 
-    Uses the string-aware call scanner of check_params so a comment
+    Uses the string-aware call scanner of check_static so a comment
     mention of ``iterations=`` never matches.  When no setup_optimization
     call parses, falls back to the first REAL (non-comment, non-string)
     ``iterations=<digits>`` occurrence.
     """
-    from Generation.check_params import _find_setup_optimization, _param_span
+    from Generation.check_static import _find_setup_optimization, _param_span
 
     span = _find_setup_optimization(code)
     if span is not None:
@@ -723,7 +909,7 @@ def _force_iterations(code: str, n: int) -> str:
                 call_text[: arg[0]] + f"iterations={n}" + call_text[arg[1]:]
             )
             return code[:start] + new_call + code[end:]
-        from Generation.check_params import _insert_before_closing
+        from Generation.check_static import _insert_before_closing
 
         new_call = _insert_before_closing(call_text, f"iterations={n}")
         return code[:start] + new_call + code[end:]
@@ -738,24 +924,16 @@ def _force_iterations(code: str, n: int) -> str:
 
 
 # ======================================================================
-# Afac (Lagrange multiplier) calibration — geometric scan + knee pick
+# Afac (Lagrange multiplier) value read
 #
 # The volume weight ``ell`` is a BALANCE parameter of the optimisation,
-# not part of the problem statement: the demos carry no value for it and
-# the coder only supplies a magnitude estimate.  The reflection loop
-# calibrates it once, deterministically: a geometric scan of five
-# candidates ell0*10^k (k = -2..2) run as short probes in parallel, the
-# solid-fraction curve sampled from each probe's optimal-design mesh, and
-# the knee (steepest central slope) chosen as the balance point.
+# not part of the problem statement — Afac is an ordinary DESIGNED
+# value and belongs to the design_fix permission set (the
+# deterministic permission is built by fixer.build_design_permission;
+# the enforcer is fixer.design_enforce).  This helper stays for the
+# quality diagnostics (ell readout); write-backs go through the generic
+# classifier._constant_replace inside design_enforce.
 # ======================================================================
-
-# Marker written into reflection.txt when the multiplier has been
-# calibrated — the trigger check greps for this string.
-_AFAC_CALIBRATED_MARK = "afac calibrated"
-
-# The FreeFEM triangle label that carries the solid region (the label
-# used by trunc(Th, region == 3) in the generated optimize script).
-_SOLID_MESH_LABEL = 3
 
 _AFAC_VALUE_RE = re.compile(
     r"Afac\s*=\s*Constant\(\s*r?['\"]\\ell['\"]\s*,\s*([-+0-9.eE]+)"
@@ -775,350 +953,11 @@ def _afac_value(code: str) -> Optional[float]:
     return None
 
 
-def _afac_replace(code: str, value: float) -> str:
-    """Replace the numeric value of the Afac constant (string-masked)."""
-    masked = code_masked_positions(code)
-    new = f"{value:g}"
-    out = []
-    pos = 0
-    for m in _AFAC_VALUE_RE.finditer(code):
-        if m.start() in masked:
-            continue
-        out.append(code[pos:m.start(1)])
-        out.append(new)
-        pos = m.end(1)
-    out.append(code[pos:])
-    return "".join(out)
-
-
-def _solid_fraction_from_mesh(mesh_path: Path) -> Optional[float]:
-    """Solid (label 3) area fraction of a FreeFEM v1 .mesh file.
-
-    The generated optimize script saves the full labelled mesh as
-    ``tmp/optimaldesign.mesh`` (best objective) and ``tmp/mesh2D.mesh``
-    (every iteration) — the triangle labels distinguish solid (3) from
-    weak material.  Vertex numbering in the v1 format is 1-based.
-    """
-    import numpy as np
-
-    try:
-        lines = mesh_path.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return None
-    i = 0
-
-    def _section(name: str) -> Optional[int]:
-        nonlocal i
-        while i < len(lines):
-            if lines[i].strip() == name:
-                i += 1
-                while i < len(lines) and not lines[i].strip():
-                    i += 1
-                try:
-                    n = int(lines[i].strip())
-                except (ValueError, IndexError):
-                    return None
-                i += 1
-                return n
-            i += 1
-        return None
-
-    try:
-        nv = _section("Vertices")
-        if nv is None:
-            return None
-        verts = np.array(
-            [[float(x) for x in lines[i + j].split()[:2]] for j in range(nv)]
-        )
-        i += nv
-        nt = _section("Triangles")
-        if nt is None or nt == 0:
-            return None
-        tris = np.array(
-            [[int(x) for x in lines[i + j].split()[:4]] for j in range(nt)]
-        )
-    except (ValueError, IndexError):
-        return None
-    if len(tris) == 0:
-        return None
-    tris[:, :3] -= 1  # FreeFEM v1 vertex numbering is 1-based
-    a = verts[tris[:, 1]] - verts[tris[:, 0]]
-    b = verts[tris[:, 2]] - verts[tris[:, 0]]
-    area = 0.5 * np.abs(a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0])
-    total = float(area.sum())
-    if total <= 0:
-        return None
-    return float(area[tris[:, 3] == _SOLID_MESH_LABEL].sum()) / total
-
-
-def _needs_afac_calibration(results_dir: Path) -> bool:
-    """True when the problem statement carries no ell (removed from the
-    demos), the problem is NONLINEAR, and the reflection log has no
-    calibration record yet.
-
-    The LINEAR benchmark cases keep their fixed Lagrange multipliers —
-    only the nonlinear cases calibrate the balance point.
-    """
-    log = _read_reflection_log(results_dir)
-    if _AFAC_CALIBRATED_MARK in log:
-        return False
-    init = results_dir / "initial.json"
-    if not init.exists():
-        return False
-    try:
-        data = json.loads(init.read_text(encoding="utf-8", errors="replace"))
-    except (OSError, ValueError):
-        return False
-    constants = (data.get("extracted") or {}).get("constants") or []
-    names = {c.get("name") for c in constants if isinstance(c, dict)}
-    if "ell" in names or "Afac" in names:
-        return False
-    # only nonlinear problems are calibrated; a missing flag means
-    # linear (the conservative default — never touch the multiplier)
-    return bool((data.get("designed") or {}).get("state_is_nonlinear"))
-
-
-def _afac_calibrate(results_dir: Path, config) -> Optional[float]:
-    """Calibrate the Lagrange multiplier Afac and write it back to main.py.
-
-    Geometric scan of five candidates ``ell0 * 10**k`` (k = -2..2), each
-    probed with a short run under ``temp/afac_cal/``; the solid fraction
-    of every candidate design is read from the FreeFEM output mesh and
-    the knee of the resulting curve (steepest central slope in log-ell
-    space) becomes the calibrated value.  When the knee lies outside the
-    window (all-solid or all-void), the scan extends outward once.
-
-    Returns the chosen value, or None when calibration was skipped.
-    """
-    from Execution.runner import run_problem
-
-    main_py = results_dir / "main.py"
-    try:
-        code = main_py.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        print("    [Afac] main.py unreadable — skip calibration.", flush=True)
-        return None
-    ell0 = _afac_value(code)
-    if ell0 is None:
-        print("    [Afac] no Afac constant in main.py — skip calibration.", flush=True)
-        return None
-
-    scan_dir = results_dir / "temp" / "afac_cal"
-    _rmtree_force(scan_dir)
-    scan_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        mesh_txt = (results_dir / "mesh.txt").read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        mesh_txt = ""
-    spec_files = [results_dir / n for n in ("initial.json", "mesh.json")]
-
-    probe_epochs = config.REFLECTION_PROBE_MIN_EPOCHS
-
-    def _run_candidate(value: float, tag: str):
-        """One short probe at Afac=*value*; returns (solid_fraction, ok).
-
-        ``ok`` is True only when the optimize run exited 0 — a crashed
-        run's fraction is a crash-time snapshot that must not steer the
-        knee selection.
-        """
-        cand_dir = scan_dir / tag
-        _rmtree_force(cand_dir)
-        cand_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            probe_code = _force_iterations(_afac_replace(code, value), probe_epochs)
-            (cand_dir / "main.py").write_text(probe_code, encoding="utf-8")
-            (cand_dir / "mesh.txt").write_text(mesh_txt, encoding="utf-8")
-            for src in spec_files:
-                if src.exists():
-                    shutil.copy2(src, cand_dir / src.name)
-        except OSError as e:
-            print(f"    [Afac] candidate {tag} setup failed: {e}", flush=True)
-            return None
-        try:
-            result = run_problem(cand_dir / "main.py", cand_dir, auto_render=False)
-        except Exception as e:
-            print(f"    [Afac] candidate {tag} run crashed: {e}", flush=True)
-            return None
-        ok = False
-        for f in result.get("freefem", []):
-            if str(f.get("edp_file", "")).startswith("optimize"):
-                ok = str(f.get("return_code")) == "0"
-                break
-        # optimaldesign.mesh (best objective) wins; mesh2D.mesh (last
-        # iteration) is the fallback when the short probe never improved.
-        for mesh_name in ("optimaldesign.mesh", "mesh2D.mesh"):
-            frac = _solid_fraction_from_mesh(cand_dir / "tmp" / mesh_name)
-            if frac is not None:
-                return frac, ok
-        return None
-
-    ks = [-2, -1, 0, 1, 2]
-    values: dict = {}  # k -> (solid fraction, ok) — None = failed probe
-    workers = max(1, min(len(ks), config.REFLECTION_PARALLEL_MAX))
-    for _round in range(3):
-        missing = [k for k in ks if k not in values]
-        print(
-            "    [Afac] scanning "
-            + ", ".join(f"{ell0 * 10.0 ** k:g}" for k in missing),
-            flush=True,
-        )
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {
-                pool.submit(_run_candidate, ell0 * 10.0 ** k, f"k{k:g}"): k
-                for k in missing
-            }
-            for fut in as_completed(futures):
-                k = futures[fut]
-                try:
-                    res = fut.result()
-                except Exception as e:
-                    res = None
-                    print(f"    [Afac] candidate k{k:g} failed: {e}", flush=True)
-                values[k] = res
-                if res is None:
-                    print(f"    [Afac] ell={ell0 * 10.0 ** k:g} -> no design", flush=True)
-                else:
-                    frac, ok = res
-                    print(
-                        f"    [Afac] ell={ell0 * 10.0 ** k:g} -> solid fraction "
-                        f"{frac:.3f}{'' if ok else ' (CRASHED)'}",
-                        flush=True,
-                    )
-        # knee selection uses SAFE candidates only — a crash-time
-        # fraction is not a converged design point
-        safe = sorted(k for k in values if values[k] is not None and values[k][1])
-        crash = sorted(k for k in values if values[k] is not None and not values[k][1])
-        knee, best = None, -1.0
-        for j in range(1, len(safe) - 1):
-            slope = abs(values[safe[j + 1]][0] - values[safe[j - 1]][0])
-            if slope > best:
-                best, knee = slope, safe[j]
-        lo_s, hi_s = (safe[0], safe[-1]) if safe else (None, None)
-        # 1) outward extension when the knee is outside the window
-        extend = None
-        if len(safe) >= 3:
-            if all(values[k][0] > 0.95 for k in safe):
-                extend = hi_s + 1  # ell too small — material is free
-            elif all(values[k][0] < 0.05 for k in safe):
-                extend = lo_s - 1  # ell too large — material unaffordable
-            elif knee == lo_s and values[lo_s][0] > 0.9:
-                extend = lo_s - 1
-            elif knee == hi_s and values[hi_s][0] < 0.1:
-                extend = hi_s + 1
-        # 2) crash-aware refinement: the knee lies just beyond the
-        # largest SAFE candidate when larger ell crashed mid-scan — the
-        # true knee is between them; refine log-linearly
-        refine = None
-        if (
-            extend is None
-            and safe
-            and any(k > hi_s for k in crash)
-            and values[hi_s][0] > 0.5
-        ):
-            refine = (hi_s + 1.0 / 3.0, hi_s + 2.0 / 3.0)
-        if extend is not None:
-            if _round < 2:
-                extra = [extend, extend + (1 if extend > hi_s else -1)]
-                ks.extend(sorted(set(k for k in extra if k not in values)))
-                print("    [Afac] knee outside window — extending scan.", flush=True)
-                continue
-        elif refine is not None:
-            if _round < 2 and any(r not in values for r in refine):
-                ks.extend(sorted(set(refine)))
-                print("    [Afac] knee adjacent to crashed candidate — refining scan.", flush=True)
-                continue
-        break
-
-    safe = sorted(k for k in values if values[k] is not None and values[k][1])
-    if not safe:
-        print("    [Afac] no safely completed candidate — no calibration.", flush=True)
-        return None
-    if knee is None or knee not in safe:
-        knee = min(safe, key=lambda k: abs(values[k][0] - 0.5))
-    chosen = ell0 * 10.0 ** knee
-    order = sorted(k for k in values if values[k] is not None)
-    scan_summary = ", ".join(
-        f"{ell0 * 10.0 ** k:g}:{values[k][0]:.3f}{'' if values[k][1] else '*'}"
-        for k in order
-    )
-
-    new_code = _afac_replace(code, chosen)
-    if new_code != code:
-        try:
-            main_py.write_text(new_code, encoding="utf-8")
-        except OSError as e:
-            print(f"    [Afac] main.py write-back failed: {e}", flush=True)
-            return None
-    else:
-        # the estimate already sat at the knee — no rewrite, but the
-        # calibration record must still be logged so the trigger check
-        # does not fire again on the next round
-        print(
-            "    [Afac] calibrated value equals the current one — no rewrite.",
-            flush=True,
-        )
-
-    _append_reflection_log(
-        results_dir,
-        1,
-        "afac_calibrate",
-        "-",
-        "-",
-        f"{_AFAC_CALIBRATED_MARK}: ell {ell0:g} -> {chosen:g} "
-        f"(knee of the solid-fraction scan: {scan_summary})",
-        f"solid fractions: {scan_summary}",
-    )
-    print(
-        f"    [Afac] calibrated ell: {ell0:g} -> {chosen:g} "
-        f"(solid fractions: {scan_summary})",
-        flush=True,
-    )
-    return chosen
-
-
-def _probe_epochs(idx: int, n_probes: int, config) -> int:
-    """Probe budget of candidate *idx* — spread evenly over
-    [REFLECTION_PROBE_MIN_EPOCHS, REFLECTION_PROBE_MAX_EPOCHS]."""
-    lo = config.REFLECTION_PROBE_MIN_EPOCHS
-    hi = config.REFLECTION_PROBE_MAX_EPOCHS
-    if n_probes <= 1:
-        return lo
-    return lo + idx * (hi - lo) // (n_probes - 1)
-
-
-def _probe_objective_tail(cand_dir: Path, n_tail: int = 5) -> tuple[int, str]:
-    """(epoch lines, tail text) of the candidate's objective*.txt."""
-    # Most recently written file wins when several objective*.txt exist
-    obj_files = sorted(
-        cand_dir.glob("objective*.txt"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    if not obj_files:
-        return 0, ""
-    values = []
-    for line in obj_files[0].read_text(encoding="utf-8", errors="replace").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("iteration") or stripped.startswith("#"):
-            continue
-        parts = stripped.split(",")
-        if len(parts) < 2:
-            continue
-        try:
-            float(parts[1].strip())
-        except ValueError:
-            continue
-        values.append(stripped)
-    if not values:
-        return 0, ""
-    return len(values), " | ".join(values[-n_tail:])
-
-
 def _empty_probe_record(idx: int, error: str) -> dict:
     """A probe record for a worker that never produced one."""
     return {
         "idx": idx,
+        "fix_type": "",
         "direction": "",
         "rationale": "",
         "main": "",
@@ -1126,19 +965,31 @@ def _empty_probe_record(idx: int, error: str) -> dict:
         "probe_epochs": 0,
         "completed_epochs": 0,
         "final_objective": None,
-        "objective_tail": "",
+        "objective_data": "",
+        "run_result_json": "{}",
         "py_rc": "?",
         "ff_rc": "?",
         "minth": False,
         "render_summary": "",
-        "render_png": None,
+        "images": [],
         "error": error,
     }
 
 
+def _per_attempt_cleanup(cand_dir: Path) -> None:
+    """Remove an attempt's results/, tex/, tmp/ subdirectories.
+
+    The attempt folder itself survives (temp/ is the record of the
+    attempts — it is never deleted, neither per-round nor at process
+    end); only the execution scratch inside each attempt goes.
+    """
+    for sub in ("results", "tex", "tmp"):
+        _rmtree_force(cand_dir / sub)
+
+
 def _run_one_probe(
     idx: int,
-    n_probes: int,
+    iteration: int,
     config,
     results_dir: Path,
     temp_dir: Path,
@@ -1149,31 +1000,50 @@ def _run_one_probe(
     objective_data: str,
     convergence_data: str,
     edp_code: str,
-    reflection_history: str,
+    repair_records: str,
     doc_text: str,
     analysis_artifacts: str,
     coarse: str,
-    fine: str,
-    action: str,
+    fix_type: str,
+    permission: dict,
+    use_vision: bool,
     vision_images,
     image_section: str,
 ) -> dict:
     """Generate ONE candidate fix (one direction) and probe-run it.
 
-    Runs inside a worker thread.  A dedicated agent is built HERE because
-    CodeAgent keeps prompt state on the instance and cannot be shared
-    across threads.
+    Runs inside a worker thread.  A dedicated agent is built HERE
+    because CodeAgent keeps prompt state on the instance and cannot be
+    shared across threads.  The agent MODEL follows the caller's
+    *use_vision* decision (the category rule): syntax always text,
+    fe_parameter always vision, formula/design/other vision with design
+    images and text without.  The
+    probe's LLM calls and its execution are recorded in FULL into
+    history.txt (round = *iteration*).
     """
     from API import (
-        AgentRouter,
         DeepSeekCodeAgentV4FlashVision,
         DeepSeekCodeAgentV4Pro,
     )
-    from .prompts import FIX_DIRECTIONS
+    from .prompts import (
+        FIX_DESIGN_DIRECTIONS,
+        FIX_FE_PARAM_DIRECTIONS,
+        FIX_FORMULA_DIRECTIONS,
+    )
 
-    direction = FIX_DIRECTIONS[idx % len(FIX_DIRECTIONS)]
-    probe_epochs = _probe_epochs(idx, n_probes, config)
+    direction_tables = {
+        "formula_fix": FIX_FORMULA_DIRECTIONS,
+        "design_fix": FIX_DESIGN_DIRECTIONS,
+        "fe_param_fix": FIX_FE_PARAM_DIRECTIONS,
+    }
+    directions = direction_tables[fix_type]
+    direction = directions[idx % len(directions)]
+    # Every candidate runs the SAME probe budget (a configs parameter —
+    # it is also part of the evidence the synthesis weighs, so a varying
+    # budget would confound the comparison).
+    probe_epochs = config.REFLECTION_PROBE_EPOCHS
     record = _empty_probe_record(idx, "")
+    record["fix_type"] = fix_type
     record["direction"] = direction
     record["probe_epochs"] = probe_epochs
 
@@ -1181,31 +1051,76 @@ def _run_one_probe(
     _rmtree_force(cand_dir)
     cand_dir.mkdir(parents=True, exist_ok=True)
 
+    round_tag = f"Reflection round {iteration}: {fix_type} probe {idx}"
+
     try:
-        probe_agent = AgentRouter(
-            DeepSeekCodeAgentV4Pro(), DeepSeekCodeAgentV4FlashVision()
+        probe_agent = (
+            DeepSeekCodeAgentV4FlashVision()
+            if use_vision
+            else DeepSeekCodeAgentV4Pro()
         )
-        fix = fixer_apply(
-            probe_agent,
-            problem_description=problem_description,
-            main_py=main_py,
-            mesh_txt=mesh_txt,
-            run_result_json=run_result_json,
-            objective_data=objective_data,
-            convergence_data=convergence_data,
-            edp_code=edp_code,
-            reflection_history=reflection_history,
-            doc_text=doc_text,
-            analysis_artifacts=analysis_artifacts,
-            coarse=coarse,
-            fine=fine,
-            action=action,
-            outer_iterations=config.MAX_OUTER_ITERATIONS,
-            inner_iterations=config.MAX_INNER_ITERATIONS,
-            images=vision_images,
-            image_section=image_section,
-            fix_direction=direction,
-        )
+        # the probe's LLM calls go into the SAME history.txt (the header
+        # exists — point at it, never rewrite it)
+        history_log = results_dir / "history.txt"
+        if history_log.exists():
+            probe_agent.attach_history(history_log, write_header=False)
+        probe_agent.history_label = round_tag
+        if fix_type == "design_fix":
+            fix = design_fix(
+                probe_agent,
+                problem_description=problem_description,
+                main_py=main_py,
+                mesh_txt=mesh_txt,
+                run_result_json=run_result_json,
+                objective_data=objective_data,
+                convergence_data=convergence_data,
+                edp_code=edp_code,
+                repair_records=repair_records,
+                doc_text=doc_text,
+                analysis_artifacts=analysis_artifacts,
+                coarse=coarse,
+                permission=permission,
+                images=vision_images if use_vision else None,
+                image_section=image_section,
+                fix_direction=direction,
+            )
+        elif fix_type == "fe_param_fix":
+            fix = fe_param_fix(
+                probe_agent,
+                problem_description=problem_description,
+                main_py=main_py,
+                mesh_txt=mesh_txt,
+                run_result_json=run_result_json,
+                objective_data=objective_data,
+                convergence_data=convergence_data,
+                edp_code=edp_code,
+                repair_records=repair_records,
+                doc_text=doc_text,
+                analysis_artifacts=analysis_artifacts,
+                coarse=coarse,
+                permission=permission,
+                images=vision_images if use_vision else None,
+                image_section=image_section,
+                fix_direction=direction,
+            )
+        else:
+            fix = formula_fix(
+                probe_agent,
+                problem_description=problem_description,
+                main_py=main_py,
+                mesh_txt=mesh_txt,
+                run_result_json=run_result_json,
+                objective_data=objective_data,
+                convergence_data=convergence_data,
+                edp_code=edp_code,
+                repair_records=repair_records,
+                doc_text=doc_text,
+                analysis_artifacts=analysis_artifacts,
+                coarse=coarse,
+                images=vision_images if use_vision else None,
+                image_section=image_section,
+                fix_direction=direction,
+            )
     except Exception as e:
         record["error"] = f"fixer call failed: {e}"
         return record
@@ -1227,9 +1142,8 @@ def _run_one_probe(
     # analysis files the runner reads.  (No include/ copy — the runner
     # deletes workdir/include and rebuilds it from the autofreefem
     # package on every run, so a copied tree would be wasted I/O.)
-    probe_main = record["main"]
     try:
-        (cand_dir / "main.py").write_text(probe_main, encoding="utf-8")
+        (cand_dir / "main.py").write_text(record["main"], encoding="utf-8")
         (cand_dir / "mesh.txt").write_text(record["mesh"] or mesh_txt, encoding="utf-8")
         for name in ("initial.json", "mesh.json"):
             src = results_dir / name
@@ -1239,44 +1153,84 @@ def _run_one_probe(
         record["error"] = f"probe directory setup failed: {e}"
         return record
 
-    # Probe run (short budget — the formal run happens after synthesis)
+    # Probe run (short budget — the formal run happens after synthesis).
+    # The attempt's results/, tex/, tmp/ are removed in the finally below
+    # as soon as the evidence is gathered — the attempt folder itself
+    # stays as a record (temp/ survives the process).
     from Execution.runner import run_problem
 
     try:
-        result = run_problem(cand_dir / "main.py", cand_dir, auto_render=False)
-    except Exception as e:
-        record["error"] = f"probe run crashed: {e}"
-        return record
+        try:
+            history_log = results_dir / "history.txt"
+            result = run_problem(
+                cand_dir / "main.py",
+                cand_dir,
+                auto_render=False,
+                history_log=history_log if history_log.exists() else None,
+                history_label=f"{round_tag} run",
+            )
+        except Exception as e:
+            record["error"] = f"probe run crashed: {e}"
+            return record
 
-    # Evidence collection — guarded as a whole: a filesystem race or a
-    # render hiccup must keep the already-gathered fields instead of
-    # turning a genuinely completed run into a "worker crashed" record.
-    try:
-        record["py_rc"] = result.get("autofreefem", {}).get("python", {}).get("return_code", "?")
-        ff_rcs = [f.get("return_code", "?") for f in result.get("freefem", [])]
-        record["ff_rc"] = ", ".join(str(rc) for rc in ff_rcs) or "-"
+        # Evidence collection — mirrors the fix-start collection: the SAME
+        # blacklist (collect_files), the SAME truncation policy (only the
+        # FreeFEM console keeps its last chars — everything else
+        # verbatim), and the SAME image rule (configs.MAX_SNAPSHOT_FRAMES
+        # with whole-run interpolation).  Guarded as a whole: a
+        # filesystem race or a render hiccup must keep the already-
+        # gathered fields instead of turning a genuinely completed run
+        # into a "worker crashed" record.
+        try:
+            record["py_rc"] = result.get("autofreefem", {}).get("python", {}).get("return_code", "?")
+            ff_rcs = [f.get("return_code", "?") for f in result.get("freefem", [])]
+            record["ff_rc"] = ", ".join(str(rc) for rc in ff_rcs) or "-"
+            # rc=0 with a console err code is the "code appeared after loop
+            # completion" case — keep the code visible WITHOUT touching the
+            # raw ff_rc string (parsed for clean-run checks elsewhere).
+            errs = [
+                f.get("console_err_code")
+                for f in result.get("freefem", [])
+                if f.get("console_err_code") is not None
+            ]
+            if errs:
+                record["ff_console_err"] = errs
 
-        n_epochs, tail = _probe_objective_tail(cand_dir)
-        record["completed_epochs"] = n_epochs
-        record["objective_tail"] = tail
-        if tail:
-            try:
-                record["final_objective"] = float(tail.split("|")[-1].split(",")[1].strip())
-            except (ValueError, IndexError):
-                pass
+            key_c = _extract_key_files(collect_files(cand_dir))
+            record["run_result_json"] = key_c["run_result_json"]
+            record["objective_data"] = key_c["objective_data"]
+            rows = []
+            for line in (key_c["objective_data"] or "").splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith(("iteration", "#", "===")):
+                    continue
+                parts = stripped.split(",")
+                if len(parts) < 2:
+                    continue
+                try:
+                    int(parts[0].strip())
+                    float(parts[1].strip())
+                except ValueError:
+                    continue
+                rows.append((parts[0].strip(), parts[1].strip()))
+            if rows:
+                record["completed_epochs"] = len(rows)
+                record["final_objective"] = float(rows[-1][1])
 
-        # Render the probe's final design for the synthesiser.  The
-        # lock serialises the matplotlib calls of the parallel probes
-        # (pyplot keeps process-global state).
-        minth = _find_minth_vtu(cand_dir)
-        if minth is not None:
-            record["minth"] = True
+            # Design images per configs (snapshots, whole-run
+            # interpolation) — the lock serialises the matplotlib calls of
+            # the parallel probes (pyplot keeps process-global state).
             with _RENDER_LOCK:
-                record["render_summary"] = render_and_summarize(minth)
-            png = minth.parent.parent / f"{minth.stem}_cell_Label.png"
-            record["render_png"] = str(png) if png.exists() else None
-    except Exception as e:
-        record["error"] = f"probe evidence collection failed: {e}"
+                record["images"], _ = _vision_context(cand_dir, config)
+            minth = _find_minth_vtu(cand_dir)
+            if minth is not None:
+                record["minth"] = True
+                with _RENDER_LOCK:
+                    record["render_summary"] = render_and_summarize(minth)
+        except Exception as e:
+            record["error"] = f"probe evidence collection failed: {e}"
+    finally:
+        _per_attempt_cleanup(cand_dir)
 
     return record
 
@@ -1289,42 +1243,30 @@ def _probe_report_text(records: list[dict]) -> str:
         # adjacent f-string literals would break implicit concatenation
         # (the whole chain parses as ``head if cond else tail``).
         err_line = f"Error (if any): {r['error']}\n" if r.get("error") else ""
+        console_note = (
+            f"FreeFEM console_err_code: {r['ff_console_err']}\n"
+            if r.get("ff_console_err")
+            else ""
+        )
         parts.append(
             f"=== Candidate {r['idx']} ===\n"
+            f"Fix type: {r.get('fix_type') or '(unknown)'}\n"
             f"Direction: {r['direction'] or '(unknown)'}\n"
             f"Fix rationale: {r['rationale'] or '(none)'}\n"
             f"Probe budget: {r['probe_epochs']} epochs\n"
             f"Probe result: Python rc={r['py_rc']}, FreeFEM rc={r['ff_rc']}, "
-            f"epochs completed={r['completed_epochs']}/{r['probe_epochs']}, "
+            f"{console_note}"
             f"final objective={r['final_objective'] if r['final_objective'] is not None else '?'}, "
             f"MinTh.vtu={'yes' if r['minth'] else 'no'}\n"
-            f"Objective tail: {r['objective_tail'] or '(none)'}\n"
+            f"Objective history (verbatim):\n{r['objective_data'] or '(none)'}\n"
+            f"Execution result (FreeFEM console keeps only its last "
+            f"chars):\n{r['run_result_json'] or '(none)'}\n"
             f"Render summary: {r['render_summary'] or '(none)'}\n"
             f"{err_line}"
             f"Candidate main.py:\n```python\n{r['main'] or '(none)'}\n```\n"
             f"Candidate mesh.txt:\n```\n{r['mesh'] or '(no change)'}\n```\n\n"
         )
     return "\n".join(parts)
-
-
-def _best_probe_record(records: list[dict]) -> Optional[dict]:
-    """Deterministic fallback choice when the synthesiser fails: the
-    best-evidenced candidate (usable code, MinTh + clean FreeFEM first,
-    then lowest final objective, then most completed epochs)."""
-    def key(r):
-        obj = r.get("final_objective") if r.get("final_objective") is not None else 1e300
-        if not r.get("minth"):
-            return (2, obj, -r.get("completed_epochs", 0))
-        # all FreeFEM runs clean (a two-run "0, 0" counts as clean, a
-        # single-run "0" too, "0, 3" does not)
-        ffs = [str(rc).strip() for rc in str(r.get("ff_rc", "")).split(",")]
-        rc_ok = 0 if ffs and all(rc == "0" for rc in ffs) else 1
-        return (rc_ok, obj, -r.get("completed_epochs", 0))
-
-    usable = [r for r in records if not r.get("error") and r.get("main")]
-    if not usable:
-        return None
-    return min(usable, key=key)
 
 
 def _synthesize_next_step(
@@ -1334,21 +1276,28 @@ def _synthesize_next_step(
     problem_description: str,
     main_py: str,
     mesh_txt: str,
-    reflection_history: str,
+    repair_records: str,
     doc_text: str,
     analysis_artifacts: str,
     coarse: str,
-    fine: str,
-    action: str,
+    fix_type: str,
+    permission: dict,
     records: list[dict],
     iteration: int,
+    use_vision: bool = True,
 ) -> dict:
     """Synthesise the formal next-step code from the probe records.
 
     One LLM call over all candidates: their directions, code, probe
-    evidence (return codes, epochs, objective, design renders).  On LLM
-    parse failure the best-evidenced candidate is used verbatim — the
-    round never dies on a malformed synthesis reply.
+    evidence (return codes, epochs, objective, design renders) — the
+    next step is judged from BOTH the objective values and the design
+    images (the renders attach only when *use_vision* — a text-model
+    round must not receive image blocks).  An unusable reply (malformed
+    JSON, missing code keys, unreachable model) returns ``_error`` —
+    the caller treats it UNIFORMLY as other_error (no deterministic
+    best-candidate fallback).
+    The deterministic permission boundary filters the output for the
+    design / fe-parameter rounds.
     """
     from .prompts import FIX_SYNTHESIS_SYSTEM, FIX_SYNTHESIS_USER
 
@@ -1363,15 +1312,20 @@ def _synthesize_next_step(
 
     # Pair each image with its OWN candidate — a zip over the filtered
     # list would misalign names when some candidates rendered no PNG.
+    # Text-model rounds (use_vision=False) get NO image blocks — the
+    # synthesis then weighs the objective numbers and the code alone.
+    # The images follow configs.MAX_SNAPSHOT_FRAMES (whole-run
+    # interpolation) — the same rule as the fix-start collection.
     images = []
     lines = []
-    for r in records:
-        if r.get("render_png"):
-            images.append(r["render_png"])
-            lines.append(
-                f"{Path(r['render_png']).name} — Candidate {r['idx']} "
-                f"final design (Label=3 cells)"
-            )
+    if use_vision:
+        for r in records:
+            for img in r.get("images") or []:
+                images.append(img)
+                lines.append(
+                    f"{Path(img).name} — Candidate {r['idx']} "
+                    "design (Label=3 cells)"
+                )
     image_section = ""
     if images:
         image_section = (
@@ -1380,30 +1334,33 @@ def _synthesize_next_step(
             + "\n"
         )
 
+    permission_block = permission_text(fix_type, permission)
+
     agent.set_prompt_list(
         [
             {"role": "system", "content": FIX_SYNTHESIS_SYSTEM},
             {"role": "user", "content": FIX_SYNTHESIS_USER},
         ]
     )
-    # A transport failure (network, rate limit, API outage) must take
-    # the same fallback path as a malformed reply — the round never
-    # dies because the synthesiser could not be reached.
+
+    # NO deterministic fallback: an unusable synthesis reply (malformed
+    # JSON, missing code keys, or an unreachable model — the connector
+    # test already ruled out a dead link) is treated UNIFORMLY as
+    # other_error by the caller; no best-probe-candidate substitution.
     try:
         raw = agent.invoke_multimodal(
             {
                 "n_candidates": len(records),
-                "probe_min": config.REFLECTION_PROBE_MIN_EPOCHS,
-                "probe_max": config.REFLECTION_PROBE_MAX_EPOCHS,
+                "probe_epochs": config.REFLECTION_PROBE_EPOCHS,
                 "formal_iterations": _expected_epochs(main_py, config),
                 "problem_description": problem_description,
                 "main_py": main_py,
                 "mesh_txt": mesh_txt,
                 "coarse": coarse,
-                "fine": fine,
-                "action": action,
+                "fix_type": fix_type,
+                "permission": permission_block,
                 "candidates_report": report,
-                "reflection_history": reflection_history or "(first attempt)",
+                "repair_records": repair_records or "(no repair records yet)",
                 "doc_text": doc_text,
                 "analysis_artifacts": analysis_artifacts or "(not available)",
                 "image_section": image_section,
@@ -1411,16 +1368,6 @@ def _synthesize_next_step(
             images=images,
         )
     except Exception as e:
-        best = _best_probe_record(records)
-        if best is not None:
-            return {
-                "main": best["main"],
-                "mesh": best["mesh"],
-                "rationale": (
-                    f"synthesis LLM call failed ({e}) — falling back to "
-                    f"best probe candidate {best['idx']}: {best['rationale']}"
-                ),
-            }
         return {
             "main": "",
             "mesh": "",
@@ -1432,17 +1379,23 @@ def _synthesize_next_step(
 
     parsed = _parse_fix_response(raw)
     if parsed.get("_error"):
-        best = _best_probe_record(records)
-        if best is not None:
-            parsed = {
-                "main": best["main"],
-                "mesh": best["mesh"],
-                "rationale": (
-                    f"synthesis parse failed ({parsed['_error']}) — "
-                    f"falling back to best probe candidate {best['idx']}: "
-                    f"{best['rationale']}"
-                ),
-            }
+        return {
+            "main": "",
+            "mesh": "",
+            "rationale": "",
+            "_error": f"synthesis parse failed ({parsed['_error']})",
+        }
+    # the deterministic permission boundary filters the synthesis output
+    # the same way it filtered the candidates (design / fe-parameter
+    # rounds only)
+    if fix_type == "design_fix":
+        parsed["main"], parsed["mesh"], _ = design_enforce(
+            main_py, parsed.get("main") or "", parsed.get("mesh") or "", permission,
+        )
+    elif fix_type == "fe_param_fix":
+        parsed["main"], parsed["mesh"], _ = fe_param_enforce(
+            main_py, parsed.get("main") or "", parsed.get("mesh") or "", permission,
+        )
     return parsed
 
 
@@ -1450,49 +1403,222 @@ def _synthesize_next_step(
 # main orchestrator
 # ======================================================================
 
+def _console_evidence(result: dict) -> str:
+    """The initial execution's console evidence (the round-0 record).
+
+    Python return code + stderr (verbatim), and each FreeFEM record's
+    exit code (with the console err code when present).  The FreeFEM
+    console was already truncated at the source (Execution/runner.py) —
+    read directly, no re-cutting.
+    """
+    if not result:
+        return "(no run_result.json)"
+    parts = []
+    py = result.get("autofreefem", {}).get("python", {})
+    if py:
+        parts.append(f"Python rc={py.get('return_code', '?')}")
+        if py.get("stderr"):
+            parts.append(f"Python stderr:\n{py['stderr']}")
+    for ff in result.get("freefem", []):
+        note = (
+            f" (console_err_code={ff['console_err_code']})"
+            if ff.get("console_err_code") is not None
+            else ""
+        )
+        parts.append(
+            f"FreeFEM {ff.get('edp_file', '?')}: exit={ff.get('return_code', '?')}{note}"
+        )
+        stream = ff.get("stderr")
+        if isinstance(stream, str) and stream:
+            parts.append(f"stderr:\n{stream}")
+    return "\n".join(parts)
+
+
+def _record_round_summary(results_dir: Path, iteration: int, fix_type: str,
+                          coarse: str, outcome: str) -> None:
+    """One summary record per reflection round in history.txt."""
+    history_log = results_dir / "history.txt"
+    if not history_log.exists():
+        return
+    record_history(
+        history_log,
+        "Reflection round (summary)",
+        label=f"round {iteration}: {fix_type} for {coarse}",
+        output_text=outcome,
+    )
+
+
+def _repair_records_text(records: list) -> str:
+    """Render the in-memory repair records for prompts.
+
+    Round 0 = the initial execution's console evidence; each later round
+    = what problem it aimed to fix (target) and what it output
+    (added / deleted / modified parts), plus its outcome.
+    """
+    if not records:
+        return "(no repair records yet)"
+    parts = []
+    for r in records:
+        if r.get("round") == 0:
+            parts.append(
+                f"--- round 0 (initial execution) ---\n"
+                f"console:\n{r.get('console', '')}\n"
+                f"outcome: {r.get('outcome', '?')}\n"
+            )
+            continue
+        t = r.get("target") or {}
+        if isinstance(t, dict):
+            target = (
+                f"{t.get('fix_type', '?')} for {t.get('coarse', '?')}"
+                f"{' - ' + t['diagnosis'] if t.get('diagnosis') else ''}"
+            )
+        else:
+            target = str(t)
+        ch = r.get("changes") or {}
+        parts.append(
+            f"--- round {r.get('round', '?')} [{target}] ---\n"
+            f"removed: {ch.get('removed') or '[]'}\n"
+            f"added:   {ch.get('added') or '[]'}\n"
+            f"modified: {ch.get('modified') or '[]'}\n"
+            f"outcome: {r.get('outcome', '?')}\n"
+        )
+    return "\n".join(parts)
+
+
+def _load_specs(results_dir: Path) -> tuple:
+    """(initial.json dict, mesh.json dict) from disk — {} on any failure
+    (the eligibility gates then fail closed to free_fix)."""
+    out = []
+    for name in ("initial.json", "mesh.json"):
+        try:
+            data = json.loads(
+                (results_dir / name).read_text(encoding="utf-8", errors="replace")
+            )
+        except (OSError, json.JSONDecodeError, TypeError):
+            data = {}
+        out.append(data if isinstance(data, dict) else {})
+    return tuple(out)
+
+
+def _load_examples(results_dir: Path) -> list:
+    """Selected reference examples (examples.txt names) for the static
+    repair review — [] when absent or unloadable."""
+    try:
+        names = [
+            line.strip()
+            for line in (results_dir / "examples.txt").read_text(
+                encoding="utf-8", errors="replace"
+            ).splitlines()
+            if line.strip()
+        ]
+    except OSError:
+        return []
+    if not names:
+        return []
+    try:
+        from Generation.select_examples import load_selected_examples
+
+        return load_selected_examples(names) or []
+    except Exception:
+        return []
+
+
+def _run_syntax_fix(fix_agent, config, results_dir: Path, key: dict,
+                    history_log=None) -> dict:
+    """syntax_fix — the Generation rule set verbatim: deterministic
+    static checks -> LLM review -> targeted repair loop (bounded by
+    configs.MAX_STATIC_FIXES).  The reflector re-executes the result;
+    one reflection round is consumed regardless of the inner repairs.
+    Every inner round is recorded in FULL into history.txt."""
+    from Generation.check_static import run_static_repair
+
+    spec, mesh_spec = _load_specs(results_dir)
+    return run_static_repair(
+        fix_agent,
+        key["main_py"],
+        problem_spec=spec,
+        mesh_spec=mesh_spec,
+        problem_description=key["problem_description"],
+        mesh_txt=key["mesh_txt"],
+        examples=_load_examples(results_dir),
+        max_fixes=config.MAX_STATIC_FIXES,
+        history_log=history_log,
+    )
+
 
 def run_reflection(agent, info, config) -> str:
     """
     Run the full reflection loop for a single problem.
 
-    Each round: detect → classify → decide → PARALLEL PROBE (up to
-    REFLECTION_PARALLEL_MAX candidate fixes, each tested with a short
-    run of REFLECTION_PROBE_MIN_EPOCHS..REFLECTION_PROBE_MAX_EPOCHS
-    epochs under results/<name>/temp/) → SYNTHESISE one next-step code
-    from the probe evidence → formal re-execute → quality check.
+    Each round: collect -> quality-check evidence (when MinTh.vtu exists;
+    the PRE-fix verdict is EVIDENCE ONLY) -> classify (5 error
+    categories + pass — the classification is the sole authority for
+    the category) -> fix (syntax_fix / formula_fix / design_fix /
+    fe_param_fix / free_fix, all sharing MAX_REFLECTION_TIMES rounds)
+    -> re-execute -> post-fix quality check (pass — or a fix that
+    produced NO change — ends the reflection DIRECTLY, no extra round).
+    Before the FIRST repair round the usable fix types are pre-computed
+    from the extracted/designed rules (the classification prompt shows
+    ONLY the usable error types; an unusable type falls back to
+    free_fix).  formula_fix / design_fix / fe_param_fix test up to
+    MAX_FIX_CANDIDATES candidates in parallel under
+    results/<name>/temp/ (short probes of REFLECTION_PROBE_EPOCHS
+    epochs); an LLM synthesiser then merges the probe evidence
+    (objective + design images) into ONE next-step code for the formal
+    run (an unusable synthesis reply is treated uniformly as
+    other_error).
 
     Args:
-        agent: CodeAgent instance for LLM calls.
-        info: Info object with problem_name, results_dir, and reflection_*
-              fields.
+        agent: CodeAgent instance (an AgentRouter in the pipeline —
+               syntax_error rounds repair with its text_agent, the other
+               repair paths with its vision_agent).
+        info: Info object with problem_name, results_dir, repair_records.
         config: Module with reflection constants (MAX_REFLECTION_TIMES,
-                REFLECTION_PARALLEL_MAX, REFLECTION_PROBE_*_EPOCHS,
-                REFLECTION_STALE_THRESHOLD, etc.).
+                MAX_FIX_CANDIDATES, REFLECTION_PROBE_EPOCHS, etc.).
 
     Returns:
         Reflection status string: "pass", "give_up_max",
         or "give_up" (no files found).
 
-    The temp/ directory lives for the WHOLE reflection process and is
-    removed when the process exits (pass / give_up / give_up_max) —
-    never mid-process.
+    temp/ survives the process — the attempts are the record; each
+    attempt only loses its results/, tex/, tmp/ subdirectories.
     """
     results_dir = info.results_dir
     problem_name = info.problem_name
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    # Parallel-probe scratch space: fresh on each reflection entry,
-    # persistent across rounds, removed on exit (finally block).
+    # Parallel-probe scratch space — a RECORD of the attempts.  It is
+    # never wiped wholesale: not on entry (previous attempts stay), not
+    # between rounds, not at process end.  Each candidate wipes its own
+    # slot on reuse and sheds only its results/, tex/, tmp/ at the end.
     temp_dir = results_dir / "temp"
-    _rmtree_force(temp_dir)
     temp_dir.mkdir(parents=True, exist_ok=True)
 
-    # Initialize reflection log.  The in-memory history is reset with it:
-    # the fixer reads the LOG and the escalation decides on the in-memory
-    # records, so a re-entered loop (same Info object) must not keep stale
-    # in-memory records that no longer exist in the log.
+    # Initialize reflection log; the in-memory repair records are reset
+    # with it.
     _init_reflection_log(results_dir, problem_name)
-    info.reflection_history = []
+    info.repair_records = []
+
+    # The repair MODEL depends on the error class: SYNTAX errors are
+    # repaired with the TEXT model (static rules + code repair — the
+    # vision model degrades code text); FE_PARAMETER errors always use
+    # the VISION model; the formula / design / other paths use VISION
+    # when design images exist and TEXT otherwise.  The quality check
+    # and the coarse classification always see the design images —
+    # vision.  main.py passes an AgentRouter(Pro, FlashVision); fall
+    # back to the agent itself when a side is absent.
+    text_agent = getattr(agent, "text_agent", None) or agent
+    vision_agent = getattr(agent, "vision_agent", None) or agent
+
+    # Connection tester FIRST: an unreachable model ends the reflection
+    # immediately instead of burning repair rounds on connection errors.
+    from API import test_connection
+
+    if not test_connection(agent):
+        print("    [Reflect] LLM connection test FAILED — ending immediately.", flush=True)
+        _append_final_status(results_dir, "connection_failed", 0)
+        info.reflection_status = "connection_failed"
+        return "connection_failed"
 
     # Load AutoFreeFEM documentation once — anchored on this file, not
     # the CWD (running the pipeline from elsewhere must not silently
@@ -1503,12 +1629,21 @@ def run_reflection(agent, info, config) -> str:
     )
     doc_text = doc_path.read_text(encoding="utf-8", errors="replace") if doc_path.exists() else ""
 
+    # Pre-computed BEFORE the first repair round (the spec is stable
+    # across rounds): which fix types have repair room under the
+    # extracted/designed rules.  The classification prompt shows ONLY
+    # the usable types; fix_type_for fails closed to free_fix for an
+    # unusable one.  mesh_frozen = the mesh code came verbatim from the
+    # sources (borders/resolution immutable).
+    available = None
+    mesh_frozen = False
+
     try:
         for iteration in range(config.MAX_REFLECTION_TIMES):
             info.reflection_attempts = iteration + 1
             print(f"\n  [Reflect] Iteration {iteration + 1}/{config.MAX_REFLECTION_TIMES}", flush=True)
 
-            # --- Step 1: Collect all files ---
+            # --- Step 1: Collect + structured context ---
             files = collect_files(results_dir)
             if not files:
                 print("    [Reflect] No files found — skipping.")
@@ -1516,307 +1651,492 @@ def run_reflection(agent, info, config) -> str:
                 return "give_up"
 
             context_text = _assemble_context_text(files)
-            key = _extract_key_files(files, evidence_chars=config.REFLECTION_EVIDENCE_CHARS)
+            key = _extract_key_files(files)
 
-            # --- Step 1a: Afac calibration (first round, only when the
-            # problem statement carries no Lagrange multiplier) ---
-            if iteration == 0 and _needs_afac_calibration(results_dir):
-                chosen = _afac_calibrate(results_dir, config)
-                if chosen is not None:
-                    # When the calibration actually rewrote main.py, drop
-                    # run_result.json so Step 2 re-executes with the
-                    # calibrated multiplier; an unchanged value means the
-                    # existing run is already valid.
-                    try:
-                        current = _afac_value(
-                            (results_dir / "main.py").read_text(
-                                encoding="utf-8", errors="replace"
-                            )
-                        )
-                    except OSError:
-                        current = None
-                    if current is None or abs(current - chosen) > abs(chosen) * 1e-9:
-                        try:
-                            (results_dir / "run_result.json").unlink()
-                        except OSError:
-                            pass
-                        files = collect_files(results_dir)
-                        context_text = _assemble_context_text(files)
-                        key = _extract_key_files(
-                            files, evidence_chars=config.REFLECTION_EVIDENCE_CHARS
-                        )
-                        vision_images, image_section = _vision_context(results_dir)
-
-            # --- Step 1b: iteration-label composite (multimodal evidence) ---
+            # --- Step 1b: per-snapshot design images (multimodal evidence) ---
             # Every result*Th<N>.vtu snapshot's Label field is merged, in
-            # iteration order, into ONE image the model can see.  The user
-            # prompt template carries an {image_section} placeholder; the
-            # image itself travels through the multimodal message channel.
-            vision_images, image_section = _vision_context(results_dir)
+            # iteration order, into ONE image the model can see.
+            vision_images, image_section = _vision_context(results_dir, config)
 
-            # --- Step 2: Check if we need to (re-)execute ---
+            # --- Step 2: (Re)execute when there is no result yet; then
+            # capture the round-0 record from the FIRST execution. ---
             run_result_json = key["run_result_json"]
             if run_result_json == "{}":
-                _re_execute(results_dir)
+                _re_execute(
+                    results_dir,
+                    history_label=f"Reflection round {iteration + 1}: initial re-execute",
+                )
                 files = collect_files(results_dir)
                 context_text = _assemble_context_text(files)
-                key = _extract_key_files(files, evidence_chars=config.REFLECTION_EVIDENCE_CHARS)
+                key = _extract_key_files(files)
                 run_result_json = key["run_result_json"]
-                # fresh snapshots after re-execution — refresh the composite
-                vision_images, image_section = _vision_context(results_dir)
+                # fresh snapshots after re-execution — refresh the images
+                vision_images, image_section = _vision_context(results_dir, config)
 
-            # --- Step 3: Coarse classification ---
-            # MinTh.vtu existence is the only hard rule; the objective
-            # history never short-circuits the classification.
-            minth = _find_minth_vtu(results_dir)
-
-            if minth is not None:
-                # MinTh.vtu exists — the LLM judges EVERY case (success vs
-                # premature stop) from the objective history, the design
-                # snapshots, and the return codes.  No epoch-count threshold.
-                qc, context_text = _quality_check_block(
-                    agent, problem_name, config, results_dir, context_text, key,
-                    vision_images=vision_images, image_section=image_section,
+            if not info.repair_records:
+                # Stage 6 always ran before Stage 7 — this IS the initial
+                # execution's console evidence (or the Step-2 re-execution
+                # when the original result was missing).
+                rr = _load_run_result(results_dir)
+                info.repair_records.append(
+                    {
+                        "round": 0,
+                        "target": "initial execution",
+                        "console": _console_evidence(rr),
+                        "outcome": _format_outcome(
+                            rr, _find_minth_vtu(results_dir) is not None
+                        ),
+                    }
                 )
-                if qc == "pass":
-                    print("    [Reflect] PASS — MinTh.vtu exists, result valid.", flush=True)
-                    # A clean pass is still a reflection iteration — log it so
-                    # reflection.txt always carries a record of the verdict.
-                    outcome = _format_outcome(_load_run_result(results_dir), minth_exists=True)
-                    _append_reflection_log(
-                        results_dir,
-                        iteration + 1,
-                        "pass",
-                        "-",
-                        "none",
-                        "Quality check: MinTh.vtu exists, design valid — no fix needed.",
-                        outcome,
-                    )
-                    _append_final_status(results_dir, "pass", info.reflection_attempts)
-                    info.reflection_status = "pass"
-                    return "pass"
-                # Quality check failed → treat as wrong_result
-                coarse = "wrong_result"
-                print(f"    [Reflect] Quality check: {qc} — treating as wrong_result.", flush=True)
-            else:
-                # No MinTh.vtu — LLM classifies
-                coarse = coarse_classify(
-                    agent, problem_name, context_text,
-                    images=vision_images, image_section=image_section,
-                )
-                print(f"    [Reflect] Coarse: {coarse}", flush=True)
 
-                if coarse == "pass":
-                    print("    [Reflect] PASS.", flush=True)
-                    outcome = _format_outcome(_load_run_result(results_dir), minth_exists=False)
-                    _append_reflection_log(
-                        results_dir,
-                        iteration + 1,
-                        "pass",
-                        "-",
-                        "none",
-                        "Coarse classification: result valid — no fix needed.",
-                        outcome,
-                    )
-                    _append_final_status(results_dir, "pass", info.reflection_attempts)
-                    info.reflection_status = "pass"
-                    return "pass"
+            repair_records_text = _repair_records_text(info.repair_records)
 
-            # --- Step 4: Fine classification ---
-            reflection_history = _read_reflection_log(results_dir)
             analysis_artifacts = ""
             for rel in sorted(files):
                 if rel in ("initial.json", "mesh.json"):
                     # Include _source annotations — critical for distinguishing
                     # extracted (immutable) vs designed (mutable) values.
-                    analysis_artifacts += f"=== {rel} ===\n{files[rel][:15000]}\n\n"
+                    # Verbatim (no truncation).
+                    analysis_artifacts += f"=== {rel} ===\n{files[rel]}\n\n"
 
-            if coarse in (
-                "autofreefem_error",
-                "freefem_error",
-                "non_convergence",
-                "wrong_result",
-                "hardware_limit",
-                "other",
-            ):
-                fine = fine_classify(
-                    agent,
-                    problem_name,
-                    coarse,
-                    key["main_py"],
-                    key["mesh_txt"],
-                    run_result_json,
-                    key["objective_data"],
-                    key["convergence_data"],
-                    key["edp_code"],
-                    context_text=context_text,
-                    images=vision_images,
-                    image_section=image_section,
+            spec, mesh_spec = _load_specs(results_dir)
+            if available is None:
+                mesh_frozen = mesh_spec.get("mesh_code_source") == "extracted"
+                available = available_fix_types(
+                    spec, key["main_py"], mesh_frozen,
                 )
-            else:
-                fine = coarse  # pass — no fine classification needed
+                print(
+                    "    [Reflect] usable fix types: "
+                    + ", ".join(t for t, (ok, _) in available.items() if ok),
+                    flush=True,
+                )
 
-            print(f"    [Reflect] Fine: {fine}", flush=True)
+            # --- Step 3: Quality gate / coarse classification ---
+            # MinTh.vtu existence is the only hard rule; the objective
+            # history never short-circuits the classification.
+            minth = _find_minth_vtu(results_dir)
+            diagnosis = ""
 
-            # --- Step 5: Escalation decision ---
-            action = escalation_decide(
-                info.reflection_history,
-                coarse,
-                fine,
-                stale_threshold=config.REFLECTION_STALE_THRESHOLD,
+            if minth is not None:
+                # MinTh.vtu exists — the quality check enriches the
+                # evidence (render summary, material-balance facts,
+                # symmetry guidance, final-design image) and gives a
+                # verdict.  The verdict is EVIDENCE ONLY: the coarse
+                # classification below is the SOLE authority for pass
+                # (and for every category — no fixed wiring).
+                set_label(
+                    vision_agent,
+                    f"Reflection round {iteration + 1}/{config.MAX_REFLECTION_TIMES}"
+                    ": quality check",
+                )
+                qc, context_text = _quality_check_block(
+                    vision_agent, problem_name, config, results_dir, context_text, key,
+                    vision_images=vision_images, image_section=image_section,
+                )
+                diagnosis = f"quality check: {qc}"
+                context_text += (
+                    f"\n\n=== Quality check verdict: {qc} (evidence only — "
+                    "the classification below is the sole authority for "
+                    "pass) ===\n"
+                )
+                print(f"    [Reflect] Quality check: {qc}", flush=True)
+
+            # --- standard flow: LLM coarse classification — the ONLY
+            # category judgment (with MinTh or without, pass or
+            # wrong_result).  The prompt shows ONLY the usable error
+            # types. ---
+            set_label(
+                vision_agent,
+                f"Reflection round {iteration + 1}/{config.MAX_REFLECTION_TIMES}"
+                ": coarse classify",
             )
-            print(f"    [Reflect] Action: {action}", flush=True)
-
-            # --- Step 6: Parallel probe round ---
-            # Up to REFLECTION_PARALLEL_MAX candidate fixes, each exploring
-            # ONE direction, each tested with a short run under temp/.
-            n_probes = max(1, int(config.REFLECTION_PARALLEL_MAX))
-            print(
-                f"    [Reflect] probing {n_probes} candidate fixes in parallel "
-                f"({config.REFLECTION_PROBE_MIN_EPOCHS}-"
-                f"{config.REFLECTION_PROBE_MAX_EPOCHS} epochs each) …",
-                flush=True,
+            coarse = coarse_classify(
+                vision_agent, problem_name, context_text,
+                images=vision_images, image_section=image_section,
+                available_types=available_types_text(available),
             )
-            records = [None] * n_probes
-            with ThreadPoolExecutor(max_workers=n_probes) as pool:
-                futures = {}
-                for i in range(n_probes):
-                    fut = pool.submit(
-                        _run_one_probe,
-                        i,
-                        n_probes,
-                        config,
-                        results_dir,
-                        temp_dir,
-                        problem_description=key["problem_description"],
-                        main_py=key["main_py"],
-                        mesh_txt=key["mesh_txt"],
-                        run_result_json=run_result_json,
-                        objective_data=key["objective_data"],
-                        convergence_data=key["convergence_data"],
-                        edp_code=key["edp_code"],
-                        reflection_history=reflection_history,
-                        doc_text=doc_text,
-                        analysis_artifacts=analysis_artifacts,
-                        coarse=coarse,
-                        fine=fine,
-                        action=action,
-                        vision_images=vision_images,
-                        image_section=image_section,
-                    )
-                    futures[fut] = i
-                for fut in as_completed(futures):
-                    i = futures[fut]
-                    try:
-                        r = fut.result()
-                    except Exception as e:  # noqa: BLE001 — worker isolation
-                        r = _empty_probe_record(i, f"probe worker crashed: {e}")
-                    records[i] = r
-                    if r.get("error"):
-                        print(f"    [Probe {i}] {r['error']}", flush=True)
-                    else:
-                        print(
-                            f"    [Probe {i}] py={r['py_rc']}, ff={r['ff_rc']}, "
-                            f"epochs={r['completed_epochs']}/{r['probe_epochs']}, "
-                            f"obj={r['final_objective']}, "
-                            f"MinTh={'yes' if r['minth'] else 'no'}",
-                            flush=True,
-                        )
+            print(f"    [Reflect] Coarse: {coarse}", flush=True)
 
-            # --- Step 7: Synthesise the next-step code ---
-            print("    [Reflect] synthesising next-step code …", flush=True)
-            synth = _synthesize_next_step(
-                agent,
-                config,
-                temp_dir,
-                problem_description=key["problem_description"],
-                main_py=key["main_py"],
-                mesh_txt=key["mesh_txt"],
-                reflection_history=reflection_history,
-                doc_text=doc_text,
-                analysis_artifacts=analysis_artifacts,
-                coarse=coarse,
-                fine=fine,
-                action=action,
-                records=[r for r in records if r is not None],
-                iteration=iteration + 1,
-            )
+            if coarse == "pass" and not vision_images:
+                # pass judged WITHOUT design images (curve-only evidence):
+                # supplement with ONE vision re-judgment — a pass needs a
+                # healthy curve AND healthy images.  A failed re-check
+                # falls through to the repair flow below.
+                set_label(
+                    vision_agent,
+                    f"Reflection round {iteration + 1}/{config.MAX_REFLECTION_TIMES}"
+                    ": pass re-check (vision)",
+                )
+                recheck = coarse_classify(
+                    vision_agent, problem_name, context_text,
+                    images=None, image_section="",
+                    available_types=available_types_text(available),
+                )
+                print(f"    [Reflect] pass re-check (vision): {recheck}", flush=True)
+                coarse = recheck
 
-            if synth.get("_error"):
-                # No usable candidate either — nothing to write or run.
-                print(f"    [Reflect] Synthesis failed, no fallback: {synth['_error']}", flush=True)
+            if coarse == "pass":
+                print("    [Reflect] PASS.", flush=True)
+                outcome = _format_outcome(
+                    _load_run_result(results_dir),
+                    minth_exists=minth is not None,
+                )
                 _append_reflection_log(
                     results_dir,
                     iteration + 1,
-                    coarse,
-                    fine,
-                    action,
-                    "(synthesis failed)",
-                    f"synthesis failed: {synth['_error']}",
+                    "pass",
+                    "-",
+                    "none",
+                    "Coarse classification: result valid — no fix needed.",
+                    outcome,
                 )
-                info.reflection_history.append(
+                info.repair_records.append(
                     {
-                        "coarse": coarse,
-                        "fine": fine,
-                        "action": action,
-                        "fix_rationale": "(synthesis failed)",
-                        "outcome": f"synthesis failed: {synth['_error']}",
+                        "round": iteration + 1,
+                        "target": {
+                            "fix_type": "none",
+                            "coarse": "pass",
+                            "diagnosis": "coarse classification passed",
+                        },
+                        "changes": {},
+                        "outcome": outcome,
                     }
                 )
-                continue
+                _record_round_summary(results_dir, iteration + 1, "none", "pass", outcome)
+                _append_final_status(results_dir, "pass", info.reflection_attempts)
+                info.reflection_status = "pass"
+                return "pass"
 
-            rationale = synth.get("rationale", "")
-            new_main = synth.get("main", "")
-            new_mesh = synth.get("mesh", "")
+            # --- Step 4: Fix-type selection (the pre-computed
+            # eligibility gates — an unusable category falls back to
+            # the free repair). ---
+            fix_type, gate_note = fix_type_for(coarse, available)
+            if gate_note:
+                print(f"    [Reflect] {gate_note}", flush=True)
+            if not diagnosis:
+                diagnosis = gate_note or coarse
+            print(f"    [Reflect] Fix type: {fix_type}", flush=True)
 
-            # --- Step 8: Apply the synthesised code + formal re-execute ---
-            # The probe budgets were probe-only: the formal run always
-            # uses the problem's own iteration count.
-            formal_epochs = _expected_epochs(key["main_py"], config)
-            if new_main:
-                out_path = results_dir / "main.py"
-                out_path.write_text(
-                    _force_iterations(new_main, formal_epochs), encoding="utf-8"
+            # syntax_error -> TEXT; fe_parameter_error -> VISION (even
+            # without design images); formula/design/other -> VISION
+            # with design images, TEXT without (the fix_agent below
+            # serves Steps 5-7).
+            use_vision = (
+                False if coarse == "syntax_error"
+                else True if coarse == "fe_parameter_error"
+                else bool(vision_images)
+            )
+            fix_agent = vision_agent if use_vision else text_agent
+
+            prev_main = key["main_py"]
+            prev_mesh = key["mesh_txt"]
+            new_main = ""
+            new_mesh = ""
+            rationale = ""
+
+            # --- Step 5: Execute the fix strategy ---
+            if fix_type == "syntax_fix":
+                history_log = results_dir / "history.txt"
+                res = _run_syntax_fix(
+                    fix_agent, config, results_dir, key,
+                    history_log=history_log if history_log.exists() else None,
                 )
-            if new_mesh:
-                out_path = results_dir / "mesh.txt"
-                out_path.write_text(new_mesh, encoding="utf-8")
+                for w in res.get("warnings") or []:
+                    print(f"    [Syntax] [W] {w.get('check')}: {w.get('message')}", flush=True)
+                new_main = res.get("main") or prev_main
+                rationale = (
+                    "static check -> review -> repair loop"
+                    f" ({len(res.get('history') or [])} repair(s),"
+                    f" passed={bool(res.get('_passed'))})"
+                )
+            elif fix_type == "free_fix":
+                set_label(
+                    fix_agent,
+                    f"Reflection round {iteration + 1}/{config.MAX_REFLECTION_TIMES}: free_fix",
+                )
+                fix = free_fix(
+                    fix_agent,
+                    problem_description=key["problem_description"],
+                    main_py=prev_main,
+                    mesh_txt=prev_mesh,
+                    run_result_json=run_result_json,
+                    objective_data=key["objective_data"],
+                    convergence_data=key["convergence_data"],
+                    edp_code=key["edp_code"],
+                    repair_records=repair_records_text,
+                    doc_text=doc_text,
+                    analysis_artifacts=analysis_artifacts,
+                    coarse=coarse,
+                    images=vision_images if use_vision else None,
+                    image_section=image_section,
+                )
+                if fix.get("_error"):
+                    print(f"    [Reflect] free_fix failed: {fix['_error']}", flush=True)
+                    _append_reflection_log(
+                        results_dir, iteration + 1, coarse, "-", fix_type,
+                        "(fix failed)", f"free_fix failed: {fix['_error']}",
+                    )
+                    info.repair_records.append(
+                        {
+                            "round": iteration + 1,
+                            "target": {
+                                "fix_type": fix_type,
+                                "coarse": coarse,
+                                "diagnosis": diagnosis,
+                            },
+                            "changes": {},
+                            "outcome": f"free_fix failed: {fix['_error']}",
+                        }
+                    )
+                    continue
+                new_main = fix.get("main") or prev_main
+                new_mesh = fix.get("mesh") or ""
+                rationale = fix.get("rationale", "")
+            else:
+                # formula_fix / design_fix / fe_param_fix — parallel
+                # probe round under temp/.  The design and fe-parameter
+                # probes carry the deterministic permission set.
+                permission = {}
+                if fix_type == "design_fix":
+                    permission = build_design_permission(
+                        spec, prev_main, mesh_frozen,
+                    )
+                elif fix_type == "fe_param_fix":
+                    permission = build_fe_param_permission(
+                        spec, prev_main, mesh_frozen,
+                    )
+                n_probes = max(1, int(config.MAX_FIX_CANDIDATES))
+                print(
+                    f"    [Reflect] probing {n_probes} {fix_type} candidates in "
+                    f"parallel ({config.REFLECTION_PROBE_EPOCHS} epochs each) ...",
+                    flush=True,
+                )
+                records = [None] * n_probes
+                with ThreadPoolExecutor(max_workers=n_probes) as pool:
+                    futures = {}
+                    for i in range(n_probes):
+                        fut = pool.submit(
+                            _run_one_probe,
+                            i,
+                            iteration + 1,
+                            config,
+                            results_dir,
+                            temp_dir,
+                            problem_description=key["problem_description"],
+                            main_py=prev_main,
+                            mesh_txt=prev_mesh,
+                            run_result_json=run_result_json,
+                            objective_data=key["objective_data"],
+                            convergence_data=key["convergence_data"],
+                            edp_code=key["edp_code"],
+                            repair_records=repair_records_text,
+                            doc_text=doc_text,
+                            analysis_artifacts=analysis_artifacts,
+                            coarse=coarse,
+                            fix_type=fix_type,
+                            permission=permission,
+                            use_vision=use_vision,
+                            vision_images=vision_images,
+                            image_section=image_section,
+                        )
+                        futures[fut] = i
+                    for fut in as_completed(futures):
+                        i = futures[fut]
+                        try:
+                            r = fut.result()
+                        except Exception as e:  # noqa: BLE001 — worker isolation
+                            r = _empty_probe_record(i, f"probe worker crashed: {e}")
+                        records[i] = r
+                        if r.get("error"):
+                            print(f"    [Probe {i}] {r['error']}", flush=True)
+                        else:
+                            print(
+                                f"    [Probe {i}] py={r['py_rc']}, ff={r['ff_rc']}, "
+                                f"epochs={r['completed_epochs']}/{r['probe_epochs']}, "
+                                f"obj={r['final_objective']}, "
+                                f"MinTh={'yes' if r['minth'] else 'no'}",
+                                flush=True,
+                            )
 
-            result = _re_execute(results_dir)
+                # --- Synthesise the next-step code from the probe
+                # evidence — judged from BOTH the objective values and
+                # the design images. ---
+                print("    [Reflect] synthesising next-step code ...", flush=True)
+                set_label(
+                    fix_agent,
+                    f"Reflection round {iteration + 1}/{config.MAX_REFLECTION_TIMES}"
+                    ": synthesis ({fix_type})",
+                )
+                synth = _synthesize_next_step(
+                    fix_agent,
+                    config,
+                    temp_dir,
+                    problem_description=key["problem_description"],
+                    main_py=prev_main,
+                    mesh_txt=prev_mesh,
+                    repair_records=repair_records_text,
+                    doc_text=doc_text,
+                    analysis_artifacts=analysis_artifacts,
+                    coarse=coarse,
+                    fix_type=fix_type,
+                    permission=permission,
+                    records=[r for r in records if r is not None],
+                    iteration=iteration + 1,
+                    use_vision=use_vision,
+                )
 
-            # --- Step 9: Evaluate outcome ---
+                if synth.get("_error"):
+                    # An unusable synthesis reply is treated UNIFORMLY as
+                    # other_error (no deterministic best-candidate
+                    # fallback) — nothing to write or run this round.
+                    print(
+                        f"    [Reflect] Synthesis unusable: {synth['_error']} "
+                        "— treated as other_error",
+                        flush=True,
+                    )
+                    _append_reflection_log(
+                        results_dir, iteration + 1, "other_error", "-", fix_type,
+                        "(synthesis failed)",
+                        f"synthesis failed — treated as other_error: {synth['_error']}",
+                    )
+                    info.repair_records.append(
+                        {
+                            "round": iteration + 1,
+                            "target": {
+                                "fix_type": fix_type,
+                                "coarse": "other_error",
+                                "diagnosis": (
+                                    "synthesis failed — treated as "
+                                    f"other_error: {synth['_error']}"
+                                ),
+                            },
+                            "changes": {},
+                            "outcome": f"synthesis failed — treated as other_error: {synth['_error']}",
+                        }
+                    )
+                    continue
+                new_main = synth.get("main") or prev_main
+                new_mesh = synth.get("mesh") or ""
+                rationale = synth.get("rationale", "")
+
+            # --- Step 6: Apply + formal re-execute ---
+            applied_main = prev_main
+            applied_mesh = prev_mesh
+            if new_main and new_main != prev_main:
+                # Probe budgets are probe-only — the formal run uses the
+                # problem's own iteration count (iterations= is FIXED
+                # content — the formula/design/fe-parameter repairs may
+                # not change it; the syntax repair owns it).
+                code_out = _force_iterations(
+                    new_main, _expected_epochs(prev_main, config)
+                )
+                (results_dir / "main.py").write_text(code_out, encoding="utf-8")
+                applied_main = code_out
+            if new_mesh and new_mesh != prev_mesh:
+                (results_dir / "mesh.txt").write_text(new_mesh, encoding="utf-8")
+                applied_mesh = new_mesh
+
+            # The fix program had NOTHING to fix (or nothing it could
+            # change — the repaired code is byte-identical to the
+            # previous one): treat the current state as final and END
+            # the reflection instead of looping identical rounds.
+            if applied_main == prev_main and applied_mesh == prev_mesh:
+                print(
+                    "    [Reflect] fix produced NO change — treating as "
+                    "PASS and ending.",
+                    flush=True,
+                )
+                outcome_nc = _format_outcome(
+                    _load_run_result(results_dir),
+                    _find_minth_vtu(results_dir) is not None,
+                )
+                _append_reflection_log(
+                    results_dir, iteration + 1, coarse, "-", fix_type,
+                    "(no change — nothing more to fix)",
+                    f"fix produced no change — treated as pass: {outcome_nc}",
+                )
+                info.repair_records.append(
+                    {
+                        "round": iteration + 1,
+                        "target": {
+                            "fix_type": fix_type,
+                            "coarse": coarse,
+                            "diagnosis": diagnosis,
+                        },
+                        "changes": {},
+                        "outcome": "fix produced no change — treated as pass",
+                    }
+                )
+                _append_final_status(results_dir, "pass", info.reflection_attempts)
+                info.reflection_status = "pass"
+                return "pass"
+
+            result = _re_execute(
+                results_dir,
+                history_label=f"Reflection round {iteration + 1}: formal re-execute ({fix_type})",
+            )
+
+            # --- Step 7: Outcome + repair records + reflection log ---
             minth_after = _find_minth_vtu(results_dir)
             outcome = _format_outcome(result, minth_after is not None)
 
-            # --- Step 10: Record history ---
-            _append_reflection_log(results_dir, iteration + 1, coarse, fine, action, rationale, outcome)
-            info.reflection_history.append(
-                {
+            from Generation.check_static import _diff_code
+
+            record = {
+                "round": iteration + 1,
+                "target": {
+                    "fix_type": fix_type,
                     "coarse": coarse,
-                    "fine": fine,
-                    "action": action,
-                    "fix_rationale": rationale,
-                    "outcome": outcome,
-                }
+                    "diagnosis": diagnosis,
+                },
+                "changes": _diff_code(prev_main, applied_main),
+                "outcome": outcome,
+            }
+            if applied_mesh != prev_mesh:
+                record["mesh_changes"] = _diff_code(prev_mesh, applied_mesh)
+            info.repair_records.append(record)
+            _record_round_summary(results_dir, iteration + 1, fix_type, coarse, outcome)
+
+            _append_reflection_log(
+                results_dir, iteration + 1, coarse, "-", fix_type, rationale, outcome
             )
 
-            # Post-fix quality check — only when the re-execution actually ran.
-            # `result` is {} when main.py was missing, in which case nothing
-            # ran and results/results/ was not wiped: a MinTh.vtu from an
-            # EARLIER run may still sit there, and judging it would accept a
-            # stale design as the outcome of the fix.
+            # --- Step 8: Post-fix quality check ---
+            # A fix whose re-execution produced a valid result ends the
+            # reflection DIRECTLY — no extra round.  Only when the
+            # re-execution actually ran: `result` is {} when main.py was
+            # missing, in which case a MinTh.vtu from an EARLIER run may
+            # still sit there and judging it would accept a stale design
+            # as the outcome of the fix.
             if minth_after is not None and result:
                 files = collect_files(results_dir)
                 context_text = _assemble_context_text(files)
-                key_after = _extract_key_files(files, evidence_chars=config.REFLECTION_EVIDENCE_CHARS)
+                key_after = _extract_key_files(files)
 
-                # The refreshed context is not consumed here — the next loop
-                # iteration re-collects the files and rebuilds it from scratch.
                 qc, _ = _quality_check_block(
-                    agent, problem_name, config, results_dir, context_text, key_after
+                    vision_agent, problem_name, config, results_dir,
+                    context_text, key_after,
                 )
                 if qc == "pass":
                     print("    [Reflect] PASS — fix succeeded, result valid.", flush=True)
+                    _append_reflection_log(
+                        results_dir, iteration + 1, "pass", "-", "none",
+                        "Post-fix quality check: result valid — no fix needed.",
+                        outcome,
+                    )
+                    info.repair_records.append(
+                        {
+                            "round": iteration + 1,
+                            "target": {
+                                "fix_type": "none",
+                                "coarse": "pass",
+                                "diagnosis": "post-fix quality check passed",
+                            },
+                            "changes": {},
+                            "outcome": outcome,
+                        }
+                    )
+                    _record_round_summary(results_dir, iteration + 1, "none", "pass", outcome)
                     _append_final_status(results_dir, "pass", info.reflection_attempts)
                     info.reflection_status = "pass"
                     return "pass"
@@ -1827,13 +2147,13 @@ def run_reflection(agent, info, config) -> str:
         info.reflection_status = "give_up_max"
         return "give_up_max"
     finally:
-        # temp/ is removed only when the process ends — pass, give_up or
-        # give_up_max — never between rounds.
-        _rmtree_force(temp_dir)
-        # The iteration-snapshot composite is vision evidence for the
-        # reflection loop only — it must not linger in the results folder
-        # after the process ends.
-        try:
-            (results_dir / "iteration_labels_composite.png").unlink(missing_ok=True)
-        except OSError:
-            pass
+        # temp/ STAYS — the attempts are the record (each attempt already
+        # lost its results/, tex/, tmp/ inside the probes).  The
+        # per-snapshot design PNGs are vision evidence for the reflection
+        # loop only — they must not linger in the results folder after
+        # the process ends.
+        for p in results_dir.glob("snapshot_Th*_label.png"):
+            try:
+                p.unlink(missing_ok=True)
+            except OSError:
+                pass

@@ -22,10 +22,10 @@ class GeminiCodeWriter(CodeWriter):
         self._model = ChatGoogleGenerativeAI(**model_kwargs)
 
 
-class GeminiCodeAgent37Flash(CodeAgent):
-    MODEL_NAME = "gemini-3.7-flash"
+class GeminiCodeAgent38Flash(CodeAgent):
+    MODEL_NAME = "gemini-3.8-flash"
 
     def __init__(self):
         super().__init__()
-        self.model_name = GeminiCodeAgent37Flash.MODEL_NAME
+        self.model_name = GeminiCodeAgent38Flash.MODEL_NAME
         self.writer = GeminiCodeWriter(self.model_name)

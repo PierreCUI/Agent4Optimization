@@ -46,7 +46,7 @@ class DeepSeekCodeAgentV4Flash(CodeAgent):
 class DeepSeekCodeAgentV4FlashVision(CodeAgent):
     # Vision-capable variant of the flash model: accepts image inputs
     # via CodeWriter.invoke_multimodal (used by the reflection loop with
-    # the iteration-label composite image).
+    # the per-snapshot design images).
     MODEL_NAME = "deepseek-v4-flash-vision-exp"
 
     def __init__(self):

@@ -35,6 +35,16 @@ _REQUIREMENTS = _PROJECT_ROOT / "requirements.txt"
 # ── helpers ────────────────────────────────────────────────────────────
 
 
+def _fatal(msg: str) -> None:
+    """FATAL-level alarm: the Python environment cannot be prepared and
+    the pipeline cannot proceed — print a prominent banner and abort."""
+    print("\n" + "!" * 60, file=sys.stderr)
+    print("  FATAL — Python environment setup failed:", file=sys.stderr)
+    print(f"  {msg}", file=sys.stderr)
+    print("!" * 60 + "\n", file=sys.stderr)
+    raise SystemExit(1)
+
+
 def _cmd(args: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(
         args, capture_output=True, text=True, errors="replace", **kw
@@ -511,10 +521,42 @@ def _install_torch(python_exe: str) -> bool:
 _ENV_LOCK = threading.Lock()
 
 
+def _cleanup_problematic_pth(python_exe: str) -> None:
+    """Remove the pip_system_certs .pth files from the env's site-packages.
+
+    ``pip_system_certs.pth`` imports pip at interpreter startup.  That
+    import runs setuptools' ``DistutilsMetaFinder.spec_for_pip()``, which
+    on Python < 3.12 permanently disables setuptools' distutils shim —
+    every later ``import setuptools`` then dies with
+    ``AssertionError: ... Lib\\distutils\\core.py`` (setuptools
+    ``_distutils_hack.ensure_local_distutils``).  The pipeline does not
+    need the system-cert injection (pip resolves its own trust), so the
+    pth is removed after every environment setup.  Idempotent.
+    """
+    try:
+        r = _cmd(
+            [python_exe, "-c", "import site; print(site.getsitepackages()[0])"]
+        )
+        site_dir = Path(r.stdout.strip())
+    except Exception:
+        # best effort — a failed probe must not fail the setup
+        site_dir = Path(python_exe).resolve().parent / "Lib" / "site-packages"
+    for name in ("pip_system_certs.pth", "pip_system_certs.pth.bak"):
+        target = site_dir / name
+        if target.exists():
+            try:
+                target.unlink()
+                print(f"[env] removed {name} (breaks setuptools' distutils shim)")
+            except OSError as e:
+                print(f"[env] could not remove {name}: {e}")
+
+
 def setup_environment() -> str:
     """Return the Python executable path, ready to run AutoFreeFEM."""
     with _ENV_LOCK:
-        return _setup_environment_locked()
+        python_exe = _setup_environment_locked()
+    _cleanup_problematic_pth(python_exe)
+    return python_exe
 
 
 def _setup_environment_locked() -> str:
@@ -526,28 +568,24 @@ def _setup_environment_locked() -> str:
         # package set (failed pip, failed GPU torch) must not silently
         # proceed — fail loudly so it can be repaired.
         if not _install_packages(cached):
-            print("[env] Cached environment is BROKEN — re-run install or fix it.", file=sys.stderr)
-            sys.exit(1)
+            _fatal("Cached environment is BROKEN — re-run install or fix it.")
         return cached
 
     conda = _find_conda()
     if not conda:
         conda = _install_miniconda()
     if not conda:
-        print("[env] No conda available.", file=sys.stderr)
-        sys.exit(1)
+        _fatal("No conda available and miniconda could not be installed.")
 
     if not _create_env(conda):
-        print("[env] Env creation failed.", file=sys.stderr)
-        sys.exit(1)
+        _fatal("Conda environment creation failed (see messages above).")
 
     python_exe = _get_python_from_env(conda)
     if not python_exe:
-        print("[env] Could not get python from env.", file=sys.stderr)
-        sys.exit(1)
+        _fatal("Could not get python from the conda environment.")
 
     if not _install_packages(python_exe):
-        sys.exit(1)
+        _fatal("Package installation failed (see messages above).")
 
     _save(python_exe)
     print(f"[env] Python: {python_exe}")

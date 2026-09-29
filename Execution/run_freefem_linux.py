@@ -4,7 +4,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from configs import FREEFEM_STEP_TIMEOUT, FREEFEM_TIMEOUT
+from configs import FREEFEM_STEP_TIMEOUT
 from Execution.runner_shared import monitor_freefem_process, sweep_helper_orphans
 
 
@@ -12,26 +12,24 @@ def run_freefem(
     edp_file: Path,
     workdir: Path = None,
     monitor_progress: bool = True,
-    total_timeout: int = None,
     step_timeout: int = None,
     expected_epochs: int = 0,
 ) -> dict:
     """Execute ``FreeFem++ <edp_file>`` with optional step-timeout monitoring.
 
     FreeFem++ console output is logged to ``tmp/freefem_console.log``
-    (tail included in the result).
+    (tail included in the result).  The ONLY run budget is per-step:
+    first and last step get 10× *step_timeout*, others 1× — there is no
+    overall timeout.
 
-    *total_timeout* and *step_timeout* override config defaults (used for
-    nonlinear-problem timeout multipliers).  Set to -1 to disable.
+    *step_timeout* overrides the config default (the runner applies the
+    nonlinear multiplier).  Set to -1 to disable.
 
     *expected_epochs* is the target total epochs for the early-stagnation
     watchdog (0 disables the check).
     """
-    if total_timeout is None:
-        total_timeout = FREEFEM_TIMEOUT
     if step_timeout is None:
         step_timeout = FREEFEM_STEP_TIMEOUT
-    total_enabled = total_timeout >= 0
     step_enabled = step_timeout >= 0
 
     if workdir is None:
@@ -47,7 +45,9 @@ def run_freefem(
     log_path.parent.mkdir(exist_ok=True)
 
     # ── no progress monitoring — simple subprocess.run ───────────
+    # A single-shot run is one "first step" — bound it by the 10× budget.
     if not monitor_progress:
+        budget = step_timeout * 10 if step_enabled else None
         with open(log_path, "wb") as log:
             try:
                 r = subprocess.run(
@@ -55,21 +55,21 @@ def run_freefem(
                     cwd=workdir,
                     stdout=log,
                     stderr=subprocess.STDOUT,
-                    timeout=total_timeout if total_enabled else None,
+                    timeout=budget,
                 )
             except subprocess.TimeoutExpired:
                 # subprocess.run killed the FreeFem++ parent — its
-                # system() children (mmg/advect/mshdist) survive and
+                # system() children (mmg2d_O3/advect/mshdist) survive and
                 # keep writing tmp/ while the next .edp reuses it.
                 sweep_helper_orphans(str(workdir.resolve()))
                 return {
                     "return_code": "-1",
                     "stdout": "",
-                    "stderr": f"TIMEOUT after {total_timeout}s",
+                    "stderr": f"TIMEOUT after {budget}s (10× step budget)",
                 }
         return {
             "return_code": str(r.returncode),
-            "stdout": log_path.read_text(encoding="utf-8", errors="replace")[-200000:],
+            "stdout": log_path.read_text(encoding="utf-8", errors="replace")[-8192:],
             "stderr": "",
         }
 
@@ -88,13 +88,11 @@ def run_freefem(
             proc,
             results_dir,
             workdir,
-            total_enabled=total_enabled,
-            total_timeout=total_timeout,
             step_enabled=step_enabled,
             step_timeout=step_timeout,
             expected_epochs=expected_epochs,
-            # Killing the FreeFem++ parent leaves mmg/advect children
-            # running and writing tmp/ — sweep them immediately
+            # Killing the FreeFem++ parent leaves mmg2d_O3/advect
+            # children running and writing tmp/ — sweep them immediately
             # (scoped to this workdir only).
             on_kill=lambda: sweep_helper_orphans(str(workdir.resolve())),
         )
@@ -104,6 +102,6 @@ def run_freefem(
 
     return {
         "return_code": str(proc.returncode),
-        "stdout": log_path.read_text(encoding="utf-8", errors="replace")[-200000:],
+        "stdout": log_path.read_text(encoding="utf-8", errors="replace")[-8192:],
         "stderr": "",
     }

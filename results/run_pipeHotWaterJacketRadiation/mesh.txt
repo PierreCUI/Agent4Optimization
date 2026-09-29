@@ -1,6 +1,0 @@
-real R = 0.5;    // outer radius of the pipe cross-section (fixed, diameter 1 m)
-real r0 = 0.1;  // initial inner radius (the inner boundary is a design boundary)
-border C01(t=0, 2*pi){x=R*cos(t); y=R*sin(t); label=3;}   // outer circle, Robin environment (fixed)
-border C02(t=0, 2*pi){x=r0*cos(t); y=r0*sin(t); label=2;} // inner circle, heat source (design)
-int n = 100;
-mesh Th = buildmesh(C01(n) + C02(-n));

@@ -8,6 +8,7 @@
 \usepackage{breqn}
 \let\cdot\oldcdot
 \begin{document}
+The design domain $D$ is the unit square $[0,1]\times[0,1]$.  Its boundary carries mesh label 1 everywhere, except the Dirichlet segment $\Gamma_{3}$ of the left edge ($x=0$, $0.4\le y\le 0.6$), which carries label 3 and the condition $u=0$.  The segment $\Gamma_{3}$ is FROZEN (fixedLabels=[3]); the remaining boundary (label 1) is NORMAL-LOCKED (boundaryLabels=[1]); no boundary is free.
 Let $\phi(x)$ be the level-set function and
  \begin{align*}\raisebox{\depth}{$\chi$}(x) &= \begin{cases} 1 & \mbox{if}\quad \phi(x) < 0 \\ 1/10 & \mbox{if}\quad \phi(x)  \ge 0 \end{cases}.\end{align*}
 The Lagrangian of the linear diffusion problem is

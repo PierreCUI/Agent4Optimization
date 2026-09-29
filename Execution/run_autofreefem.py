@@ -43,7 +43,13 @@ def _autofreefem_include_dir(python_exe: str):
 
 def _install_local_idp(python_exe: str) -> None:
     """Copy the .idp files shipped in Execution/ into the autofreefem
-    include dir, overwriting any previously downloaded copies."""
+    include dir, overwriting any previously downloaded copies.
+
+    FROZEN FILES: inout.idp and gradientIdentification.idp are reference
+    files that must NEVER be modified — they are copied byte-for-byte
+    (``shutil.copy2``, no patching of any kind; the only file the
+    pipeline ever patches is the generated .edp in runner.py).
+    """
     inc = _autofreefem_include_dir(python_exe)
     if inc is None:
         print("  [idp] cannot locate autofreefem include dir — skipping")
@@ -57,7 +63,8 @@ def _fetch_missing_idp(stderr: str, python_exe: str) -> bool:
     """Provide a missing .idp from the local Execution/ directory.
 
     AutoFreeFEM errors name the include file it could not find; the file
-    is copied from Execution/ — no upstream download.
+    is copied VERBATIM from Execution/ — no upstream download and no
+    modification of the shipped .idp files.
     """
     m = re.search(r"autofreefem[\\/]include[\\/]([^\s']+\.idp)", stderr)
     if not m:
@@ -83,8 +90,15 @@ def run_autofreefem(main_py: Path, workdir: Path = None, python_exe: str = None)
     if python_exe is None:
         python_exe = sys.executable
 
-    # Clean stale artefacts from previous runs so autofreefem starts fresh
-    for pattern in ["*.edp", "*.pdf"]:
+    # Clean stale artefacts from previous runs so autofreefem starts fresh.
+    # convergenceShape<problem>.txt / objective<problem>.txt are FreeFEM
+    # optimizer outputs from the previous run (<problem> = the problem
+    # title in the generated code, e.g. Wheelstrainstiffening — the
+    # workdir name minus the run_ prefix).
+    for pattern in [
+        "*.edp", "*.pdf", "*.png",
+        "convergenceShape*.txt", "objective*.txt",
+    ]:
         for f in workdir.glob(pattern):
             try:
                 f.unlink()
@@ -100,21 +114,22 @@ def run_autofreefem(main_py: Path, workdir: Path = None, python_exe: str = None)
     (workdir / "tmp").mkdir(exist_ok=True)
     results_d = workdir / "results"
     results_d.mkdir(exist_ok=True)
-    # Clean stale iteration VTUs so the progress watchdog starts from 0
-    for f in results_d.glob("result*Th*.vtu"):
-        try:
-            f.unlink()
-        except OSError:
-            pass
+    # Clean stale iteration VTUs so the progress watchdog starts from 0,
+    # plus leftover render PNGs and FreeFEM optimizer logs
+    for pat in ["result*Th*.vtu", "*.png", "convergenceShape*.txt", "objective*.txt"]:
+        for f in results_d.glob(pat):
+            try:
+                f.unlink()
+            except OSError:
+                pass
 
     # Local .idp overrides — install the include files shipped in
     # Execution/ before running, so the generated .edp scripts find them.
     _install_local_idp(python_exe)
 
-    # Cumulative budget: AUTOFREEFEM_TIMEOUT applies PER ATTEMPT for an
-    # individual run, but the retry loop as a whole must not take
-    # AUTOFREEFEM_MAX_RETRIES × TIMEOUT — pass the REMAINING budget as
-    # the per-attempt timeout so a retry cannot overrun the total.
+    # Cumulative budget: AUTOFREEFEM_TIMEOUT is the TOTAL budget for the
+    # whole retry loop (not per attempt) — pass the REMAINING budget as
+    # each attempt's timeout so retries cannot overrun the total.
     t_start = time.time()
     for _ in range(AUTOFREEFEM_MAX_RETRIES):
         remaining = AUTOFREEFEM_TIMEOUT - (time.time() - t_start)
