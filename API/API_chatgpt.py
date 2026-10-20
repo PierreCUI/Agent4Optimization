@@ -27,7 +27,7 @@ class ChatGPTCodeAgent6Astra(CodeAgent):
 
 
 class ChatGPTCodeAgent6Sol(CodeAgent):
-    MODEL_NAME = "gpt-6-sol"
+    MODEL_NAME = "gpt-6.1-sol"
 
     def __init__(self):
         super().__init__()
