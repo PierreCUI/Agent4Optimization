@@ -1,0 +1,40 @@
+Pad on an Elastic Foundation
+
+This is the elastic foundation problem of railway sleepers and
+machine-foundation pads: a pad rests on soft ground that pushes back
+like a mattress of springs, and it carries the rail seat or the
+machine standing on it, so the pad must spread the load over the soil
+without sinking. The pad is a long prism whose cross-section is a
+rectangle, so the problem is treated as plane strain in that
+cross-section.
+
+The problem is a topology optimization on a rectangle 2 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is void. The physics is steady, linear elasticity
+with one single physical field, the displacement u, a vector with a
+horizontal and a vertical component, measured in metres. The solid is a
+linear elastic material with Young's modulus 200 N/m^2 and Poisson's
+ratio 0.3; regions without material are treated as a weak elastic solid
+100 times softer than the real material. The optimization starts from a
+prescribed initial design: a checkerboard pattern of solid and void
+cells covering the whole rectangle, roughly half solid.
+
+There is no body force. The bottom edge rests on the ground: the
+ground pushes back vertically with a restoring traction proportional
+to the vertical displacement there, like a mattress of springs with a
+stiffness of 100 N/m^3, while horizontally the pad may slide freely
+over the soil; a short segment at the left end of the bottom edge, the
+rail fastening, holds the pad against horizontal sliding. The top edge
+carries the rail seat or the machine: a uniform traction of 10 N/m^2
+pressing downward over the whole edge, perpendicular to it. The left
+edge and the right edge are free. The ground-supported bottom edge,
+its fastening segment and the loaded top edge are non-design
+boundaries: their positions are prescribed, they are frozen, and the
+optimizer cannot add or remove material on them; the two lateral edges
+are design boundaries, where material may be attached or removed
+freely. The optimization goal is to minimize the elastic strain energy
+stored in the pad under the top load — its compliance — while using
+as little material as possible, a balance between stiffness and
+material cost.

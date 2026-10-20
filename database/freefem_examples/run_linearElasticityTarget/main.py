@@ -7,7 +7,7 @@ name = 'linear elasticity target'
 
 Th = Domain('D', 'Th')
 
-u = VectorField('u', P2, Th, '0.0', 4, meter)
+u = VectorField('u', P2, Th, '0.0', 4, unit=meter)
 testu = VectorField(r'\delta u', P2, Th)
 
 alpha = Constant(r'c', 1.0e10, 'spring stiffness', Newton / meter ** 3)

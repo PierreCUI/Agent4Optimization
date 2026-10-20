@@ -396,6 +396,12 @@ CLASSIFY_COARSE_SYSTEM = """\
          the two-Lagrangian-call form);
        - the extracted/designed rules (extracted values transcribed
          verbatim, designed values matching the spec);
+       - the mesh.txt buildmesh chain: borders not listed
+         counter-clockwise / not connected head-to-tail / the chain not
+         closing — AND the FreeFEM mesh-generation failures these
+         cause (Bamg 899 meshing errors, degenerate-triangle fatal
+         errors, "mesh too fine" assertions, buildmesh/readmesh
+         errors);
        - any other Python/FreeFEM-reported syntax error.
 
     3. **formula_error**
@@ -411,7 +417,9 @@ CLASSIFY_COARSE_SYSTEM = """\
        (ell) value, the CharacteristicFunction values, phi (the initial
        level set), the three-way boundary labels (fixedLabels = frozen /
        boundaryLabels = normal-locked / neither = free), each boundary's
-       physical properties, or the mesh border definitions.
+       physical properties, or the mesh border definitions (their
+       GEOMETRY and labels — the buildmesh chain's orientation /
+       head-to-tail connectivity is syntax_error, above).
 
     5. **fe_parameter_error**
        A finite-element parameter is wrong: hmin / hmax / diffusion /

@@ -1,0 +1,43 @@
+Flow through a Microchannel Distributor Manifold
+
+This is the distributor manifold problem of microfluidics and fuel
+cell plates: one incoming stream must be split into two outgoing
+streams and delivered evenly to the outlet ports, and the task is to
+lay out the channel network inside the plate so that the flow divides
+with the least dissipated energy. The plate is a long prism whose
+cross-section is a rectangle, so the problem is treated in that
+cross-section.
+
+The problem is a topology optimization on a rectangle 4 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is fluid. The physics is steady, linear Stokes
+flow with one single physical field, the velocity u, a vector with a
+horizontal and a vertical component, measured in metres per second; the
+pressure is eliminated by enforcing incompressibility with a large
+penalty on the velocity divergence, and the solid regions are modelled
+as an impermeable porous medium through a Darcy damping term that
+resists the flow, so the flow naturally carves its channel through the
+fluid regions. The fluid has the dynamic viscosity 1 N s/m^2 and the
+incompressibility penalty is 10000 N s/m^2; the solid applies a Darcy
+resistance of 10000 N s/m^4 while the fluid applies none. The optimization starts from a prescribed initial design: a checkerboard pattern phi(x,y) = min(min(min((x-0.5)^2+(y-0.25)^2-0.04, (x-1.5)^2+(y-0.25)^2-0.04, (x-2.5)^2+(y-0.25)^2-0.04), min((x-3.5)^2+(y-0.25)^2-0.04, (x-0.5)^2+(y-0.75)^2-0.04, (x-1.5)^2+(y-0.75)^2-0.04)), min((x-2.5)^2+(y-0.75)^2-0.04, (x-3.5)^2+(y-0.75)^2-0.04, 10.0)), negative where the material is solid and positive where it is fluid, with about half the domain initially solid.
+
+The left edge is the inlet: the fluid enters through it with a uniform
+prescribed velocity of 1 m/s pointing into the domain, both velocity
+components fixed. The right edge is split into three segments: the
+lower segment, between the heights 0 and 1/3, and the upper segment,
+between the heights 2/3 and 1, are the two outlets, where the flow
+leaves freely with zero traction, while the middle segment, between
+the heights 1/3 and 2/3, is a no-slip wall, both velocity components
+zero. The top edge is a no-slip wall, both velocity components zero.
+The bottom edge is a no-slip wall, both velocity components zero.
+There is no body force. The inlet, the two outlets and the top wall are
+non-design boundaries: their positions are prescribed, they are frozen,
+and the optimizer cannot add or remove material on them; the bottom
+wall is a design boundary, where material may be attached or removed
+freely. The optimization goal is to minimize the total energy
+dissipated by the flow through the manifold — the viscous dissipation
+of the fluid plus the Darcy damping of the solid regions — while using
+as little material as possible, a balance between flow performance and
+material cost.

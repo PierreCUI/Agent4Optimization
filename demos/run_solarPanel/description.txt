@@ -1,0 +1,52 @@
+Solar Panel under Sun Heating, Snow Load and Self-Weight
+
+This is the solar panel problem of photovoltaic installations: the
+panel absorbs sunlight and heats up uniformly through its thickness,
+sheds the heat by convection to the air on both faces, and carries the
+snow and wind load and its own weight on the mounting rails. The panel
+is a long strip whose cross-section is a rectangle, so the problem is
+treated as plane strain in that cross-section.
+
+The problem is a topology optimization on a rectangle 4 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is void. The physics is steady: linear heat
+conduction for the temperature T, measured in kelvin, and linear
+elasticity for the displacement u, a vector with a horizontal and a
+vertical component, measured in metres; the two are coupled one-way —
+the temperature drives a thermal expansion strain of 3.6e-5 per kelvin
+times the temperature, subtracted from the elastic strain, so a heated
+solid region expands and pushes against its supports. The solid
+material has Young's modulus 3.2e7 N/m^2, Poisson's ratio 0.23, density
+2500 kg/m^3, thermal conductivity 1.25 W/(m K) and thermal expansion
+coefficient 3.6e-5 per kelvin; regions without material are treated as
+a weak phantom that is 1000 times softer, 1000 times less conductive
+and 1000 times less expansive than the solid. The optimization starts
+from a prescribed initial design: a checkerboard pattern of solid and
+void cells covering the rectangle, roughly half solid, with a thin
+solid strip along the top edge.
+
+Heat is generated uniformly inside every solid region, with a
+volumetric heat source of 300 W/m^3 everywhere in the material, the
+absorbed solar radiation. The top edge and the bottom edge lose heat by
+convection to the surrounding air at temperature 20, with a heat
+transfer coefficient h of 10 W/(m^2 K), the front glass and the back
+sheet cooling to the air; the top edge at the same time carries a
+uniform traction of 5000 N/m^2 pressing downward, the snow and wind
+load, while the bottom edge is free of any mechanical load. The left
+edge and the right edge are the frame rails: each is held in place by
+strong penalty springs that pull its horizontal and vertical
+displacements back to zero, for the panel is bolted onto the rails, and
+each is insulated, so that no heat crosses it. Besides the snow load,
+the solid material is pulled downward by its own weight, a uniform body
+force of 24500 N/m^3 acting throughout the volume of every solid
+region. The sun-lit top face and the two frame rails are non-design
+boundaries: their positions are prescribed, they are frozen, and the
+optimizer cannot add or remove material on them; the convecting back
+face is a design boundary, where material may be attached or removed
+freely. The optimization goal is to minimize the elastic strain energy
+stored in the panel under the snow load, the solar heating and its own
+weight — its compliance — while using as little material as possible, a
+balance between stiffness and material cost, and a strong penalty keeps
+the frame rails from sliding horizontally.

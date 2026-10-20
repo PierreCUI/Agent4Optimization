@@ -1,0 +1,37 @@
+Double-Sided Cooling of a Power Module with Temperature-Dependent Heat Generation
+
+This is the double-sided cooling architecture of power semiconductor
+modules (IGBT or SiC): the die region, modeled as a volumetric heat
+source, is sandwiched between two cold plates, so heat leaves the
+module through both the top and the bottom face, while the lateral
+faces are encapsulated and insulated. The die is a semiconductor
+device whose leakage current — and therefore its self-heating — grows
+with temperature, so the hottest regions generate the most heat.
+
+The problem is a topology optimization on a square plate of side 1 m.
+The task is to find the best material layout inside the plate: solid
+regions may be added or removed, and the design is described by a
+level-set function, negative where the material is solid and positive
+where it is void. The physics is steady, nonlinear heat conduction with
+one single physical field, the temperature T in kelvin. The solid
+material has a thermal conductivity k of 1 W/(m K); regions without
+material are treated as a weak heat conductor that conducts 10 times
+less than the solid. The volumetric heat source is not fixed: it
+strengthens with the local temperature, being 10 times the quantity 1
+plus 0.1 times the local temperature in kelvin, in W/m^3 — the
+leakage-current self-heating of the semiconductor; this temperature
+feedback makes the state problem nonlinear. The optimization starts
+from a prescribed initial design: a checkerboard pattern of solid and
+void cells covering the whole plate, roughly half solid.
+
+The temperature-dependent volumetric heat source described above acts
+everywhere in the domain. The bottom edge and the top edge are held at
+the fixed temperature 0: they are the two cold plates; the left edge
+and the right edge are insulated, so that no heat crosses them. Both
+cold edges are non-design boundaries: they are frozen, and the
+optimizer cannot add or remove material on them; the two insulated
+lateral edges are design boundaries, where material may be attached or
+removed freely. The optimization goal is to minimize the total thermal
+energy dissipated by heat conduction in the plate while using as little
+material as possible — a balance between conduction performance and
+material cost.

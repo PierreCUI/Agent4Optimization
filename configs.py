@@ -36,6 +36,10 @@ PYTHON_ENV_NAME = "autofreefem"
 # =========================================================================
 
 AUTOFREEFEM_TIMEOUT = 3600  # max seconds for python main.py
+
+# Sweep (Stage 6): the execution runs in temp/diffv0_beta/<penalty>/
+# diff_<D>_v0_<V>/ — concurrent FreeFEM workers for the sweep grid.
+SWEEP_WORKERS = 16  # USER RULE: all runs use up to 16 threads
 AUTOFREEFEM_MAX_RETRIES = 10  # retries when providing missing .idp files
 
 # =========================================================================
@@ -52,7 +56,22 @@ FREEFEM_DONE_GRACE = 5  # grace seconds after the final iteration file before ki
 # 7.  Reflection — reflector / classifier / fixer
 # =========================================================================
 
-MAX_REFLECTION_TIMES = 10  # total repair rounds shared by the five fix types (syntax/formula/design/fe_param/free)
+MAX_REFLECTION_TIMES = 10  # total repair rounds of the serial reflection loop
+MAX_REFLECTION_GROUP = 16  # USER RULE 2026-10-17: max experiments per
+                           # reflection repair group (a round's
+                           # fixes/designs/param combos create a NEW group,
+                           # never modify the previous round's files).
+                           # ONLY the FIRST execution's sweep may reach
+                           # MAX_SWEEP_CELLS (see the sweep section).
+MAX_SWEEP_CELLS = 64       # USER RULE 2026-10-17: the FIRST execution's
+                           # parameter sweep runs at most this many cells
+                           # (penalty x diffusion x v0); reflection reruns
+                           # are capped by MAX_REFLECTION_GROUP instead
+REFLECTION_WORKERS = 16    # USER RULE: all runs use up to 16 threads
+# The promising/unpromising example lists fed to the repairer share the
+# SAME budget convention as the example selector: MAX_INPUT_TOKENS x
+# TOKEN_BUDGET_RATIO tokens (~4 chars/token), whole examples only
+# (USER 2026-10-18).
 MAX_FIX_CANDIDATES = 8  # max parallel probe candidates per round, shared by formula_fix / design_fix / fe_param_fix
 MAX_SNAPSHOT_FRAMES = 50  # max per-snapshot design images per vision call (beyond it, interpolate over the WHOLE run)
 FF_CONSOLE_TAIL_CHARS = 8192  # FreeFEM console (stderr/stdout) keeps ONLY its LAST chars — nothing else is truncated

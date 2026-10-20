@@ -1,0 +1,43 @@
+Rubber Hanger with a Strain-Hardening Elastomer
+
+This is the hanging bracket problem of vibration-isolation mounts: a
+rubber-like bracket is bolted to the ceiling and carries a piece of
+equipment suspended from its bottom edge, the elastomer — nearly
+incompressible — deforms strongly under the hanging load and its own
+weight, and it hardens as it stretches. The bracket is a long prism
+whose cross-section is a rectangle, so the problem is treated as plane
+strain in that cross-section.
+
+The problem is a topology optimization on a rectangle 2 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is void. The physics is steady, nonlinear
+elasticity with one single physical field, the displacement u, a vector
+with a horizontal and a vertical component, measured in metres. The
+solid is a nearly incompressible rubber-like elastomer whose stiffness
+grows as it deforms: its Poisson's ratio is 0.45, its Young's modulus
+is 200 N/m^2 where the material is undeformed and doubles at a strain
+of one tenth — the modulus rises in proportion to the square of the
+local strain magnitude; this dependence makes the state problem
+nonlinear. Regions without material are treated as a weak
+elastic solid 100 times softer than the solid at the same
+deformation state. The optimization starts from a prescribed initial
+design: a checkerboard pattern of solid and void cells covering the
+whole rectangle, roughly half solid.
+
+The top edge is bolted to the ceiling: it is held completely fixed,
+its horizontal and vertical displacements both zero. The bottom edge
+carries the hanging equipment: a uniform traction of 10 N/m^2 presses
+downward over its whole length, perpendicular to the edge. The left
+edge and the right edge are free. Besides the hanging load, the solid
+material is pulled downward by its own weight, a uniform body force
+of 10 N/m^3 acting throughout the volume of every solid region. The
+bolted top edge and the loaded bottom edge are non-design boundaries:
+their positions are prescribed, they are frozen, and the optimizer
+cannot add or remove material on them; the two lateral edges are
+design boundaries, where material may be attached or removed freely.
+The optimization goal is to minimize the elastic strain energy stored
+in the bracket under the hanging load and its own weight — its
+compliance — while using as little material as possible, a balance
+between stiffness and material cost.

@@ -24,12 +24,15 @@ Every check returns a list of flat error dicts::
 
 Hard errors (severity=error) drive the generate -> review -> repair loop
 of ``Initialization.spec_generation`` (bounded by
-``configs.MAX_SPEC_FIXES``); warnings never block.
+``configs.MAX_SPEC_FIXES``); the deterministic checks below emit errors
+only — warnings enter the loop at low priority from the LLM review
+channel and become non-blocking after two strikes (the loop's 2-strike
+rule).
 
 The deterministic normalizers (``normalize_*``) run BEFORE the checks and
-mechanically enforce the format conventions (Lagrange-multiplier rule,
-enum spelling, label stringification, source backfill), so the repairs
-stay reserved for real semantic failures.
+mechanically enforce the format conventions (enum spelling, label
+stringification, source backfill), so the repairs stay reserved for real
+semantic failures.
 """
 
 import json
@@ -56,7 +59,8 @@ def _err(check, level, message, severity="error"):
 
 
 def hard_errors(checks):
-    """Only the severity=error checks (warnings never block)."""
+    """Only the severity=error checks (warnings never enter this list;
+    they flow through the review channel instead)."""
     return [c for c in checks if c.get("severity") == "error"]
 
 
@@ -156,12 +160,37 @@ _DESIGNED_LIST_KEYS = ("boundaries", "interfaces", "fields", "test_functions",
                        "constants", "expressions", "domains")
 
 
+def _inset(v, container):
+    """Hashable-safe set membership — LLM-authored values may arrive
+    as unhashable wrapped dicts ({"value": ..., "source": ...})."""
+    try:
+        hash(v)
+    except TypeError:
+        return False
+    return v in container
+
+
+def _designed_boundaries(ds):
+    """Boundaries under domain.boundaries (current schema) or the flat
+    legacy key — ONE place so the nested schema can never silently
+    skip the boundary checks and normalizer mappings."""
+    dom = ds.get("domain") if isinstance(ds, dict) else None
+    if isinstance(dom, dict) and isinstance(dom.get("boundaries"), list):
+        return dom["boundaries"]
+    b = ds.get("boundaries")
+    return b if isinstance(b, list) else []
+
+
 def _norm_enum(v, canonical, aliases):
-    if v in canonical:
+    # the wrapped {"value": ..., "source": ...} form unwraps like the
+    # designed-side flatten convention
+    if isinstance(v, dict) and "value" in v:
+        v = v["value"]
+    if _inset(v, canonical):
         return v
     if isinstance(v, str):
         s = v.strip()
-        if s in canonical:
+        if _inset(s, canonical):
             return s
         if s.lower() in aliases:
             return aliases[s.lower()]
@@ -178,13 +207,15 @@ _PHYSICAL_ALIASES = {"value": "value_continuity", "flux": "flux_continuity",
 
 
 def _norm_fe_space(v):
-    if v in _FE_SPACES:
+    if isinstance(v, dict) and "value" in v:
+        v = v["value"]
+    if _inset(v, _FE_SPACES):
         return v
     if isinstance(v, str):
         s = v.strip()
-        if s in _FE_SPACES:
+        if _inset(s, _FE_SPACES):
             return s
-        if s.upper() in _FE_SPACES:
+        if _inset(s.upper(), _FE_SPACES):
             return s.upper()
         # the convention is a SCALAR space P1/P2 (the DSL expands it
         # per component) — a LIST form like "[P2, P2]" or "P2, P2"
@@ -202,15 +233,33 @@ def _norm_labels(lst):
     """Every label as a string (LLMs sometimes emit JSON numbers, a
     single "1" / "1,2" string instead of an array, or structured
     entries like {"label": "1", "source": ...} — dict entries are
-    flattened to their "label" value)."""
+    flattened to their "label" value; a STRINGIFIED dict (the
+    "{'value': '1', ...}" text the LLM writes into lists) is
+    literal-evaluated and flattened the same way)."""
     if isinstance(lst, str):
-        lst = lst.replace(" ", "").split(",")
+        s = lst.strip()
+        if s.startswith("{") and s.endswith("}"):
+            try:
+                import ast
+                lst = ast.literal_eval(s)
+            except Exception:
+                lst = s.replace(" ", "").split(",")
+        else:
+            lst = s.replace(" ", "").split(",")
     if not isinstance(lst, list):
         return lst
     out = []
     for x in lst:
+        if isinstance(x, str):
+            sx = x.strip()
+            if sx.startswith("{") and sx.endswith("}"):
+                try:
+                    import ast
+                    x = ast.literal_eval(sx)
+                except Exception:
+                    pass
         if isinstance(x, dict):
-            x = x.get("label", x)
+            x = x.get("label", x.get("value", x))
         out.append(str(x))
     return out
 
@@ -261,8 +310,21 @@ def normalize_extracted(ex):
     # a lowercase variant is renamed deterministically (the LLM
     # fluctuates between runs; downstream reads the capital form)
     if "lagrangian" in ex and "Lagrangian" not in ex:
-        warnings.warn("normalize: renamed LLM key 'lagrangian' to 'Lagrangian' (canonical capitalisation)")
+        warnings.warn(
+            "normalize: renamed LLM key 'lagrangian' to 'Lagrangian' "
+            "(canonical capitalisation)"
+        )
         ex["Lagrangian"] = ex.pop("lagrangian")
+    # FLATTEN nested {"value": X, "source": S} scalars — the same
+    # convention as the designed side (a wrapped problem_type once
+    # crashed the enum check with "unhashable type: 'dict'")
+    for k in list(ex.keys()):
+        v = ex[k]
+        if (isinstance(v, dict) and not k.endswith("_source")
+                and "value" in v and _inset(v.get("source"), _SOURCES)):
+            ex[k] = v["value"]
+            if f"{k}_source" not in ex:
+                ex[f"{k}_source"] = v["source"]
     # an EMPTY optimization_params object is noise (nothing was stated in
     # the sources) — drop it instead of carrying a hollow annotated object
     op = ex.get("optimization_params")
@@ -357,7 +419,10 @@ def normalize_designed(ds, extracted=None):
     # a lowercase variant is renamed deterministically (the LLM
     # fluctuates between runs; downstream reads the capital form)
     if "lagrangian" in ds and "Lagrangian" not in ds:
-        warnings.warn("normalize: renamed LLM key 'lagrangian' to 'Lagrangian' (canonical capitalisation)")
+        warnings.warn(
+            "normalize: renamed LLM key 'lagrangian' to 'Lagrangian' "
+            "(canonical capitalisation)"
+        )
         ds["Lagrangian"] = ds.pop("lagrangian")
     # FLATTEN nested {"value": X, "source": S} scalars — the format rule is
     # flat, but the LLM sometimes wraps a value; unwrap deterministically
@@ -391,10 +456,13 @@ def normalize_designed(ds, extracted=None):
         return extracted.get(k)
 
     # backfill scalar _source siblings: equal to the extracted value ->
-    # carried-over ground truth, anything else was designed
+    # carried-over ground truth, anything else was designed.  The
+    # comparison goes through _ex_val (which routes the nested keys) —
+    # `k in extracted` would be False for every _NESTED_MAP key and
+    # mislabel carried values as designed.
     _backfill_scalar_sources(
         ds, _DESIGNED_SCALAR_KEYS,
-        lambda k: "extracted" if k in extracted and ds[k] == _ex_val(k) else "designed",
+        lambda k: "extracted" if _ex_val(k) is not None and ds[k] == _ex_val(k) else "designed",
     )
     # DETERMINISTIC IMMUTABILITY: an "extracted"-marked scalar is VERBATIM
     # ground truth — restore the extracted value where the LLM embellished
@@ -419,6 +487,10 @@ def normalize_designed(ds, extracted=None):
         for k in _DESIGNED_LIST_KEYS
     }
     for k in _DESIGNED_LIST_KEYS:
+        if k == "test_functions":
+            # test functions carry ONLY name/fe_space/domain (the prompt
+            # schema) — never a source annotation
+            continue
         items = ds.get(k)
         if not isinstance(items, list):
             continue
@@ -443,8 +515,8 @@ def normalize_designed(ds, extracted=None):
             for it in (extracted.get(k) or [])
             if isinstance(it, dict) and it.get("name") is not None
         }
-        items = ds.get(k)
-        if not isinstance(items, list):
+        items = _designed_boundaries(ds) if k == "boundaries" else ds.get(k)
+        if not isinstance(items, list) or not items:
             continue
         for it in items:
             if not isinstance(it, dict) or it.get("source") != "extracted":
@@ -456,6 +528,14 @@ def normalize_designed(ds, extracted=None):
             for f in keys:
                 if f in ex_it and ex_it[f] is not None:
                     it[f] = ex_it[f]
+                    # a verbatim-restored value IS extracted ground
+                    # truth — carry its source sibling so the reviewer
+                    # does not hold it to the designed-syntax rules
+                    # (e.g. the source's own 'metres' spelling).  This
+                    # breaks the old 'metres'->'meter'->restored-to-
+                    # 'metres' repair deadlock.
+                    if f in ("unit", "dirichlet_value"):
+                        it[f"{f}_source"] = "extracted"
             if k == "boundaries" and ex_it.get("mesh_label") is not None:
                 it["label"] = str(ex_it["mesh_label"])
     # every extracted expression is ground truth and must appear in the
@@ -493,16 +573,16 @@ def normalize_designed(ds, extracted=None):
         str(eb.get("mesh_label")): eb.get("design_role")
         for eb in (extracted.get("boundaries") or [])
         if isinstance(eb, dict) and eb.get("mesh_label") is not None
-        and eb.get("design_role") in _ROLES
+        and _inset(eb.get("design_role"), _ROLES)
     }
-    for b in ds.get("boundaries") or []:
+    for b in _designed_boundaries(ds):
         if not isinstance(b, dict):
             continue
         b["kind"] = _norm_enum(b.get("kind"), _KINDS, _KIND_ALIASES)
         b["design_role"] = _norm_enum(b.get("design_role"), _ROLES, _ROLE_ALIASES)
         if b.get("label") is not None:
             b["label"] = str(b["label"])
-        if b.get("design_role") not in _ROLES:
+        if not _inset(b.get("design_role"), _ROLES):
             key = str(b.get("label")) if b.get("label") is not None else None
             if key in ex_roles:
                 b["design_role"] = ex_roles[key]
@@ -518,9 +598,9 @@ def normalize_designed(ds, extracted=None):
         if not isinstance(f, dict):
             continue
         t, fs = f.get("type"), f.get("fe_space")
-        if t not in _FIELD_TYPES and fs in _FE_SPACES:
+        if not _inset(t, _FIELD_TYPES) and _inset(fs, _FE_SPACES):
             f["type"] = "vector" if fs == "P2" else "scalar"
-        elif fs not in _FE_SPACES and t in _FIELD_TYPES:
+        elif not _inset(fs, _FE_SPACES) and _inset(t, _FIELD_TYPES):
             f["fe_space"] = "P2" if t == "vector" else "P1"
         f["type"] = _norm_enum(f.get("type"), _FIELD_TYPES, _TYPE_ALIASES)
         f["fe_space"] = _norm_fe_space(f.get("fe_space"))
@@ -530,7 +610,7 @@ def normalize_designed(ds, extracted=None):
         # the physics convention for units: displacement in meter,
         # temperature in kelvin (enforced deterministically, per the
         # design prompt's convention)
-        if f.get("unit") is None and f.get("type") in _FIELD_TYPES:
+        if f.get("unit") is None and _inset(f.get("type"), _FIELD_TYPES):
             f["unit"] = "meter" if f.get("type") == "vector" else "kelvin"
             f["unit_source"] = "designed"
         # a Dirichlet field with labels but no value is clamped to zero
@@ -541,10 +621,12 @@ def normalize_designed(ds, extracted=None):
     for tf in (ds.get("test_functions") or []):
         if not isinstance(tf, dict):
             continue
-        # a test function carries ONLY name/fe_space/domain
-        for extra in ("latex", "type", "unit", "dirichlet_value",
-                      "dirichlet_labels"):
-            tf.pop(extra, None)
+        # a test function carries ONLY name/fe_space/domain — strip
+        # EVERY other key (the reviewer rejects extras like 'source'
+        # or 'rationale', and the backfill/check machinery is exempted)
+        for k in list(tf.keys()):
+            if k not in ("name", "fe_space", "domain"):
+                tf.pop(k, None)
     # test functions sometimes land in `fields` by mistake (names like
     # "delta T" / "delta_u") — MOVE them deterministically to
     # test_functions with only name/fe_space/domain (plus their source)
@@ -561,7 +643,6 @@ def normalize_designed(ds, extracted=None):
                 "name": f.get("name"),
                 "fe_space": f.get("fe_space"),
                 "domain": f.get("domain"),
-                "source": f.get("source") or "extracted",
             })
         else:
             kept.append(f)
@@ -581,24 +662,51 @@ def normalize_designed(ds, extracted=None):
     # ``<c> * inner(<field>, test)`` prescribes no value and never
     # strips.  A single-valued Dirichlet therefore always keeps its
     # declaration.
-    weak_text = json.dumps(ds)
-    for f in (ds.get("fields") or []):
+    # The search text is the WEAK FORMS ONLY — never the whole designed
+    # JSON (an objective term or rationale containing "(u - value)*v"
+    # must not strip a single-valued declaration).
+    weak_text = " ".join(
+        str(ds.get(k) or "")
+        for k in ("state_weak_lhs", "state_weak_rhs",
+                  "adjoint_weak_lhs", "adjoint_weak_rhs",
+                  "shape_derivative_volume", "shape_derivative_boundary",
+                  "newton_weak_form")
+    )
+    # the Dirichlet penalty constant pen = 1e15 must be LISTED whenever
+    # the weak forms use it — the multi-valued Dirichlet detection runs
+    # on the fields BEFORE the penalty-strip below removes their
+    # declarations (a stripped field still needs its pen listed)
+    multi_valued = False
+    for f in (ds.get("fields") or []) if isinstance(ds.get("fields"), list) else []:
         if not isinstance(f, dict):
             continue
-        dl = f.get("dirichlet_labels")
-        if not (isinstance(dl, list) and dl):
-            continue
-        fname = str(f.get("name") or "")
-        if not fname:
-            continue
-        if re.search(rf"\(\s*{re.escape(fname)}\s*[+-]\s*[^)]*\)\s*\*", weak_text):
-            for k in ("dirichlet_value", "dirichlet_value_source",
-                      "dirichlet_labels", "dirichlet_labels_source"):
-                f.pop(k, None)
+        dv = f.get("dirichlet_value")
+        vals = list(dv.values()) if isinstance(dv, dict) else \
+            (dv if isinstance(dv, list) else ([dv] if dv not in (None, "") else []))
+        if len({str(v) for v in vals}) >= 2:
+            multi_valued = True
+            break
+    # the strip runs ONLY for multi-valued Dirichlet specs — a
+    # single-valued declaration is never stripped, whatever text the
+    # weak forms contain
+    if multi_valued:
+        for f in (ds.get("fields") or []):
+            if not isinstance(f, dict):
+                continue
+            dl = f.get("dirichlet_labels")
+            if not (isinstance(dl, list) and dl):
+                continue
+            fname = str(f.get("name") or "")
+            if not fname:
+                continue
+            if re.search(rf"\(\s*{re.escape(fname)}\s*[+-]\s*[^)]*\)\s*\*", weak_text):
+                for k in ("dirichlet_value", "dirichlet_value_source",
+                          "dirichlet_labels", "dirichlet_labels_source"):
+                    f.pop(k, None)
     # designed mesh labels (deterministic, mirrors the extraction mapping)
     bnd_name_to_label = {
         str(b.get("name")): str(b.get("label"))
-        for b in (ds.get("boundaries") or [])
+        for b in _designed_boundaries(ds)
         if isinstance(b, dict) and b.get("name") is not None and b.get("label") is not None
     }
     # names arrive with or without the leading LaTeX backslash
@@ -608,6 +716,18 @@ def normalize_designed(ds, extracted=None):
             for k, v in bnd_name_to_label.items()
         }
     )
+    # FUZZY keys: the LLM drifts between "cold patch" and "cold_patch",
+    # "bottom edge" and "bottom_foundation", "Gamma_bottom" and "bottom"
+    # (and case) — a normalised key (no spaces/underscores/dashes, no
+    # leading gamma, lowercase) maps such spellings to the same label
+    def _fuzzy_key(s):
+        k = re.sub(r"[\s_-]+", "", str(s).lower())
+        return re.sub(r"^gamma", "", k)
+
+    bnd_key_to_label = {
+        _fuzzy_key(k): v
+        for k, v in bnd_name_to_label.items()
+    }
     known_mesh_ds = {
         str(l) for l in (extracted.get("mesh_labels_used") or [])
     } if isinstance(extracted.get("mesh_labels_used"), list) else set()
@@ -625,14 +745,36 @@ def normalize_designed(ds, extracted=None):
                 if s in bnd_name_to_label:
                     mapped.append(bnd_name_to_label[s])
                 else:
-                    m = re.search(r"\d+", s)
-                    digit = m.group(0) if m else None
-                    if digit is not None and (
-                        digit in known_mesh_ds or digit in designed_labels
-                    ):
-                        mapped.append(digit)
+                    key = _fuzzy_key(s)
+                    if key in bnd_key_to_label:
+                        mapped.append(bnd_key_to_label[key])
                     else:
-                        mapped.append(s)
+                        # common-prefix fallback: "bottom edge" must map
+                        # to "bottom_foundation" (they share "bottom"),
+                        # "left edge" to "left_foundation" — a UNIQUE
+                        # shared prefix of >= 5 chars decides
+                        def _prefix_len(a, b):
+                            n = 0
+                            for x, y in zip(a, b):
+                                if x != y:
+                                    break
+                                n += 1
+                            return n
+                        cands = [
+                            lab for kk, lab in bnd_key_to_label.items()
+                            if _prefix_len(key, kk) >= 5
+                        ]
+                        if len(cands) == 1:
+                            mapped.append(cands[0])
+                            continue
+                        m = re.search(r"\d+", s)
+                        digit = m.group(0) if m else None
+                        if digit is not None and (
+                            digit in known_mesh_ds or digit in designed_labels
+                        ):
+                            mapped.append(digit)
+                        else:
+                            mapped.append(s)
             f["dirichlet_labels"] = mapped
     for it in ds.get("interfaces") or []:
         if isinstance(it, dict):
@@ -645,11 +787,16 @@ def normalize_designed(ds, extracted=None):
             "extracted" if chi == extracted.get("characteristic_function")
             else "designed"
         )
-    if isinstance(chi, dict) and chi.get("source") == "extracted" \
-            and isinstance(extracted.get("characteristic_function"), dict):
+    if isinstance(chi, dict) and isinstance(extracted.get("characteristic_function"), dict):
         ex_chi = extracted["characteristic_function"]
+        # restore verbatim when EITHER the whole chi object OR the
+        # per-field <f>_source is marked extracted (a weak_value the
+        # repair falsely marks extracted is restored like any other —
+        # the same convention as the field unit restore)
         for f in ("latex", "strong_value", "weak_value"):
-            if ex_chi.get(f) is not None:
+            if ex_chi.get(f) is not None and (
+                    chi.get("source") == "extracted"
+                    or chi.get(f"{f}_source") == "extracted"):
                 chi[f] = ex_chi[f]
     # deterministic defaults for the contrast values: the LARGER side is 1;
     # the smaller (weak) side follows the physics convention (1/100 for
@@ -681,18 +828,9 @@ def normalize_designed(ds, extracted=None):
     # structures whose key names evolved over the schema revisions.
     # pen is a FreeFEM WORKAROUND used ONLY when a field enforces two
     # or more DIFFERENT Dirichlet values — never backfill it for a
-    # single-valued Dirichlet.
+    # single-valued Dirichlet.  (multi_valued was computed BEFORE the
+    # penalty-strip above, on the original field declarations.)
     weak_text = json.dumps(ds)
-    multi_valued = False
-    for f in (ds.get("fields") or []) if isinstance(ds.get("fields"), list) else []:
-        if not isinstance(f, dict):
-            continue
-        dv = f.get("dirichlet_value")
-        vals = list(dv.values()) if isinstance(dv, dict) else \
-            (dv if isinstance(dv, list) else ([dv] if dv not in (None, "") else []))
-        if len({str(v) for v in vals}) >= 2:
-            multi_valued = True
-            break
     if re.search(r"\bpen\b", weak_text) and multi_valued:
         consts = ds.get("constants")
         if isinstance(consts, list) and not any(
@@ -715,6 +853,20 @@ def normalize_designed(ds, extracted=None):
     if (ds.get("newton_description") or ds.get("newton_weak_form")) \
             and ds.get("newton_source") not in _SOURCES:
         ds["newton_source"] = "extracted" if extracted.get("newton_linearisation") else "designed"
+    # M5: the canonical placement of check_units is INSIDE the
+    # Lagrangian object (item 7) — a stray top-level key is moved there
+    # deterministically instead of burning repair rounds on the
+    # placement error.  When no Lagrangian object exists the move is
+    # skipped and the placement check flags it for the LLM.
+    if "check_units" in ds:
+        lag = ds.get("Lagrangian")
+        if isinstance(lag, dict):
+            lag.setdefault("check_units", ds["check_units"])
+            if lag.get("check_units_source") is None and isinstance(
+                    ds.get("check_units_source"), str):
+                lag["check_units_source"] = ds["check_units_source"]
+        ds.pop("check_units", None)
+        ds.pop("check_units_source", None)
     opt = ds.get("optimization_config")
     if isinstance(opt, dict):
         if opt.get("source") not in _SOURCES:
@@ -722,6 +874,10 @@ def normalize_designed(ds, extracted=None):
         for k in ("boundary_labels", "fixed_labels"):
             if k in opt:
                 opt[k] = _norm_labels(opt.get(k))
+        # numeric quirks: a JSON number phi is stringified like every
+        # other numeric tolerance in this module
+        if isinstance(opt.get("phi"), (int, float)):
+            opt["phi"] = str(opt["phi"])
     return ds
 
 
@@ -744,6 +900,39 @@ def normalize_extracted_mesh(ex):
     for e in ex.get("edges") or []:
         if isinstance(e, dict) and e.get("label") is not None:
             e["label"] = str(e["label"])
+    # wrapped {"value": ..., "source": ...} mesh_code unwraps (the
+    # same flatten convention as every other scalar)
+    mc = ex.get("mesh_code")
+    if isinstance(mc, dict) and "value" in mc:
+        ex["mesh_code"] = mc["value"]
+    # the checker can COMPUTE these fields itself — backfill them
+    # deterministically instead of burning repair rounds on the LLM's
+    # self-reported values (the old has_syntax_errors_bool stall).
+    # The syntax sanity is the SHARED helper (same one the provided-mesh
+    # freeze uses); commented-out lines are ignored consistently.
+    code = ex.get("mesh_code")
+    if isinstance(code, str) and code.strip():
+        problems = mesh_syntax_problems(code)
+        ex["has_syntax_errors"] = bool(problems)
+        ex["syntax_error_details"] = "; ".join(problems)
+        if not ex.get("labels_found"):
+            # labels derive from the ACTIVE code (commented-out borders
+            # are not part of the mesh); square() carries the implicit
+            # labels 1=bottom, 2=right, 3=top, 4=left
+            active = _strip_comments(code)
+            if re.search(r"\bsquare\s*\(", active):
+                ex["labels_found"] = ["1", "2", "3", "4"]
+            else:
+                ex["labels_found"] = [
+                    l for l in _labels_in_text(active) if l != "10"
+                ]
+    elif ex.get("category") == "description":
+        # a mesh description has no code to syntax-check — the flag is
+        # deterministically false, never an LLM-authored value
+        ex["has_syntax_errors"] = False
+        ex["syntax_error_details"] = ""
+        if not isinstance(ex.get("labels_found"), list):
+            ex["labels_found"] = []
     return ex
 
 
@@ -809,32 +998,75 @@ def normalize_designed_mesh(ds, extracted=None):
             if ex_e is not None:
                 for f in ("param", "x", "y", "label", "role"):
                     if ex_e.get(f) is not None:
+                        # the extracted ROLE is only a PLACEHOLDER
+                        # ("border X") when the source states no physical
+                        # function (extraction rule) — a designed
+                        # design/fixed role fix must survive the restore
+                        if f == "role" and re.match(
+                                r"^border\s+\S+$", str(ex_e[f]).strip()):
+                            continue
                         e[f] = str(ex_e[f])
     # AUTO-FILL missing edges from the ACTIVE code — the edges list is
     # mechanically derivable from the borders, so a missing entry is
     # filled deterministically instead of burning repair retries
-    active_code = re.sub(r"//[^\n]*", "", ds.get("mesh_code") or "")
+    # wrapped {"value": ..., "source": ...} mesh_code unwraps (the
+    # same flatten convention as every other scalar)
+    mc = ds.get("mesh_code")
+    if isinstance(mc, dict) and "value" in mc:
+        ds["mesh_code"] = mc["value"]
+    active_code = _strip_comments(ds.get("mesh_code"))
     # when the ACTIVE mesh is square(), its implicit labels are 1-4 only —
     # replace labels_used AND the edges with the four canonical square
     # sides (commented-out borders must not leak in).  The detection must
     # not depend on the transform being present — a bare square(n,m) is
     # still the unit square with implicit labels 1-4.
+    # the numeric args must be GREEDY: with non-greedy args the optional
+    # transform group never matches (the engine locks in the shortest
+    # overall match, e.g. `square(20, 1`), silently dropping every
+    # transform and writing unit-square edges for mapped rectangles
     sm = re.search(
-        r"\bmesh\s+Th\s*=\s*square\s*\(\s*[^,)]+?\s*,\s*[^,)]+?\s*"
+        r"\bmesh\s+Th\s*=\s*square\s*\(\s*[^,)]+\s*,\s*[^,)]+\s*"
         r"(?:,\s*\[\s*([^,\]]+)\s*,\s*([^\]]+)\s*\])?",
         active_code,
     )
     if sm:
-        def _coef(s):
+        def _coef(s, var):
+            """Linear coefficient of a square() transform expression,
+            with the mesh's `real` constants substituted — symbolic
+            transforms like [L*x, H*y] resolve to the true domain size
+            (the old digit-picking fell back to 1.0 for them, writing
+            unit-square edges for a mapped rectangle)."""
             try:
-                f = float(re.search(r"[-+]?\d*\.?\d+", s).group(0))
+                sp = _get_sympy()
+                consts = _real_constants(active_code)
+                expr = sp.sympify(s).subs(
+                    {sp.Symbol(k): v for k, v in consts.items()}
+                )
+                sym = sp.Symbol(var)
+                v = complex(expr.subs(sym, 1) - expr.subs(sym, 0))
+                if abs(v.imag) < 1e-12 and v.real:
+                    return abs(v.real)
+            except Exception:
+                pass
+            try:
+                return abs(float(re.search(r"[-+]?\d*\.?\d+", s).group(0)))
             except Exception:
                 return 1.0
-            return abs(f)
         # the transform [a*x+b, c*y+d] is optional (groups 1/2) — a bare
-        # square(n, m) is the unit square
-        L = _coef(sm.group(1)) if sm.group(1) else 1.0
-        H = _coef(sm.group(2)) if sm.group(2) else 1.0
+        # square(n, m) is the unit square.  When the code maps the mesh
+        # afterwards (``Th = movemesh(Th, [fx, fy]);``), the FINAL box
+        # comes from the movemesh transform — edges written on the
+        # pre-movemesh unit square would contradict the active domain
+        mm = re.search(
+            r"movemesh\s*\(\s*\w+\s*,\s*\[\s*([^,\]]+)\s*,\s*([^\]]+)\s*\]",
+            active_code,
+        )
+        if mm:
+            L = _coef(mm.group(1), "x")
+            H = _coef(mm.group(2), "y")
+        else:
+            L = _coef(sm.group(1), "x") if sm.group(1) else 1.0
+            H = _coef(sm.group(2), "y") if sm.group(2) else 1.0
         warnings.warn(
             "normalize: active square() mesh — replaced labels_used/edges "
             "with the four square sides (implicit labels 1-4)"
@@ -856,7 +1088,6 @@ def normalize_designed_mesh(ds, extracted=None):
         ]
     edges = ds.get("edges") if isinstance(ds.get("edges"), list) else []
     existing = {str(e.get("name")) for e in edges if isinstance(e, dict) and e.get("name")}
-    _BORDER_FULL = re.compile(r"\bborder\s+(\w+)\s*\(([^)]*)\)\s*\{(.*?)\}", re.DOTALL)
     # GENERAL rule: auto-fill ONLY the borders that the ACTIVE buildmesh
     # actually references (they are the final mesh's edges).  A stray
     # active border that no buildmesh uses is never appended, and a
@@ -876,20 +1107,22 @@ def normalize_designed_mesh(ds, extracted=None):
                     break
             i += 1
         arg = active_code[start:i]
-        built = set(re.findall(r"\b([A-Za-z_]\w*)\s*\(\s*\d+", arg))
+        # the resolution argument may be a literal (C01(10)) or the
+        # mesh's n (C01(n)) — accept any identifier/digit
+        built = set(re.findall(r"\b([A-Za-z_]\w*)\s*\(\s*\w+", arg))
         for m in _BORDER_FULL.finditer(active_code):
             name, args, body = m.group(1), m.group(2), m.group(3)
             if name in existing or name not in built:
                 continue
             xm = re.search(r"x\s*=\s*([^;]+);", body)
             ym = re.search(r"y\s*=\s*([^;]+);", body)
-            lm = re.search(r"label\s*=\s*([^;]+);", body)
+            labs = _labels_in_text(body)
             edges.append({
                 "name": name,
                 "param": args.strip(),
                 "x": xm.group(1).strip() if xm else "",
                 "y": ym.group(1).strip() if ym else "",
-                "label": str(lm.group(1).strip()) if lm else "",
+                "label": labs[0] if labs else "",
                 "role": f"border {name}",
                 "source": "designed",
             })
@@ -900,13 +1133,9 @@ def normalize_designed_mesh(ds, extracted=None):
     # with the edges again (border meshes: their border labels; square
     # meshes: the replacement above already set 1-4)
     if not sm:
-        active_labels = []
-        for bm in _BORDER_FULL.finditer(active_code):
-            lm = re.search(r"label\s*=\s*(\d+)", bm.group(3))
-            if lm and lm.group(1) != "10" and lm.group(1) not in active_labels:
-                active_labels.append(lm.group(1))
+        active_labels = [l for l in _labels_in_text(active_code) if l != "10"]
         if active_labels:
-            ds["labels_used"] = sorted(active_labels, key=int)
+            ds["labels_used"] = sorted(set(active_labels), key=int)
     return ds
 
 
@@ -935,7 +1164,9 @@ def _phi_syntax_issues(phi):
     """Deterministic string-level checks on the level-set expression:
     paren balance and sympy parseability.  (Semantic rules — negativity,
     coverage of the fixed labels, solid fraction ~20-80% — are judged by
-    the LLM design reviewer.)"""
+    the LLM design reviewer; the CONNECTIVITY rule is deterministic,
+    ``_phi_connectivity_issues``, and runs only for non-prescribed
+    phis.)"""
     checks = []
     if not isinstance(phi, str) or not phi.strip():
         return [_err("phi_defined", "syntax", "phi must be a non-empty string")]
@@ -944,6 +1175,118 @@ def _phi_syntax_issues(phi):
     if _sympify_phi(phi) is None:
         checks.append(_err("phi_parseable", "syntax", "phi is not a parseable expression"))
     return checks
+
+
+# ──────────────────────────────────────────────────────────────────────
+# mesh-code helpers — the ONE shared syntax sanity and the shared label
+# extraction (plain `label=2` and conditional `label=(t>0.5)?2:1`)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _strip_comments(code):
+    """Best-effort removal of FreeFEM ``//`` comments.  The GENERATED
+    mesh carries no comments (per the prompt); extracted verbatim code
+    may.  The provided-mesh path uses the string-aware
+    ``Generation.check_static.strip_ff_comments`` on the raw user file —
+    this naive strip covers the spec-level checks."""
+    return re.sub(r"//[^\n]*", "", code or "")
+
+
+def _real_constants(code):
+    """Parse ``real`` declarations of a mesh code into {name: sympy
+    expr} — single declarations (``real L = 2.0;``) AND
+    multi-declarations (``real L = 2.0, H = 1.0;``)."""
+    sp = _get_sympy()
+    consts = {}
+    for line in (code or "").splitlines():
+        s = line.strip()
+        if not s.startswith("real "):
+            continue
+        body = s[len("real "):].rstrip(";")
+        for part in body.split(","):
+            m = re.match(r"(\w+)\s*=\s*(.+?)\s*$", part.strip())
+            if m:
+                try:
+                    consts[m.group(1)] = sp.sympify(m.group(2))
+                except Exception:
+                    pass
+    return consts
+
+
+def mesh_syntax_problems(code: str) -> list:
+    """Deterministic syntax sanity of a mesh code — the ONE shared
+    syntax check, used by the provided-mesh freeze (Initialization) and
+    the extraction backfill below (they must never drift apart).
+
+    Returns a list of problems (empty = OK); commented-out lines are
+    ignored like everywhere else."""
+    if not (isinstance(code, str) and code.strip()):
+        return ["empty mesh code"]
+    active = _strip_comments(code)
+    problems = []
+    if not re.search(r"\bmesh\s+Th\s*=", active) and not re.search(
+        r"\b(buildmesh|square|border)\s*\(", active
+    ):
+        problems.append(
+            "no mesh definition found (expected `mesh Th =` with "
+            "buildmesh / square / border)"
+        )
+    for opening, closing in (("(", ")"), ("{", "}"), ("[", "]")):
+        if active.count(opening) != active.count(closing):
+            problems.append(f"unbalanced {opening}{closing} delimiters")
+    # USER RULE (2026-10-15): identifiers entering the FreeFEM code
+    # must not contain underscores (FreeFEM identifiers cannot contain
+    # them) — border names are the mesh-side identifiers.
+    for name in re.findall(r"\bborder\s+([A-Za-z][A-Za-z0-9_]*)\s*\(", active):
+        if "_" in name:
+            problems.append(
+                f"border name {name!r} contains an underscore — FreeFEM "
+                f"identifiers cannot contain underscores (use "
+                f"concatenated lowercase or CamelCase)"
+            )
+    return problems
+
+
+_LABEL_RE = re.compile(r"\blabel\s*=")
+
+
+def _labels_in_text(text):
+    """Every label digit appearing in `label=...` assignments of *text*
+    — plain `label=2` and conditional `label=(t>0.5)?2:1` both yield
+    their digits (the conditional form yields both branches, nested
+    parentheses included).  The word boundary rejects identifiers that
+    merely END in "label" (e.g. `int edgelabel = 5;`)."""
+    labels = []
+    for m in _LABEL_RE.finditer(text or ""):
+        i = m.end()
+        # optional conditional: a BALANCED (...) group followed by '?'
+        if i < len(text) and text[i] == "(":
+            depth = 0
+            j = i
+            while j < len(text):
+                if text[j] == "(":
+                    depth += 1
+                elif text[j] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            if j < len(text):
+                k = j + 1
+                while k < len(text) and text[k].isspace():
+                    k += 1
+                if k < len(text) and text[k] == "?":
+                    i = k + 1
+        dm = re.match(r"\s*(\d+)", text[i:])
+        if not dm:
+            continue
+        if dm.group(1) not in labels:
+            labels.append(dm.group(1))
+        rest = text[i + dm.end():]
+        cm = re.match(r"\s*:\s*(\d+)", rest)
+        if cm and cm.group(1) not in labels:
+            labels.append(cm.group(1))
+    return labels
 
 
 def _phi_connectivity_issues(phi, L, H):
@@ -962,16 +1305,27 @@ def _phi_connectivity_issues(phi, L, H):
         return checks
     sp = _get_sympy()
     x, y = sp.symbols("x y")
+    # NOTE: the sampling grid is deliberately kept at 64 — coarser
+    # grids alias high-frequency (checkerboard) patterns differently and
+    # flip the connectivity verdict on corner-touching cells
     n = 64
     solid = []
+    evals_ok = 0
+    evals_total = n * n
     for i in range(n):
         for j in range(n):
             try:
                 v = complex(expr.subs({x: L * i / (n - 1), y: H * j / (n - 1)}))
+                evals_ok += 1
             except Exception:
                 continue
             if abs(v.imag) < 1e-12 and v.real < 0:
                 solid.append((i, j))
+    if evals_ok < evals_total // 2:
+        # most samples failed to evaluate (free symbols, exotic syntax) —
+        # claiming an all-void design from a few stray points would be
+        # wrong; skip the connectivity verdict entirely
+        return checks
     if not solid:
         checks.append(_err("phi_connectivity", "design",
                            "phi >= 0 everywhere on the sampled mesh box — an all-void design"))
@@ -988,9 +1342,12 @@ def _phi_connectivity_issues(phi, L, H):
                 seen.add((nx, ny))
                 stack.append((nx, ny))
     if len(seen) != len(solid_set):
-        checks.append(_err("phi_connectivity", "design",
-                           f"the initial solid region is DISCONNECTED: {len(solid_set) - len(seen)} "
-                           "of the sampled solid cells are unreachable — the design must be one connected piece"))
+        checks.append(_err(
+            "phi_connectivity", "design",
+            f"the initial solid region is DISCONNECTED: "
+            f"{len(solid_set) - len(seen)} of the sampled solid cells "
+            "are unreachable — the design must be one connected piece",
+        ))
     return checks
 
 
@@ -1012,7 +1369,7 @@ def check_extracted_problem(extracted):
     pt = extracted.get("problem_type")
     if pt is None:
         checks.append(_err("problem_type_required", "syntax", "problem_type is required"))
-    elif pt not in _PROBLEM_TYPES:
+    elif not _inset(pt, _PROBLEM_TYPES):
         checks.append(_err(
             "problem_type_enum", "syntax",
             f"problem_type must be one of {sorted(_PROBLEM_TYPES)}, got {pt!r}",
@@ -1031,7 +1388,7 @@ def check_extracted_problem(extracted):
         if k in extracted and extracted.get(f"{k}_source") != "extracted":
             checks.append(_err(
                 "source_annotation", "syntax",
-                f"extracted scalar {k!r} is missing its '{k}_source': 'extracted' sibling",
+                f"extracted scalar {k!r} is missing its \"{k}_source\": \"extracted\" sibling",
             ))
     for k in _EXTRACTED_LIST_KEYS:
         if k in extracted:
@@ -1068,14 +1425,14 @@ def check_extracted_problem(extracted):
         if not isinstance(b, dict):
             continue
         kind = b.get("kind")
-        if kind is not None and kind not in _KINDS:
+        if kind is not None and not _inset(kind, _KINDS):
             checks.append(_err(
                 "boundary_kind_enum",
                 "syntax",
                 f"boundaries[{i}] kind must be one of {sorted(_KINDS)}, got {kind!r}",
             ))
         role = b.get("design_role")
-        if role is not None and role not in _ROLES:
+        if role is not None and not _inset(role, _ROLES):
             checks.append(_err(
                 "boundary_role_enum",
                 "syntax",
@@ -1085,7 +1442,7 @@ def check_extracted_problem(extracted):
         if not isinstance(it, dict):
             continue
         phys = it.get("physical")
-        if phys is not None and phys not in _INTERFACE_PHYSICALS:
+        if phys is not None and not _inset(phys, _INTERFACE_PHYSICALS):
             checks.append(_err(
                 "interface_physical_enum",
                 "syntax",
@@ -1099,13 +1456,13 @@ def check_extracted_problem(extracted):
     for i, f in enumerate(extracted.get("fields") or []):
         if not isinstance(f, dict):
             continue
-        if f.get("type") is not None and f.get("type") not in _FIELD_TYPES:
+        if f.get("type") is not None and not _inset(f.get("type"), _FIELD_TYPES):
             checks.append(_err(
                 "field_type_enum",
                 "syntax",
                 f"fields[{i}] type must be one of {sorted(_FIELD_TYPES)}, got {f.get('type')!r}",
             ))
-        if f.get("fe_space") is not None and f.get("fe_space") not in _FE_SPACES:
+        if f.get("fe_space") is not None and not _inset(f.get("fe_space"), _FE_SPACES):
             checks.append(_err(
                 "field_fe_enum",
                 "syntax",
@@ -1135,7 +1492,8 @@ def check_extracted_problem(extracted):
             for i, it in enumerate(xr):
                 if not isinstance(it, dict) or not it.get("requirement"):
                     checks.append(_err("extra_requirements_item", "syntax",
-                                       f"extra_requirements[{i}] must be an object with a non-empty 'requirement'"))
+                                       f"extra_requirements[{i}] must be an object "
+                                   "with a non-empty \"requirement\""))
 
     return checks
 
@@ -1162,7 +1520,7 @@ def check_designed_problem(designed, extracted=None):
             checks.append(_err(
                 "source_annotation",
                 "syntax",
-                f"designed scalar {k!r} is missing a valid '{k}_source'",
+                f"designed scalar {k!r} is missing a valid \"{k}_source\"",
             ))
     if "objective_terms" in designed:
         terms = designed.get("objective_terms")
@@ -1206,7 +1564,7 @@ def check_designed_problem(designed, extracted=None):
                         f"designed {k}[{i}] must be an object",
                     ))
                     continue
-                if it.get("source") not in _SOURCES:
+                if k != "test_functions" and it.get("source") not in _SOURCES:
                     checks.append(_err(
                         "source_annotation",
                         "syntax",
@@ -1215,7 +1573,7 @@ def check_designed_problem(designed, extracted=None):
 
     # ── 1. basic information ──────────────────────────────────────────
     if (not isinstance(designed.get("problem_type"), str)
-            or designed.get("problem_type") not in _PROBLEM_TYPES):
+            or not _inset(designed.get("problem_type"), _PROBLEM_TYPES)):
         checks.append(_err(
             "problem_type_enum",
             "syntax",
@@ -1232,7 +1590,7 @@ def check_designed_problem(designed, extracted=None):
 
     # ── 2. boundaries ─────────────────────────────────────────────────
     boundary_by_label = {}
-    for i, b in enumerate(designed.get("boundaries") or []):
+    for i, b in enumerate(_designed_boundaries(designed)):
         if not isinstance(b, dict):
             continue
         label, kind, role = b.get("label"), b.get("kind"), b.get("design_role")
@@ -1246,7 +1604,7 @@ def check_designed_problem(designed, extracted=None):
         # boundary's treatment when the weak form acts on it (e.g. a spring
         # term on the hole).  It still never enters boundary_labels /
         # fixed_labels (checked separately) and carries no design role.
-        if kind not in _KINDS:
+        if not _inset(kind, _KINDS):
             checks.append(_err(
                 "boundary_kind_enum",
                 "syntax",
@@ -1254,7 +1612,7 @@ def check_designed_problem(designed, extracted=None):
             ))
         # the label-10 (material boundary) entry carries NO design role —
         # only non-10 boundaries must have one
-        if str(label) != "10" and role not in _ROLES:
+        if str(label) != "10" and not _inset(role, _ROLES):
             checks.append(_err(
                 "boundary_role_enum",
                 "syntax",
@@ -1265,18 +1623,21 @@ def check_designed_problem(designed, extracted=None):
 
     # explicit extracted design_role is ground truth — must be preserved
     for i, eb in enumerate(extracted.get("boundaries") or []):
-        if not isinstance(eb, dict) or eb.get("design_role") not in _ROLES:
+        if not isinstance(eb, dict) or not _inset(eb.get("design_role"), _ROLES):
             continue
         key = eb.get("mesh_label")
         db = boundary_by_label.get(str(key)) if key is not None else None
         if db is None:  # fall back to matching by name
             name = eb.get("name")
-            db = next((b for b in (designed.get("boundaries") or [])
+            db = next((b for b in _designed_boundaries(designed)
                        if isinstance(b, dict) and b.get("name") == name), None)
         if db is not None and db.get("design_role") != eb.get("design_role"):
-            checks.append(_err("design_role_preserved", "syntax",
-                               f"extracted boundary {eb.get('name')!r} design_role {eb.get('design_role')!r} "
-                               f"was changed to {db.get('design_role')!r} — extracted roles are immutable"))
+            checks.append(_err(
+                "design_role_preserved", "syntax",
+                f"extracted boundary {eb.get('name')!r} design_role "
+                f"{eb.get('design_role')!r} was changed to "
+                f"{db.get('design_role')!r} — extracted roles are immutable",
+            ))
 
     # ── 4/7. constants and state ──────────────────────────────────────
     for i, c in enumerate(designed.get("constants") or []):
@@ -1341,7 +1702,7 @@ def check_designed_problem(designed, extracted=None):
     # ── 3. fields ─────────────────────────────────────────────────────
     boundary_labels = {
         str(b.get("label"))
-        for b in (designed.get("boundaries") or [])
+        for b in _designed_boundaries(designed)
         if isinstance(b, dict) and b.get("label")
     }
     domains = designed.get("domains") if isinstance(designed.get("domains"), list) else []
@@ -1349,13 +1710,13 @@ def check_designed_problem(designed, extracted=None):
     for i, f in enumerate(designed.get("fields") or []):
         if not isinstance(f, dict):
             continue
-        if f.get("type") not in _FIELD_TYPES:
+        if not _inset(f.get("type"), _FIELD_TYPES):
             checks.append(_err(
                 "field_type_enum",
                 "syntax",
                 f"fields[{i}] type must be one of {sorted(_FIELD_TYPES)}",
             ))
-        if f.get("fe_space") not in _FE_SPACES:
+        if not _inset(f.get("fe_space"), _FE_SPACES):
             checks.append(_err(
                 "field_fe_enum",
                 "syntax",
@@ -1364,8 +1725,11 @@ def check_designed_problem(designed, extracted=None):
         fdom = f.get("domain")
         if domain_names:
             if fdom not in domain_names:
-                checks.append(_err("field_domain", "syntax",
-                                   f"fields[{i}] domain must be one of {domain_names} (multi-domain), got {fdom!r}"))
+                checks.append(_err(
+                    "field_domain", "syntax",
+                    f"fields[{i}] domain must be one of {domain_names} "
+                    f"(multi-domain), got {fdom!r}",
+                ))
         elif fdom and designed.get("domain_name") and fdom != designed.get("domain_name"):
             checks.append(_err("field_domain", "syntax",
                                f"fields[{i}] domain {fdom!r} does not "
@@ -1380,12 +1744,12 @@ def check_designed_problem(designed, extracted=None):
     # every test function's fe_space MUST match the physical field it tests
     field_fes = {
         f.get("fe_space") for f in (designed.get("fields") or [])
-        if isinstance(f, dict) and f.get("fe_space") in _FE_SPACES
+        if isinstance(f, dict) and _inset(f.get("fe_space"), _FE_SPACES)
     }
     for i, tf in enumerate(designed.get("test_functions") or []):
         if not isinstance(tf, dict):
             continue
-        if tf.get("fe_space") not in _FE_SPACES:
+        if not _inset(tf.get("fe_space"), _FE_SPACES):
             checks.append(_err(
                 "test_fe_enum",
                 "syntax",
@@ -1418,7 +1782,11 @@ def check_designed_problem(designed, extracted=None):
             "syntax",
             "optimization_config.mesh_file must be a non-empty string (default \"mesh.txt\")",
         ))
+    # USER RULE (2026-10-15): designed parameters are NOT validated —
+    # hmin/hmax/diffusion/v0 checks run only for non-designed sources.
     for k in ("hmin", "hmax", "diffusion", "v0"):
+        if opt.get(f"{k}_source") == "designed":
+            continue
         v = opt.get(k)
         if _to_float(v) is None or not math.isfinite(_to_float(v)) or _to_float(v) <= 0:
             checks.append(_err(
@@ -1427,7 +1795,8 @@ def check_designed_problem(designed, extracted=None):
                 f"optimization_config.{k} must be a positive finite number, got {v!r}",
             ))
     hmin, hmax = _to_float(opt.get("hmin")), _to_float(opt.get("hmax"))
-    if hmin is not None and hmax is not None and hmin >= hmax:
+    if (opt.get("hmin_source") != "designed" and opt.get("hmax_source") != "designed"
+            and hmin is not None and hmax is not None and hmin >= hmax):
         checks.append(_err("opt_hmin_hmax", "syntax", f"hmin ({hmin}) must be < hmax ({hmax})"))
     iters = _to_int(opt.get("iterations"))
     if iters is None or iters < 1:
@@ -1450,7 +1819,9 @@ def check_designed_problem(designed, extracted=None):
             "show_weak_material must be false",
         ))
 
-    checks += _phi_syntax_issues(opt.get("phi", ""))
+    # USER RULE (2026-10-15): a designed phi is NOT validated
+    if opt.get("phi_source") != "designed":
+        checks += _phi_syntax_issues(opt.get("phi", ""))
 
     bf_list = opt.get("boundary_labels")
     ff_list = opt.get("fixed_labels")
@@ -1501,17 +1872,24 @@ def check_designed_problem(designed, extracted=None):
         # fixed = frozen -> fixedLabels; design = normal-locked ->
         # boundaryLabels, OR FREE (in NEITHER list — the strongest
         # design form); a design boundary must never be frozen
-        for i, b in enumerate(designed.get("boundaries") or []):
-            if not isinstance(b, dict) or b.get("design_role") not in _ROLES:
+        for i, b in enumerate(_designed_boundaries(designed)):
+            if not isinstance(b, dict) or not _inset(b.get("design_role"), _ROLES):
                 continue
             label = str(b.get("label"))
             if b.get("design_role") == "fixed" and label not in ff:
-                checks.append(_err("role_label_consistency", "syntax",
-                                   f"boundaries[{i}] role 'fixed' but its label {label!r} is not in fixed_labels"))
+                checks.append(_err(
+                    "role_label_consistency", "syntax",
+                    f"boundaries[{i}] role 'fixed' but its label "
+                    f"{label!r} is not in fixed_labels",
+                ))
             elif b.get("design_role") == "design" and label in ff:
-                checks.append(_err("role_label_consistency", "syntax",
-                                   f"boundaries[{i}] role 'design' but its label {label!r} is in fixed_labels "
-                                   f"(a design boundary is normal-locked via boundaryLabels or FREE — never frozen)"))
+                checks.append(_err(
+                    "role_label_consistency", "syntax",
+                    f"boundaries[{i}] role 'design' but its label "
+                    f"{label!r} is in fixed_labels (a design boundary "
+                    "is normal-locked via boundaryLabels or FREE — "
+                    "never frozen)",
+                ))
 
     # ── 10. additional run requirements (optional) ────────────────────
     xr = designed.get("extra_requirements")
@@ -1522,7 +1900,8 @@ def check_designed_problem(designed, extracted=None):
             for i, it in enumerate(xr):
                 if not isinstance(it, dict) or not it.get("requirement"):
                     checks.append(_err("extra_requirements_item", "syntax",
-                                       f"extra_requirements[{i}] must be an object with a non-empty 'requirement'"))
+                                       f"extra_requirements[{i}] must be an object "
+                                   "with a non-empty \"requirement\""))
                 elif it.get("source") not in _SOURCES:
                     checks.append(_err("source_annotation", "syntax",
                                        f"extra_requirements[{i}] is missing a valid \"source\""))
@@ -1539,7 +1918,7 @@ def check_designed_problem(designed, extracted=None):
         for i, it in enumerate(interfaces):
             if not isinstance(it, dict):
                 continue
-            if it.get("physical") not in _INTERFACE_PHYSICALS:
+            if not _inset(it.get("physical"), _INTERFACE_PHYSICALS):
                 checks.append(_err(
                     "interface_physical_enum",
                     "syntax",
@@ -1585,7 +1964,7 @@ def check_extracted_mesh(extracted):
             "extracted mesh spec is missing \"source\": \"extracted\"",
         ))
     category = extracted.get("category")
-    if category not in _MESH_CATEGORIES:
+    if not _inset(category, _MESH_CATEGORIES):
         checks.append(_err(
             "mesh_category_enum",
             "syntax",
@@ -1610,11 +1989,12 @@ def check_extracted_mesh(extracted):
             "syntax",
             "labels_found must be a list of label strings",
         ))
-    if _as_bool(extracted.get("has_syntax_errors")) is None:
+    hse = extracted.get("has_syntax_errors")
+    if _as_bool(hse) is None:
         checks.append(_err(
             "has_syntax_errors_bool",
             "syntax",
-            "has_syntax_errors must be a boolean",
+            f"mesh.extracted.has_syntax_errors must be a boolean, got {hse!r}",
         ))
     return checks
 
@@ -1628,7 +2008,6 @@ _SQUARE_RE = re.compile(
     r"\bsquare\s*\(\s*[^,]+?\s*,\s*[^,]+?\s*,\s*\[\s*([^,\]]+)\s*,\s*([^\]]+)\s*\]"
 )
 
-
 _BORDER_FULL = re.compile(r"\bborder\s+(\w+)\s*\(([^)]*)\)\s*\{(.*?)\}", re.DOTALL)
 
 
@@ -1640,22 +2019,17 @@ def _mesh_box(code):
     transforms (the unit square scaled to a x c), and generic border
     parameterisations (ALL ``real X = v;`` constants substituted, border
     endpoints evaluated with sympy) so a redesigned border mesh built on
-    the wrong constants is caught too."""
+    the wrong constants is caught too.  Commented-out lines (``// ...``)
+    are ignored — they are not part of the active mesh."""
     try:
+        code = _strip_comments(code)
         from Initialization.phi_rules import mesh_dims
 
-        L, H = mesh_dims(code or "")
+        L, H = mesh_dims(code)
         if L is not None and H is not None:
             return L, H
         sp = _get_sympy()
-        consts = {}
-        for line in (code or "").splitlines():
-            mm = re.match(r"real\s+(\w+)\s*=\s*([^;]+);", line.strip())
-            if mm:
-                try:
-                    consts[mm.group(1)] = sp.sympify(mm.group(2))
-                except Exception:
-                    pass
+        consts = _real_constants(code)
         m = _SQUARE_RE.search(code or "")
         if m:
             try:
@@ -1666,6 +2040,26 @@ def _mesh_box(code):
                 # (e.g. polar) mapping has no rectangular box; implicit
                 # unit coefficients (``[4 * x, y]``) and symbolic
                 # constants (``real L = 2.0; [L * x, L * y]``) both work
+                if (fx.diff(x, 2) == 0 and not fx.has(y)
+                        and fy.diff(y, 2) == 0 and not fy.has(x)):
+                    L2 = abs(float(fx.subs(x, 1)) - float(fx.subs(x, 0)))
+                    H2 = abs(float(fy.subs(y, 1)) - float(fy.subs(y, 0)))
+                    if L2 and H2:
+                        return L2, H2
+            except Exception:
+                pass
+        # a movemesh after square()/border remaps the reference mesh to
+        # the FINAL domain — its transform defines the active box
+        # (``Th = movemesh(Th, [2*x, y]);`` -> 2 x 1)
+        mm = re.search(
+            r"movemesh\s*\(\s*\w+\s*,\s*\[\s*([^,\]]+)\s*,\s*([^\]]+)\s*\]",
+            code or "",
+        )
+        if mm:
+            try:
+                x, y = sp.symbols("x y")
+                fx = sp.sympify(mm.group(1)).subs(consts)
+                fy = sp.sympify(mm.group(2)).subs(consts)
                 if (fx.diff(x, 2) == 0 and not fx.has(y)
                         and fy.diff(y, 2) == 0 and not fy.has(x)):
                     L2 = abs(float(fx.subs(x, 1)) - float(fx.subs(x, 0)))
@@ -1720,7 +2114,7 @@ def check_designed_mesh(designed, extracted=None, problem_context=None):
             "mesh_code_required", "syntax",
             "mesh_code must be a non-empty string",
         )]
-    if designed.get("mesh_code_source") not in _MESH_SOURCES:
+    if not _inset(designed.get("mesh_code_source"), _MESH_SOURCES):
         checks.append(_err(
             "mesh_code_source_enum",
             "syntax",
@@ -1734,9 +2128,12 @@ def check_designed_mesh(designed, extracted=None, problem_context=None):
         ex_code = extracted.get("mesh_code")
         if (ex_code and designed.get("mesh_code_source") == "extracted"
                 and code.strip() != str(ex_code).strip()):
-            checks.append(_err("mesh_code_verbatim", "syntax",
-                               "mesh_code_source is 'extracted' but the code differs from the extracted "
-                               "verbatim copy — extracted code is immutable"))
+            checks.append(_err(
+                "mesh_code_verbatim", "syntax",
+                "mesh_code_source is 'extracted' but the code differs "
+                "from the extracted verbatim copy — extracted code is "
+                "immutable",
+            ))
         # a redesigned mesh must keep the ACTIVE source mesh's DOMAIN
         # dimensions (never the coordinates of commented-out borders)
         ex_L, ex_H = _mesh_box(ex_code)
@@ -1788,18 +2185,19 @@ def check_designed_mesh(designed, extracted=None, problem_context=None):
             "labels_used contains label 10 — the material boundary is not a non-10 label",
         ))
 
+    # ACTIVE code only — commented-out lines (``// border C04...``) are
+    # not part of the mesh and must not drive ANY check below
+    active_code = _strip_comments(code)
+
     # the code must produce a mesh named Th
-    if not (re.search(r"\bmesh\s+Th\s*=", code) or
-            (("buildmesh" in code or "square" in code) and re.search(r"\bTh\b", code))):
+    if not (re.search(r"\bmesh\s+Th\s*=", active_code) or
+            (("buildmesh" in active_code or "square" in active_code)
+             and re.search(r"\bTh\b", active_code))):
         checks.append(_err(
             "mesh_produces_Th",
             "syntax",
             "mesh_code must produce a mesh variable named Th",
         ))
-
-    # ACTIVE borders only — commented-out borders (``// border C04...``)
-    # are not part of the mesh and must not drive the checks
-    active_code = re.sub(r"//[^\n]*", "", code)
     # every border in the code must carry a label (any assignment form —
     # plain `label=2` or conditional `label=(t>0.5)?2:1`; whitespace is
     # excluded from the RHS so a dangling `label = ;` still fails)
@@ -1834,7 +2232,7 @@ def check_designed_mesh(designed, extracted=None, problem_context=None):
     edge_by_name = {e.get("name"): e for e in edges if isinstance(e, dict) and e.get("name")}
     for m in _BORDER_RE.finditer(active_code):
         name, body = m.group(1), m.group(2)
-        lab = re.search(r"label\s*=\s*(\d+)", body)
+        labs = _labels_in_text(body)
         e = edge_by_name.get(name)
         if e is None:
             checks.append(_err(
@@ -1842,11 +2240,11 @@ def check_designed_mesh(designed, extracted=None, problem_context=None):
                 "syntax",
                 f"border {name!r} in mesh_code is missing from edges",
             ))
-        elif lab and str(e.get("label")) != lab.group(1):
+        elif labs and str(e.get("label")) not in labs:
             checks.append(_err("edges_label_match", "syntax",
                                f"edges entry {name!r} label "
                                f"{e.get('label')!r} does not match the "
-                               f"code label {lab.group(1)!r}"))
+                               f"code label(s) {labs}"))
     edge_labels = {str(e.get("label")) for e in edges if isinstance(e, dict) and e.get("label")}
     missing = set(labels_used) - edge_labels
     if missing:
@@ -1864,23 +2262,30 @@ def check_designed_mesh(designed, extracted=None, problem_context=None):
     if isinstance(problem_context, dict):
         opt = problem_context.get("optimization_config")
         if isinstance(opt, dict):
+            bf_list = opt.get("boundary_labels")
+            ff_list = opt.get("fixed_labels")
             wanted = {
                 str(l)
-                for l in ((opt.get("boundary_labels") or [])
-                          + (opt.get("fixed_labels") or []))
-            }
+                for l in ((bf_list if isinstance(bf_list, list) else [])
+                          + (ff_list if isinstance(ff_list, list) else []))
+            } - {"0"}  # label 0 = no-effect placeholder (never a real boundary)
             if wanted - set(labels_used):
                 checks.append(_err("problem_labels_in_mesh", "syntax",
                                    f"problem boundary/fixed labels not "
                                    f"in mesh labels_used: "
                                    f"{sorted(wanted - set(labels_used))}"))
-        for i, b in enumerate(problem_context.get("boundaries") or []):
+        for i, b in enumerate(_designed_boundaries(problem_context)):
             # label 10 (material boundary) is deliberately NOT in
-            # labels_used — skip it in the cross-file check
+            # labels_used, and label 0 is the no-effect placeholder —
+            # both are skipped in the cross-file check
             if (isinstance(b, dict) and b.get("label") and str(b["label"]) != "10"
+                    and str(b["label"]) != "0"
                     and str(b["label"]) not in labels_used):
-                checks.append(_err("problem_labels_in_mesh", "syntax",
-                                   f"problem boundaries[{i}] label {b.get('label')!r} not in mesh labels_used"))
+                checks.append(_err(
+                    "problem_labels_in_mesh", "syntax",
+                    f"problem boundaries[{i}] label {b.get('label')!r} "
+                    "not in mesh labels_used",
+                ))
     return checks
 
 

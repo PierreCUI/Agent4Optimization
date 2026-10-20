@@ -5,7 +5,7 @@ name = 'linear diffusion'
 
 Th = Domain('D', 'Th')
 
-u = ScalarField('u', P2, Th, '0.0', 3, kelvin)
+u = ScalarField('u', P2, Th, '0.0', 3, unit=kelvin)
 testu = ScalarField(r'\delta u', P2, Th)
 
 f = Constant('f', -10.0, 'source', Watt / meter ** 3)

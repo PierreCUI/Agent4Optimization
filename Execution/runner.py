@@ -130,10 +130,12 @@ def _tail_ff_console(stream: str) -> str:
     )
 
 
-def run_problem(main_py: Path, workdir: Path = None, auto_render: bool = True,
-                history_log=None, history_label: str = "") -> dict:
+def run_single(main_py: Path, workdir: Path = None, auto_render: bool = True,
+               history_log=None, history_label: str = "") -> dict:
     """
-    Run *main_py* through AutoFreeFEM then FreeFEM.
+    Run *main_py* through AutoFreeFEM then FreeFEM — ONE execution in
+    *workdir* (no sweep).  The sweep entry point is ``run_problem``;
+    the reflection probes call this function directly.
 
     *auto_render* controls the trailing MinTh.vtu -> PNG render.  The
     parallel reflection probes pass False and render their own final
@@ -297,12 +299,26 @@ def run_problem(main_py: Path, workdir: Path = None, auto_render: bool = True,
                 rec["console_err_code"] = ff["console_err_code"]
             freefem_records.append(rec)
 
+    # a machine-readable dead-run signal for the reflection loop: when
+    # FreeFEM never ran, say WHY (python crash vs no optimize*.edp) —
+    # the serial reflector's execution gate reads this back from
+    # run_result.json on disk
+    py_rc = str(py_result.get("return_code") or "")
+    if py_rc == "0" and not edp_files:
+        ff_warning = ("python phase rc=0 but no optimize*.edp was emitted "
+                      "— FreeFEM never ran")
+    elif py_rc != "0":
+        ff_warning = f"python phase failed (rc={py_rc}) — FreeFEM never ran"
+    else:
+        ff_warning = ""
+
     result = {
         "autofreefem": {
             "python": py_result,
             "files_before": files_before,
             "files_after": files_after,
             "edp_files": edp_files,
+            "warning": ff_warning,
         },
         "freefem": freefem_records,
     }
@@ -386,3 +402,253 @@ def run_problem(main_py: Path, workdir: Path = None, auto_render: bool = True,
             pass
 
     return result
+
+
+# ======================================================================
+# sweep (Stage 6): workdir/temp/diffv0_beta/<penalty>/diff_<D>_v0_<V>/
+# ======================================================================
+
+# The sweep ranges are the 32-suite historical values — the elasticity
+# cases swept ell, the thermal cases swept beta (note: DIFFERENT).
+_SWEEP_DIFFUSIONS = [1e-2, 1e-3, 1e-4, 1e-5]
+_SWEEP_V0S = [2e-3, 2e-4, 2e-5, 2e-6]
+_SWEEP_PENALTIES_ELASTICITY = [1.0, 2.5, 5.0, 10.0]   # ell
+_SWEEP_PENALTIES_THERMAL = [25.0, 50.0, 100.0, 500.0]  # beta
+
+_MATERIAL_COST_RE = re.compile(
+    r"material.{0,30}cost|cost.{0,30}material|volume cost|Lagrange multiplier",
+    re.I,
+)
+
+
+def _sweep_meta(workdir: Path) -> tuple:
+    """(level_prefix, penalty_values, penalty_name, main_text)"""
+    main_text = (workdir / "main.py").read_text(encoding="utf-8",
+                                                errors="replace")
+    is_elasticity = bool(re.search(r"\bVectorField\s*\(", main_text))
+    if is_elasticity:
+        level_prefix, values = "ell", _SWEEP_PENALTIES_ELASTICITY
+    else:
+        level_prefix, values = "beta", _SWEEP_PENALTIES_THERMAL
+    penalty_name = ""
+    for m in re.finditer(
+        r"([A-Za-z_]\w*)\s*=\s*Constant\s*\([^,]+,\s*[^,]+,\s*'([^']*)'",
+        main_text,
+    ):
+        if _MATERIAL_COST_RE.search(m.group(2)):
+            penalty_name = m.group(1)
+            break
+    if not penalty_name:
+        penalty_name = "ell" if is_elasticity else "beta"
+    return level_prefix, values, penalty_name, main_text
+
+
+def _sweep_main(main_text: str, penalty_name: str, penalty_value: float,
+                diffusion: float, v0: float) -> str:
+    """The sweep overwrites the three axes in the PYTHON copy only."""
+    t = re.sub(
+        r"(" + re.escape(penalty_name) + r"\s*=\s*Constant\s*\([^,]*,\s*)"
+        r"[^,]*(\s*,)",
+        lambda m: m.group(1) + repr(penalty_value) + m.group(2),
+        main_text, count=1,
+    )
+    t = re.sub(r"\bdiffusion\s*=\s*[-+0-9.eE]+",
+               f"diffusion={diffusion:.6g}", t, count=1)
+    t = re.sub(r"\bv0\s*=\s*[-+0-9.eE]+",
+               f"v0={v0:.6g}", t, count=1)
+    return t
+
+
+def _cell_objective(cell_dir: Path):
+    for f in sorted(cell_dir.glob("objective*.txt")):
+        try:
+            lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+            if len(lines) > 1 and "," in lines[-1]:
+                return float(lines[-1].split(",")[1])
+        except (ValueError, IndexError, OSError):
+            continue
+    return None
+
+
+def _cell_name(diffusion: float, v0: float) -> str:
+    return f"diff_{diffusion:.0e}_v0_{v0:.0e}"
+
+
+def _level_name(prefix: str, penalty: float) -> str:
+    return f"{prefix}_{penalty:g}"
+
+
+def _run_cell(workdir: Path, root: Path, prefix: str, penalty: float,
+              diffusion: float, v0: float, penalty_name: str,
+              main_text: str, auto_render: bool) -> dict:
+    level = root / _level_name(prefix, penalty)
+    cell = level / _cell_name(diffusion, v0)
+    cell.mkdir(parents=True, exist_ok=True)
+    cell_main = cell / "main.py"
+    cell_main.write_text(
+        _sweep_main(main_text, penalty_name, penalty, diffusion, v0),
+        encoding="utf-8", newline="\n",
+    )
+    mesh_src = workdir / "mesh.txt"
+    if mesh_src.exists():
+        shutil.copy2(mesh_src, cell / "mesh.txt")
+    # the nonlinear timeout factor reads initial.json from the run dir —
+    # the sweep cells must carry it too (2026-10-19)
+    spec_src = workdir / "initial.json"
+    if spec_src.exists():
+        shutil.copy2(spec_src, cell / "initial.json")
+    result = run_single(cell_main, cell, auto_render=auto_render)
+    exit_codes = [r.get("return_code") for r in result.get("freefem", [])]
+    return {
+        "penalty": penalty,
+        "penalty_name": penalty_name,
+        "diffusion": diffusion,
+        "v0": v0,
+        "dir": str(cell.relative_to(workdir)),
+        "exit_codes": exit_codes,
+        "objective": _cell_objective(cell),
+        "result": result,
+    }
+
+
+def run_problem(main_py: Path, workdir: Path = None, auto_render: bool = True,
+                history_log=None, history_label: str = "") -> dict:
+    """Stage 6 — the SWEEP execution.  No run happens in the main.py
+    directory itself: under ``workdir/temp/diffv0_beta/`` one cell is
+    created per (material penalty x diffusion x v0) combination and each
+    cell runs its own AutoFreeFEM + FreeFEM pass.  The returned dict
+    keeps the single-run shape, filled from the BEST cell (lowest final
+    objective), plus the ``sweep`` summary; ``run_result.json`` in
+    *workdir* carries the same aggregate."""
+    if workdir is None:
+        workdir = main_py.parent
+    check_tools()
+    setup_environment()
+
+    prefix, penalties, penalty_name, main_text = _sweep_meta(workdir)
+    root = workdir / "temp" / "diffv0_beta"
+    root.mkdir(parents=True, exist_ok=True)
+
+    cells = [(p, d, v)
+             for p in penalties
+             for d in _SWEEP_DIFFUSIONS
+             for v in _SWEEP_V0S]
+    # USER RULE 2026-10-17: ONLY this first-execution sweep may reach
+    # configs.MAX_SWEEP_CELLS (reflection groups are capped separately
+    # by configs.MAX_REFLECTION_GROUP)
+    cells = cells[: _cfg.MAX_SWEEP_CELLS]
+    print(f"[sweep] {prefix} x diffusion x v0 = {len(cells)} cells "
+          f"(cap={_cfg.MAX_SWEEP_CELLS}, workers={_cfg.SWEEP_WORKERS})")
+
+    records = {}
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=_cfg.SWEEP_WORKERS) as ex:
+        futs = {
+            ex.submit(_run_cell, workdir, root, prefix, p, d, v,
+                      penalty_name, main_text, auto_render): (p, d, v)
+            for p, d, v in cells
+        }
+        for fut in as_completed(futs):
+            p, d, v = futs[fut]
+            try:
+                rec = fut.result()
+            except (Exception, SystemExit) as e:
+                # SystemExit (e.g. check_tools' FATAL path when WSL is
+                # temporarily down) must become a per-cell error — a
+                # transient tool failure must not kill the whole sweep
+                # after the other cells finished
+                rec = {"penalty": p, "diffusion": d, "v0": v,
+                       "error": f"{type(e).__name__}: {e}"}
+            records[_cell_name(d, v) + f"|{_level_name(prefix, p)}"] = rec
+            obj = rec.get("objective")
+            print(f"  [sweep] {_level_name(prefix, p):>10} {_cell_name(d, v):>24} "
+                  f"exit={rec.get('exit_codes')} obj={obj}", flush=True)
+
+    # best cell = lowest final objective among cells that produced one
+    def _key(item):
+        o = item.get("objective")
+        return o if o is not None else float("inf")
+    ranked = sorted(
+        (r for r in records.values() if r.get("result")),
+        key=_key,
+    )
+    best = ranked[0] if ranked else {}
+    best_res = best.get("result", {})
+
+    summary = {
+        "sweep": {
+            "prefix": prefix,
+            "penalty_name": penalty_name,
+            "penalties": penalties,
+            "diffusions": _SWEEP_DIFFUSIONS,
+            "v0s": _SWEEP_V0S,
+            "cells": records,
+            "best_cell": best.get("dir"),
+            "best_objective": best.get("objective"),
+        },
+        "autofreefem": best_res.get("autofreefem", {}),
+        "freefem": best_res.get("freefem", []),
+    }
+
+    try:
+        summary_path = root / f"diffv0_{prefix}_summary.json"
+        summary_path.write_text(
+            json.dumps(summary, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+    try:
+        (workdir / "run_result.json").write_text(
+            json.dumps(summary, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+    # USER RULE (2026-10-15): at the END of execution, BEFORE reflection —
+    # keep ONLY the MinTh design files in results/ (promote the best
+    # cell's MinTh there) and empty tmp/ (the folders stay).
+    def _finalize_case():
+        res = workdir / "results"
+        res.mkdir(parents=True, exist_ok=True)
+        if best.get("dir"):
+            bres = workdir / best["dir"] / "results"
+            for vt in sorted(bres.glob("*MinTh.vtu")):
+                shutil.copy2(vt, res / vt.name)
+        for f in res.iterdir():
+            if f.name.endswith("MinTh.vtu"):
+                continue
+            try:
+                f.unlink() if f.is_file() else shutil.rmtree(f)
+            except OSError:
+                pass
+        tmp = workdir / "tmp"
+        if tmp.exists():
+            for p in tmp.iterdir():
+                try:
+                    p.unlink() if p.is_file() else shutil.rmtree(p)
+                except OSError:
+                    pass
+
+    try:
+        _finalize_case()
+    except Exception as e:
+        warnings.warn(f"case finalize failed: {e}")
+
+    if history_log is not None:
+        try:
+            from history import record as record_history
+
+            record_history(
+                history_log,
+                "run_problem_sweep",
+                label=history_label or "Execution/run_problem (sweep)",
+                input_text=main_text,
+                output_text=json.dumps(summary, indent=2,
+                                       ensure_ascii=False, default=str),
+            )
+        except Exception as e:
+            warnings.warn(f"history record failed: {e}")
+
+    return summary

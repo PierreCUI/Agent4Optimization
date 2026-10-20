@@ -59,6 +59,10 @@ from autofreefem.units import *
 The ``name`` variable is used by autofreefem to generate include filenames.
 **Never use underscores** — use spaces instead.  autofreefem will convert
 spaces to underscores internally where needed.
+NO UNDERSCORES in ANY identifier that enters the FreeFEM code: the name
+string, Domain names/mesh variables, field symbols, Constant latex and
+Parameter names must all be underscore-free (FreeFEM identifiers cannot
+contain underscores).
 
 ```python
 name = 'linear Diffusion'     # spaces, NOT underscores
@@ -75,35 +79,90 @@ Label 999 is ALWAYS the evolving level-set boundary reference.  Meshes
 with holes mark the void as region 3: ``int[int] re = [0,3]; Th =
 change(Th, reft=re)``.
 
+mesh.txt: when the domain is built with ``buildmesh(...)``, the borders
+joined by the plus-chain MUST be listed in COUNTER-CLOCKWISE order and
+connected head-to-tail — each border's end point (its t-range end)
+equals the NEXT border's start point (its t-range start), and the last
+border's end point equals the first border's start point (the chain
+closes).  A reversed border, a gap between two borders, or a
+non-closing chain breaks the mesh generation — reorder or reverse the
+borders (never the labels) to restore the counter-clockwise closed
+chain.
+
 ### Scalar fields
 ```python
-u = ScalarField('u', 'P2', Th, '0.', 3, kelvin)       # Dirichlet on label 3
-testu = ScalarField(r'\\delta u', 'P2', Th)          # test function
+u = ScalarField('u', 'P2', Th, '0.', 3, unit=kelvin)   # Dirichlet on label 3
+testu = ScalarField(r'\\delta u', 'P2', Th)            # test function
 ```
 
 fe_space is a SCALAR space, P1 or P2 (bare, optionally quoted) — the
 DSL expands it per component, so NEVER write a list like [P2, P2].
 
-The FULL ScalarField form is ``ScalarField(name, fe_space, domain,
-dirichlet_value, dirichlet_labels, unit)`` — the dirichlet value and
-labels are OPTIONAL (omit them when the field carries no Dirichlet).
-WHEN THERE IS NO DIRICHLET VALUE, the unit MUST be the KEYWORD
-``unit=``: positionally, slot 4 is the dirichlet value, and a unit
-placed there is printed into the .edp as ``BaseUnit(...)`` — FreeFEM
-cannot compile it.  Correct: ``ScalarField('T', P2, Th, unit=kelvin)``;
-WRONG: ``ScalarField('T', P2, Th, kelvin)``.  Same for VectorField
-(``VectorField('u', P2, Th, unit=meter)``).
+ScalarField/VectorField declarations have EXACTLY THREE valid
+structures:
+  a. ``ScalarField(name, fe_space, domain)`` — a TEST function
+     (test functions NEVER take a unit or Dirichlet values);
+  b. ``ScalarField(name, fe_space, domain, unit=UNIT)`` — a physical
+     field WITHOUT Dirichlet conditions;
+  c. ``ScalarField(name, fe_space, domain, VALUE, LABEL, unit=UNIT)``
+     — a physical field WITH Dirichlet conditions.
+The unit is ALWAYS the ``unit=`` KEYWORD, never positional: a unit
+placed positionally is printed into the .edp as ``BaseUnit(...)`` and
+FreeFEM cannot compile it.  Correct:
+``ScalarField('T', P2, Th, '0.', 3, unit=kelvin)``; WRONG:
+``ScalarField('T', P2, Th, '0.', 3, kelvin)``.  Same for VectorField.
 A SINGLE Dirichlet label is passed BARE (``3``); several labels go in a
 list (``[1, 2]``) — one value on several labels stays one declaration.
-Declare each field with the type the spec gives it — ScalarField for
-scalar fields, VectorField for vector fields — including in multi-field
-coupling problems.
+A COMPONENT-WISE Dirichlet condition (the spec's ``dirichlet_conditions``
+with a SINGLE component, e.g. u_x = 0 on label 5) is transcribed with
+pen PENALTY terms in the weak form — NOT with ``BoundaryFunction``:
+BoundaryFunction components must be numeric strings or FreeFEM
+expressions, because a component that references the field's own
+symbol as a bare identifier (the old ``BoundaryFunction('u_x',
+'0.')`` idiom) emits the FreeFEM initializer ``[ux, uy] = [ux, 0.]``
+which references ux inside its own declaration and does NOT compile.
+A scalar VALUE pins ALL components — never use one for a
+single-component condition, and never invent keywords like
+boundary_functions= / dirichlet= / bcs= (the DSL has none).
+A test function's fe_space must EQUAL its tested field's fe_space (a P2
+field is tested by a P2 test function, a P1 field by a P1 test
+function) — a field/test fe_space mismatch is an ERROR.
+Declare each field with the type ITS PHYSICS gives it — ScalarField for
+scalar quantities (temperature, ...) and VectorField for vector
+quantities (displacement, ...) — INDEPENDENT of whether the problem is
+single- or multi-physics; the spec's designed type (scalar|vector) is
+authoritative.
 
 ### Vector fields
 ```python
-u = VectorField('u', 'P2', Th, '0.', 4, meter)      # Dirichlet on label 4
-testu = VectorField(r'\\delta u', 'P2', Th)           # test function
+u = VectorField('u', 'P2', Th, '0.', 4, unit=meter)  # Dirichlet on label 4
+testu = VectorField(r'\\delta u', 'P2', Th)             # test function
 ```
+
+### Weak-form DSL rules (all hard-checked — a violation is rejected)
+
+- Fields are NOT subscriptable: never write ``u[0]``/``v[1]`` — use
+  ``inner(u, ex())`` / ``inner(u, ey())`` for component projection.
+- Each ``dsx`` term carries ONE boundary label — a bare int or a
+  digit string (``dsx(term, Th, 4)`` / ``dsx(term, Th, '4')``).
+  Never '1,3,5' or [1,3,5] — one dsx term per label.
+- VECTOR fields never take raw gradients in inner/inner2:
+  ``inner(grad(u), grad(v))`` crashes codegen, and the emitted
+  ``inner2(grad(u), grad(v))`` (the μ ∇u:∇v form) is numerically
+  unstable with the boundary penalties.  The viscous term MUST be the
+  2μ ε:ε Expression form:
+  ```python
+  strain = Expression('ε', (grad(u) + transpose(grad(u))) / 2)
+  strainTest = Expression('ε(v)', (grad(v) + transpose(grad(v))) / 2)
+  # weak form:  2 * mu * inner2(strain, strainTest)   (NOT inner2(grad(u), grad(v)))
+  ```
+  SCALAR fields are unaffected (``inner(grad(T), grad(testT))`` is
+  fine).
+- A label in a field's dirichlet_labels must NOT also appear in a
+  dsx boundary term: the emitted on(label, u=0) OVERRIDES the
+  weak-form term, so a penalty inlet on such a label is DEAD
+  (u = 0 there).  Penalty-enforced boundaries (inlets with nonzero
+  values) are NOT listed in dirichlet_labels.
 
 ### Constants
 ```python
@@ -112,6 +171,19 @@ nu = Constant(r'\\nu', <spec value>, 'Poisson ratio', '-')
 ```
 (The values shown are placeholders — transcribe the SPEC's numerical
 values and units exactly; never reuse an example's numbers.)
+
+A Dirichlet penalty constant (``pen``) must sit in [1e7, 1e15] — 1e7
+dominates the divergence penalty (1e4) and the viscous operator with
+~1e-3 inlet error; never tgv.  The pen value must ALWAYS be written in
+scientific notation (``1.0e7``, ``1.0e15``) — never a plain decimal
+like ``10000000.0``.
+
+DESIGNED tunables are NOT validated or preserved: when the spec marks
+the material penalty (beta/ell/Afac), hmin, hmax, diffusion, v0 or phi
+as designed, a later stage OVERWRITES them with canonical values
+(material penalty 1, hmin d/200, hmax d/20, v0 1e-6, diffusion 0.1,
+phi a scaled checkerboard) — transcribe the spec's values as-is; do
+not fight them.
 
 ### Parameters and Symbols
 

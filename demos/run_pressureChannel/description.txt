@@ -1,0 +1,39 @@
+Flow through a Pressure-Driven Channel
+
+This is the pressure-driven channel problem of long ducts and porous
+media: instead of an inlet and an outlet, the flow is driven along the
+channel by a uniform pressure gradient acting throughout the volume,
+and the task is to lay out the material between the walls so that the
+flow passes with the least dissipated energy. The duct is a long prism
+whose cross-section is a rectangle, so the problem is treated in that
+cross-section.
+
+The problem is a topology optimization on a rectangle 4 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is fluid. The physics is steady, linear Stokes
+flow with one single physical field, the velocity u, a vector with a
+horizontal and a vertical component, measured in metres per second; the
+pressure is eliminated by enforcing incompressibility with a large
+penalty on the velocity divergence, and the solid regions are modelled
+as an impermeable porous medium through a Darcy damping term that
+resists the flow, so the flow naturally carves its channel through the
+fluid regions. The fluid has the dynamic viscosity 1 N s/m^2 and the
+incompressibility penalty is 10000 N s/m^2; the solid applies a Darcy
+resistance of 10000 N s/m^4 while the fluid applies none. The optimization starts from a prescribed initial design: a checkerboard pattern phi(x,y) = min(min(min((x-0.5)^2+(y-0.25)^2-0.04, (x-1.5)^2+(y-0.25)^2-0.04, (x-2.5)^2+(y-0.25)^2-0.04), min((x-3.5)^2+(y-0.25)^2-0.04, (x-0.5)^2+(y-0.75)^2-0.04, (x-1.5)^2+(y-0.75)^2-0.04)), min((x-2.5)^2+(y-0.75)^2-0.04, (x-3.5)^2+(y-0.75)^2-0.04, 10.0)), negative where the material is solid and positive where it is fluid, with about half the domain initially solid.
+
+The left edge and the right edge are free cross-sections: the flow
+crosses them with zero traction, as in a periodic channel. The bottom
+edge is a no-slip wall, both velocity components zero. The top edge is
+a no-slip wall, both velocity components zero. The flow is driven by a
+uniform body force of 50 N/m^3 pointing along the channel, representing
+the pressure gradient, acting throughout the domain. The two free
+cross-sections and the bottom wall are non-design boundaries: their
+positions are prescribed, they are frozen, and the optimizer cannot
+add or remove material on them; the top wall is a design boundary,
+where material may be attached or removed freely. The optimization goal
+is to minimize the total energy dissipated by the flow through the
+channel — the viscous dissipation of the fluid plus the Darcy damping
+of the solid regions — while using as little material as possible, a
+balance between flow performance and material cost.

@@ -5,7 +5,7 @@ name = 'linear elasticity bridge'
 
 Th = Domain('D', 'Th')
 
-u = VectorField('u', P2, Th, '0.0', [2, 4], meter)
+u = VectorField('u', P2, Th, '0.0', [2, 4], unit=meter)
 v = VectorField('v', P2, Th)
 
 f = Constant('f', -5.0, 'applied surface load', Newton / meter)

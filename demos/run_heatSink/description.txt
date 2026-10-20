@@ -1,0 +1,50 @@
+Heat Sink under Chip Heating and Mounting Pressure
+
+This is the heat sink problem of LED lighting and CPU packaging: a
+chip is bonded to the centre of the base plate and pours its waste
+heat into the metal, which conducts the heat away and sheds it to the
+air by convection from the finned face, while the assembled module
+presses down on the sink with the mounting force of its clamp.
+
+The problem is a topology optimization on a rectangle 4 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is void. The physics is steady: linear heat
+conduction for the temperature T, measured in kelvin, and linear
+elasticity for the displacement u, a vector with a horizontal and a
+vertical component, measured in metres; the two are coupled one-way —
+the temperature drives a thermal expansion strain of 3.6e-5 per kelvin
+times the temperature, subtracted from the elastic strain, so a heated
+solid region expands and pushes against its supports. The solid
+material has Young's modulus 3.2e7 N/m^2, Poisson's ratio 0.23, density
+2500 kg/m^3, thermal conductivity 1.25 W/(m K) and thermal expansion
+coefficient 3.6e-5 per kelvin; regions without material are treated as
+a weak phantom that is 1000 times softer, 1000 times less conductive
+and 1000 times less expansive than the solid. The optimization starts
+from a prescribed initial design: a checkerboard pattern of solid and
+void cells covering the rectangle, roughly half solid, with a thin
+solid strip along the top edge.
+
+The central portion of the bottom edge, between the horizontal
+positions 1.5 m and 2.5 m, is the chip contact face: it is held at the
+fixed temperature 120, the hot chip, and it is held in place by strong
+penalty springs that pull its horizontal and vertical displacements
+back to zero, for the chip itself is rigid. The remaining parts of the
+bottom edge, left and right of the chip, are insulated, so that no heat
+crosses them, and they are free of any mechanical load. The top edge
+loses heat by convection to the surrounding air at temperature 20, with
+a heat transfer coefficient h of 100 W/(m^2 K), the fins shedding heat
+to the air; the same top edge carries a uniform traction of 5000 N/m^2
+pressing downward, the mounting force of the assembled module. The left
+edge and the right edge are insulated and free. There is no body heat
+and no body force. The chip contact face is a non-design boundary: its
+position is prescribed, it is frozen, and the optimizer cannot add or
+remove material on it; every other edge — the insulated parts of the
+bottom edge, the convecting top edge and the two lateral edges — is a
+design boundary, where material may be attached or removed freely. The
+optimization goal is to minimize the elastic strain energy stored in
+the sink under the mounting pressure and the thermal expansion of the
+heated material — its compliance — while using as little material as
+possible, a balance between stiffness and material cost, and a strong
+penalty keeps the chip contact face from sliding horizontally.

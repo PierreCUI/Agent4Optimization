@@ -1,0 +1,47 @@
+Gravity Dam with Confinement-Dependent Stiffness
+
+This is the concrete gravity dam problem of hydropower and flood
+control with the confinement behaviour of rock and concrete: a massive
+wall of concrete holds back a reservoir by its own weight — the water
+presses on the upstream face and grows heavier with depth, the dam's
+weight compresses its body onto the rock foundation, and the concrete
+stiffens where it is most compressed, exactly as rock and concrete do
+under confinement. The dam is a long prism whose cross-section is a
+rectangle, so the problem is treated as plane strain in that
+cross-section.
+
+The problem is a topology optimization on a rectangle 2 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is void. The physics is steady, nonlinear
+elasticity with one single physical field, the displacement u, a vector
+with a horizontal and a vertical component, measured in metres. The
+solid's Young's modulus depends on the local volumetric strain: it is
+200 N/m^2 where the material neither compacts nor dilates, and it
+doubles at a volumetric strain of one tenth — the modulus rises with
+the square of the volumetric strain, so the rock stiffens whether it
+is compacted or dilated, the confinement hardening of rock and
+concrete; this dependence makes the state problem nonlinear. Regions
+without material are treated as a weak
+elastic solid 100 times softer than the solid at the same deformation
+state. The optimization starts from a prescribed initial design: a
+checkerboard pattern of solid and void cells covering the whole
+rectangle, roughly half solid.
+
+The left edge is the upstream face: the reservoir presses on it with a
+water pressure that grows linearly with depth, zero at the top edge
+and 10 N/m^2 at the bottom, pressing perpendicular to the face. The
+bottom edge is the rock foundation: it is held completely fixed, its
+horizontal and vertical displacements both zero. The top edge and the
+right edge, the downstream face, are free. Besides the water pressure,
+the solid material is pulled downward by its own weight, a uniform
+body force of 10 N/m^3 acting throughout the volume of every solid
+region. The pressurized upstream face and the fixed foundation are
+non-design boundaries: their positions are prescribed, they are
+frozen, and the optimizer cannot add or remove material on them; the
+top edge and the downstream face are design boundaries, where material
+may be attached or removed freely. The optimization goal is to
+minimize the elastic strain energy stored in the dam under the water
+pressure and its own weight — its compliance — while using as little
+material as possible, a balance between stiffness and material cost.

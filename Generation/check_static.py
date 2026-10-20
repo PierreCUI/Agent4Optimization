@@ -581,11 +581,11 @@ def _check_syntax(code: str) -> list:
 _CALL_SIGNATURES = {
     "ScalarField": (
         ("name", "fe_space", "domain", "dirichlet_value", "dirichlet_labels", "unit"),
-        False, 3, None,
+        False, 3, {"unit"},
     ),
     "VectorField": (
         ("name", "fe_space", "domain", "dirichlet_value", "dirichlet_labels", "unit"),
-        False, 3, None,
+        False, 3, {"unit"},
     ),
     "Domain": (("name", "mesh_variable"), True, 2, set()),
     "Constant": (("latex", "value", "description", "unit"), False, 2, None),
@@ -652,6 +652,18 @@ def _arg_is_label_list(node) -> bool:
 
 def _arg_is_str(node) -> bool:
     return isinstance(node, ast.Constant) and isinstance(node.value, str)
+
+
+def _arg_is_boundary_function(node) -> bool:
+    """A ``BoundaryFunction(x, y)`` call — the DSL's component-wise
+    Dirichlet value (a single-component condition must NOT use a scalar
+    value, which would pin ALL components)."""
+    if not isinstance(node, ast.Call):
+        return False
+    fn = node.func
+    name = fn.id if isinstance(fn, ast.Name) else (
+        fn.attr if isinstance(fn, ast.Attribute) else None)
+    return name == "BoundaryFunction"
 
 
 def _arg_is_fe_space(node) -> bool:
@@ -732,6 +744,38 @@ def _check_call_args(code: str) -> list:
             return None
 
         if func_name in ("ScalarField", "VectorField"):
+            # THREE valid declaration structures (STRUCTURE is the
+            # deterministic check's job — whether a declaration IS a
+            # physical field / test function / adjoint is the LLM
+            # review's CONTENT judgment):
+            #   a. (name, fe_space, domain)                          test function
+            #   b. (name, fe_space, domain, unit=UNIT)               field, no Dirichlet
+            #   c. (name, fe_space, domain, VALUE, LABEL, unit=UNIT) field with Dirichlet
+            # The unit is ALWAYS the unit= keyword (never positional).
+            unit_kw = any(k.arg == "unit" for k in kws)
+            if len(pos) == 4:
+                errors.append(_err_call_args(
+                    node.lineno, func_name,
+                    "4 positional arguments is not a valid structure — "
+                    "the unit is ALWAYS the unit= keyword (valid "
+                    "structures: (name, fe_space, domain) / (name, "
+                    "fe_space, domain, unit=UNIT) / (name, fe_space, "
+                    "domain, VALUE, LABEL, unit=UNIT))",
+                ))
+            elif len(pos) == 6:
+                errors.append(_err_call_args(
+                    node.lineno, func_name,
+                    "the unit is ALWAYS the unit= keyword, never the "
+                    "6th positional argument",
+                ))
+            elif len(pos) == 5 and not unit_kw:
+                errors.append(_err_call_args(
+                    node.lineno, func_name,
+                    "a field with a Dirichlet value and label must carry "
+                    "its unit: add unit=UNIT (e.g. unit=kelvin)",
+                ))
+            # other positional counts are covered by the generic
+            # too-many-positional / missing-required checks above
             fe = _slot(1)
             if fe is not None and not _arg_is_fe_space(fe):
                 errors.append(_err_call_args(
@@ -740,12 +784,15 @@ def _check_call_args(code: str) -> list:
                     f"{ast.dump(fe)[:40]}",
                 ))
             dv = _slot(3)
-            if dv is not None and not (_arg_is_number(dv) or _arg_is_str(dv)):
+            if dv is not None and not (_arg_is_number(dv)
+                                       or _arg_is_str(dv)
+                                       or _arg_is_boundary_function(dv)):
                 errors.append(_err_call_args(
                     node.lineno, func_name,
-                    "dirichlet_value must be a value (number/string) — a "
-                    "bare name here is almost always a unit misplaced in "
-                    "the dirichlet slot (use the unit= keyword instead)",
+                    "dirichlet_value must be a value (number/string) or a "
+                    "BoundaryFunction(x, y) for a component-wise condition "
+                    "— a bare name here is almost always a unit misplaced "
+                    "in the dirichlet slot (use the unit= keyword instead)",
                 ))
             dl = _slot(4)
             if dl is not None and not _arg_is_label_list(dl):
@@ -802,8 +849,13 @@ def _check_call_args(code: str) -> list:
 
 
 def _check_lagrangian(code: str, problem_spec: dict = None) -> list:
-    """Item 11 — Lagrangian is instantiated; the state/test lists match
-    the spec; the third argument is the objective; check_units=True."""
+    """Item 11 — Lagrangian is instantiated; the third argument is the
+    objective; check_units=True.  The state/test LIST MEMBERSHIP is
+    LLM-reviewed, not hard-checked: the lists must contain exactly the
+    declared physical fields and their test functions — never the
+    adjoint pair, which the DSL auto-derives (a deterministic
+    membership check cannot tell the adjoint apart from a physical
+    field)."""
     code_nc = _strip_comments(code)
     m = re.search(r"\bLagrangian\s*\(", code_nc)
     if not m:
@@ -819,42 +871,6 @@ def _check_lagrangian(code: str, problem_spec: dict = None) -> list:
     args = _top_level_split(call_text) if call_text is not None else []
     if problem_spec:
         ds = problem_spec.get("designed") or {}
-        for key, slot, label in (
-            ("fields", 0, "state field"),
-            ("test_functions", 1, "test function"),
-        ):
-            names = [
-                str(x.get("name") or "").strip()
-                for x in (ds.get(key) or [])
-                if isinstance(x, dict) and x.get("name")
-                and not (key == "fields" and _is_adjoint_field(x))
-            ]
-            if names and len(args) > slot:
-                for name in names:
-                    # the list holds VARIABLE names — match the spec
-                    # entry through its declared variable (by spec name
-                    # or by its latex first argument)
-                    x = next(
-                        (xx for xx in (ds.get(key) or [])
-                         if isinstance(xx, dict)
-                         and str(xx.get("name") or "") == name),
-                        None,
-                    )
-                    var = _field_var_name(
-                        code_nc, name, str((x or {}).get("latex") or "")
-                    ) or name
-                    if not re.search(rf"\b{re.escape(var)}\b", args[slot]):
-                        errors.append(
-                            {
-                                "check": "lagrangian",
-                                "severity": "error",
-                                "message": (
-                                    f"{label} '{name}' (variable '{var}') is "
-                                    f"missing from the Lagrangian's {key} "
-                                    f"list."
-                                ),
-                            }
-                        )
         obj = ds.get("objective_name")
         if not obj and isinstance(ds.get("objective"), dict):
             obj = ds["objective"].get("name")
@@ -1051,8 +1067,12 @@ def _check_no_comments(code: str) -> list:
     return []
 
 
-def _check_params(code: str) -> list:
-    """Deterministic parameter sanity: 0 < hmin < hmax, both finite."""
+def _check_params(code: str, problem_spec: dict = None) -> list:
+    """Deterministic parameter sanity: 0 < hmin < hmax, both finite.
+    USER RULE (2026-10-15): DESIGNED hmin/hmax are not validated."""
+    opt = ((problem_spec or {}).get("designed") or {}).get("optimization_config") or {}
+    if opt.get("hmin_source") == "designed" and opt.get("hmax_source") == "designed":
+        return []
     hmin = _setup_param_value(code, "hmin")
     hmax = _setup_param_value(code, "hmax")
     if hmin is None or hmax is None:
@@ -1072,10 +1092,14 @@ def _check_params(code: str) -> list:
     return []
 
 
-def _check_phi(code: str, mesh_txt: str = "") -> list:
+def _check_phi(code: str, mesh_txt: str = "", problem_spec: dict = None) -> list:
     """Deterministic phi checks: parses, and is NEGATIVE somewhere on
     the domain box (phi < 0 = solid — a non-negative phi everywhere
-    starts from an EMPTY design)."""
+    starts from an EMPTY design).
+    USER RULE (2026-10-15): a DESIGNED phi is not validated."""
+    opt = ((problem_spec or {}).get("designed") or {}).get("optimization_config") or {}
+    if opt.get("phi_source") == "designed":
+        return []
     phi = _extract_phi(code)
     if not phi:
         return []  # absence is the merged review's territory
@@ -1427,9 +1451,21 @@ def _check_characteristic(code: str, problem_spec: dict = None) -> list:
     return errors
 
 
-def _check_pen(code: str) -> list:
+def _check_pen(code: str, problem_spec: dict = None) -> list:
     """Rule d — when ``pen`` is used in the code, its Constant must be
-    declared with the spec's value 1e15 (never tgv)."""
+    declared in [1e7, 1e15] (never tgv), and the value must ALWAYS be
+    written in SCIENTIFIC NOTATION (1.0e7, 1.0e15 — never 10000000.0).
+    The range (not the old fixed 1e15) comes from the 2026-10-15
+    fluid-suite verification: 1e7 dominates every competing operator
+    (λdiv ~ 1e4, μ/h² ~ 1.6e3) with ~1e-3 inlet error and passes the
+    full 2-iteration smoke suite (7/7 cases); values below 1e7 leave
+    too little margin over the divergence penalty.
+    USER RULE (2026-10-15): a DESIGNED pen is not validated."""
+    ds = ((problem_spec or {}).get("designed") or {})
+    for c in ds.get("constants") or []:
+        if isinstance(c, dict) and str(c.get("name") or "").lower() == "pen" \
+                and c.get("value_source") == "designed":
+            return []
     code_nc = _strip_comments(code)
     if not re.search(r"\bpen\b", code_nc):
         return []
@@ -1440,8 +1476,9 @@ def _check_pen(code: str) -> list:
                 "check": "pen",
                 "severity": "error",
                 "message": "'pen' is used in the code but no "
-                "pen = Constant(...) is declared — declare it with the "
-                "spec's value 1e15 (the Dirichlet penalty).",
+                "pen = Constant(...) is declared — declare it with a "
+                "value in [1e7, 1e15], written in scientific notation "
+                "(the Dirichlet penalty).",
             }
         ]
     call = _call_content(code_nc, m)
@@ -1454,27 +1491,40 @@ def _check_pen(code: str) -> list:
             }
         ]
     args = _top_level_split(call)
-    value = None
-    if len(args) >= 2:
-        try:
-            value = float(args[1].strip())
-        except (TypeError, ValueError):
-            value = None
-    if value is None:
-        vm = re.search(r"\bvalue\s*=\s*([-+0-9.eE]+)", call)
+    value_text = args[1].strip() if len(args) >= 2 else ""
+    if value_text.startswith("value"):
+        vm = re.search(r"\bvalue\s*=\s*(\S+)", call)
         if vm:
-            try:
-                value = float(vm.group(1))
-            except ValueError:
-                value = None
-    if value != 1e15:
+            value_text = vm.group(1).strip().rstrip(",")
+    value = None
+    try:
+        value = float(value_text)
+    except (TypeError, ValueError):
+        value = None
+    if value_text and not re.fullmatch(
+        r"[+-]?\d+(\.\d+)?[eE][+-]?\d+", value_text
+    ):
         return [
             {
                 "check": "pen",
                 "severity": "error",
                 "message": (
-                    f"pen = Constant(..., {value!r}) — the Dirichlet penalty "
-                    f"must be the spec's value 1e15 (never tgv)."
+                    f"pen = Constant(..., {value_text!r}) — the Dirichlet "
+                    f"penalty value must ALWAYS be written in scientific "
+                    f"notation (e.g. 1.0e7, 1.0e15), never as a plain "
+                    f"decimal."
+                ),
+            }
+        ]
+    if value is None or not (1e7 <= value <= 1e15):
+        return [
+            {
+                "check": "pen",
+                "severity": "error",
+                "message": (
+                    f"pen = Constant(..., {value_text!r}) — the Dirichlet "
+                    f"penalty must sit in [1e7, 1e15] (never tgv), written "
+                    f"in scientific notation."
                 ),
             }
         ]
@@ -1561,56 +1611,6 @@ def _quoted(s: str):
     return None
 
 
-def _domain_meshvars(code_nc: str) -> dict:
-    """Map Domain name -> its mesh variable, parsed from the code."""
-    mapping = {}
-    for m in re.finditer(r"\bDomain\s*\(", code_nc):
-        call_text = _call_content(code_nc, m)
-        if call_text is None:
-            continue
-        args = _top_level_split(call_text)
-        if len(args) >= 2 and _quoted(args[0]):
-            mapping[_quoted(args[0])] = _quoted(args[1]) or args[1].strip()
-    return mapping
-
-
-def _values_equal(a, b) -> bool:
-    """Numeric-tolerant equality ('0' == '0.') with a string fallback."""
-    try:
-        return float(a) == float(b)
-    except (TypeError, ValueError):
-        return str(a) == str(b)
-
-
-def _is_adjoint_field(f: dict) -> bool:
-    """The ADJOINT state (u_tilde) is auto-derived by the DSL for linear
-    problems — the code never declares it, so the declaration check
-    skips it (its Dirichlet conditions live in the adjoint weak form,
-    the LLM review's territory)."""
-    return "tilde" in str(f.get("name") or "").lower() \
-        or "\\tilde" in str(f.get("latex") or "")
-
-
-def _test_latex_candidates(name: str) -> list:
-    """LaTeX first-argument candidates for a test-function NAME: the
-    source symbol delta_T / δT / Δu corresponds to the code declaration
-    ``testT = ScalarField(r'\\delta T', ...)`` — bridge name -> latex.
-    A name that is ALREADY latex (starts with a backslash, e.g.
-    ``\\delta T``) is its own candidate."""
-    s = str(name or "").strip()
-    if s.startswith("\\"):
-        # the name IS the latex symbol — the declaration's first
-        # argument carries it verbatim
-        return [s]
-    if s.lower().startswith("delta"):
-        rest = s[len("delta"):].lstrip("_ ").replace("_", " ")
-        return [f"\\delta {rest}"] if rest else []
-    if s.startswith(("δ", "Δ")):
-        rest = s[1:].lstrip("_ ").replace("_", " ")
-        return [f"\\delta {rest}"] if rest else []
-    return []
-
-
 def _norm_latex(s) -> str:
     """Normalise a latex symbol for COMPARISON: collapse the braces of
     single-character sub/superscripts (``\\alpha_{T}`` == ``\\alpha_T``,
@@ -1618,238 +1618,6 @@ def _norm_latex(s) -> str:
     if not isinstance(s, str):
         return s
     return re.sub(r"([_^])\{([A-Za-z0-9])\}", r"\1\2", s)
-
-
-def _match_field_call(code_nc: str, name: str, latex: str):
-    """The argument list of the field/test declaration matching *name*
-    (variable declaration) or *latex* (first argument), else None."""
-    if name and name.isidentifier():
-        m = re.search(
-            rf"\b{re.escape(name)}\s*=\s*(?:ScalarField|VectorField)\s*\(", code_nc
-        )
-        if m:
-            call_text = _call_content(code_nc, m)
-            if call_text is not None:
-                return _top_level_split(call_text)
-    for cand in ([latex] if latex else []) + _test_latex_candidates(name):
-        for m in re.finditer(r"\b(?:ScalarField|VectorField)\s*\(", code_nc):
-            call_text = _call_content(code_nc, m)
-            if call_text is None:
-                continue
-            args = _top_level_split(call_text)
-            if args and _norm_latex(_quoted(args[0])) == _norm_latex(cand):
-                return args
-    return None
-
-
-def _field_var_name(code_nc: str, name: str, latex: str):
-    """The Python variable name bound to the field/test declaration
-    matching *name* or *latex* — for the Lagrangian list check, which
-    works on variable names."""
-    if name and name.isidentifier() and re.search(
-        rf"\b{re.escape(name)}\s*=\s*(?:ScalarField|VectorField)\s*\(", code_nc
-    ):
-        return name
-    for cand in ([latex] if latex else []) + _test_latex_candidates(name):
-        for m in re.finditer(r"\b(\w+)\s*=\s*(?:ScalarField|VectorField)\s*\(", code_nc):
-            call_text = _call_content(code_nc, m)
-            if call_text is None:
-                continue
-            args = _top_level_split(call_text)
-            if args and _norm_latex(_quoted(args[0])) == _norm_latex(cand):
-                return m.group(1)
-    return None
-
-
-def _check_fields(code: str, problem_spec: dict = None) -> list:
-    """Item 5 — every PHYSICAL spec field is declared with its name,
-    fe_space, domain (the spec's domain name or its mesh variable),
-    dirichlet value and dirichlet labels.  The adjoint state (u_tilde)
-    is skipped — the DSL auto-derives it."""
-    if not problem_spec:
-        return []
-    fields = (problem_spec.get("designed") or {}).get("fields")
-    if not isinstance(fields, list):
-        return []
-    code_nc = _strip_comments(code)
-    meshvars = _domain_meshvars(code_nc)
-    errors = []
-    for f in fields:
-        if not isinstance(f, dict):
-            continue
-        if _is_adjoint_field(f):
-            # the ADJOINT field is auto-derived by the DSL — declaring
-            # it in the code is itself an error (a duplicate u_tilde
-            # would conflict with the auto-derived adjoint)
-            name = str(f.get("name") or "").strip()
-            if _match_field_call(code_nc, name, str(f.get("latex") or "")) \
-                    is not None:
-                errors.append(
-                    {
-                        "check": "fields",
-                        "severity": "error",
-                        "message": (
-                            f"the ADJOINT field '{name}' is declared in the "
-                            f"code but the DSL auto-derives it for linear "
-                            f"problems — remove its declaration."
-                        ),
-                    }
-                )
-            continue
-        name = str(f.get("name") or "").strip()
-        if not name:
-            continue
-        args = _match_field_call(code_nc, name, str(f.get("latex") or ""))
-        if args is None:
-            errors.append(
-                {
-                    "check": "fields",
-                    "severity": "error",
-                    "message": (
-                        f"field '{name}' is not declared "
-                        f"({name} = ScalarField/VectorField(...))."
-                    ),
-                }
-            )
-            continue
-        fe = str(f.get("fe_space") or "")
-        if fe and (len(args) < 2 or args[1].strip().strip("'\"") != fe):
-            errors.append(
-                {
-                    "check": "fields",
-                    "severity": "error",
-                    "message": f"field '{name}' fe_space must be {fe} "
-                    f"(the spec's value).",
-                }
-            )
-        dom = str(f.get("domain") or "")
-        if dom and (len(args) < 3
-                    or (args[2].strip() != dom
-                        and meshvars.get(dom) != args[2].strip())):
-            errors.append(
-                {
-                    "check": "fields",
-                    "severity": "error",
-                    "message": f"field '{name}' domain must be {dom} "
-                    f"(the spec's value, or its mesh variable).",
-                }
-            )
-        dv = f.get("dirichlet_value")
-        if dv not in (None, ""):
-            code_dv = _quoted(args[3]) if len(args) > 3 else None
-            if code_dv is None or not _values_equal(code_dv, dv):
-                errors.append(
-                    {
-                        "check": "fields",
-                        "severity": "error",
-                        "message": (
-                            f"field '{name}' Dirichlet value must be "
-                            f"{dv} (the spec's value)."
-                        ),
-                    }
-                )
-        dl = f.get("dirichlet_labels")
-        if isinstance(dl, list) and dl and args is not None:
-            call_text = ",".join(args)
-            missing = [str(l) for l in dl if str(l) not in call_text]
-            if missing:
-                errors.append(
-                    {
-                        "check": "fields",
-                        "severity": "error",
-                        "message": (
-                            f"field '{name}' Dirichlet labels {missing} "
-                            f"are missing from its declaration."
-                        ),
-                    }
-                )
-        # a SINGLE Dirichlet label is passed bare (3), never wrapped in
-        # a one-element list ([3])
-        if args is not None:
-            call_text = ",".join(args)
-            for lm in re.finditer(r"\[\s*['\"]?(\d+)['\"]?\s*\]", call_text):
-                errors.append(
-                    {
-                        "check": "fields",
-                        "severity": "error",
-                        "message": (
-                            f"field '{name}': a single Dirichlet label "
-                            f"must be bare ({lm.group(1)}), not "
-                            f"[{lm.group(1)}]."
-                        ),
-                    }
-                )
-    return errors
-
-
-def _check_test_functions(code: str, problem_spec: dict = None) -> list:
-    """Item 6 — every spec test function is declared with the tested
-    field's fe_space, the same domain, and NO extras (no unit, no
-    Dirichlet values)."""
-    if not problem_spec:
-        return []
-    tests = (problem_spec.get("designed") or {}).get("test_functions")
-    if not isinstance(tests, list):
-        return []
-    code_nc = _strip_comments(code)
-    meshvars = _domain_meshvars(code_nc)
-    errors = []
-    for t in tests:
-        if not isinstance(t, dict):
-            continue
-        name = str(t.get("name") or "").strip()
-        if not name:
-            continue
-        args = _match_field_call(code_nc, name, str(t.get("latex") or ""))
-        if args is None:
-            errors.append(
-                {
-                    "check": "test_functions",
-                    "severity": "error",
-                    "message": (
-                        f"test function '{name}' is not declared "
-                        f"({name} = ScalarField/VectorField(...))."
-                    ),
-                }
-            )
-            continue
-        fe = str(t.get("fe_space") or "")
-        if fe and (len(args) < 2 or args[1].strip().strip("'\"") != fe):
-            errors.append(
-                {
-                    "check": "test_functions",
-                    "severity": "error",
-                    "message": (
-                        f"test function '{name}' fe_space must be {fe} — "
-                        f"it MUST match the physical field it tests."
-                    ),
-                }
-            )
-        dom = str(t.get("domain") or "")
-        if dom and (len(args) < 3
-                    or (args[2].strip() != dom
-                        and meshvars.get(dom) != args[2].strip())):
-            errors.append(
-                {
-                    "check": "test_functions",
-                    "severity": "error",
-                    "message": f"test function '{name}' domain must be {dom}.",
-                }
-            )
-        if len(args) > 3:
-            errors.append(
-                {
-                    "check": "test_functions",
-                    "severity": "error",
-                    "message": (
-                        f"test function '{name}' carries extra arguments "
-                        f"({args[3].strip()}) — test functions take ONLY "
-                        f"(name, fe_space, domain), never a unit or "
-                        f"Dirichlet values."
-                    ),
-                }
-            )
-    return errors
 
 
 def _check_constants(code: str, problem_spec: dict = None) -> list:
@@ -2076,17 +1844,352 @@ def _check_mesh_region3(code: str, mesh_txt: str = "") -> list:
     return []
 
 
+# ======================================================================
+# fluid-suite DSL findings (2026-10-15) — deterministic checks retrofitted
+# from the out-of-pipeline verification of the 8 Stokes cases
+# ======================================================================
+
+
+def _declared_fields(code: str) -> dict:
+    """Map field name -> (kind, dirichlet_labels) from the ScalarField/
+    VectorField declarations.  kind is 'scalar'|'vector'; labels is a
+    set of ints (empty when the declaration has no label slot)."""
+    fields = {}
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return fields
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        name = fn.id if isinstance(fn, ast.Name) else None
+        if name not in ("ScalarField", "VectorField"):
+            continue
+        if not node.args or not isinstance(node.args[0], ast.Constant) \
+                or not isinstance(node.args[0].value, str):
+            continue
+        kind = "scalar" if name == "ScalarField" else "vector"
+        labels = set()
+        if len(node.args) >= 5 and node.args[4] is not None:
+            lab = node.args[4]
+            if _arg_is_int(lab):
+                labels.add(int(lab.value))
+            elif isinstance(lab, ast.Constant) and isinstance(lab.value, str) \
+                    and lab.value.isdigit():
+                labels.add(int(lab.value))
+            elif isinstance(lab, (ast.List, ast.Tuple)):
+                for e in lab.elts:
+                    if _arg_is_int(e):
+                        labels.add(int(e.value))
+                    elif isinstance(e, ast.Constant) and isinstance(e.value, str) \
+                            and e.value.isdigit():
+                        labels.add(int(e.value))
+        fields[node.args[0].value] = (kind, labels)
+    return fields
+
+
+def _dsx_label_args(code: str) -> list:
+    """Every dsx(...) third argument (the boundary label), as text —
+    with the integrand text (first argument) alongside."""
+    out = []
+    code_nc = _strip_comments(code)
+    for m in re.finditer(r"\bdsx\s*\(", code_nc):
+        call = _call_content(code_nc, m)
+        if call is None:
+            continue
+        args = _top_level_split(call)
+        if len(args) >= 3:
+            out.append((args[2].strip(), args[0], m.start()))
+    return out
+
+
+def _check_dsx_labels(code: str) -> list:
+    """The DSL's dsx accepts ONE boundary label per term — a bare int or
+    a digit string.  A comma string ('1,3,5') or a list ([1,3,5]) makes
+    the library crash (TypeError during codegen, verified 2026-10-15)."""
+    errors = []
+    for label, _integrand, _pos in _dsx_label_args(code):
+        bare = label.strip("'\"").strip()
+        if re.fullmatch(r"-?\d+", bare):
+            continue
+        errors.append({
+            "check": "dsx_labels",
+            "severity": "error",
+            "message": (
+                f"dsx(..., {label}) — the DSL takes ONE boundary label per "
+                f"dsx term (a bare int or digit string).  {label!r} is not "
+                f"a single label (comma strings and lists crash the "
+                f"library) — split it into one dsx term per label."
+            ),
+        })
+    return errors
+
+
+def _check_field_subscript(code: str) -> list:
+    """VectorField/ScalarField objects are not subscriptable — u[0]/
+    v[1] raise TypeError at codegen.  Component projection must use
+    inner(u, ex()) / inner(u, ey())."""
+    fields = _declared_fields(code)
+    if not fields:
+        return []
+    errors = []
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Subscript):
+            continue
+        if isinstance(node.value, ast.Name) and node.value.id in fields:
+            errors.append({
+                "check": "field_subscript",
+                "severity": "error",
+                "line": node.lineno,
+                "message": (
+                    f"{node.value.id}[...] — field subscripting is not "
+                    f"supported by the DSL (TypeError at codegen).  Use "
+                    f"inner({node.value.id}, ex()) / inner({node.value.id}, "
+                    f"ey()) for component projection."
+                ),
+            })
+    return errors
+
+
+def _check_gradient_forms(code: str) -> list:
+    """Raw gradient arguments of VECTOR fields are broken in the viscous
+    terms: inner(grad(u), grad(v)) makes the library emit an
+    ImmutableDenseNDimArray and crash in the dx expansion; the emitted
+    inner2(grad(u), grad(v)) (= the μ ∇u:∇v form) is numerically
+    unstable with the 1e6-1e15 boundary penalties (max|u| ~ 1e8 in
+    FreeFEM, verified by minimal-system isolation 2026-10-15).  The
+    stable form is the 2μ ε:ε Expression form.  Scalar fields
+    (inner(grad(T), grad(testT))) are unaffected."""
+    fields = _declared_fields(code)
+    errors = []
+    code_nc = _strip_comments(code)
+
+    def _is_vector(field_name: str) -> bool:
+        return field_name in fields and fields[field_name][0] == "vector"
+
+    # inner(grad(<v>), ...) — a vector grad inside inner crashes codegen
+    for m in re.finditer(r"\binner\s*\(\s*grad\s*\(\s*([A-Za-z_]\w*)\s*\)", code_nc):
+        if _is_vector(m.group(1)):
+            errors.append({
+                "check": "gradient_forms",
+                "severity": "error",
+                "message": (
+                    f"inner(grad({m.group(1)}), ...) — inner() with a "
+                    f"VECTOR field's raw gradient crashes codegen (the "
+                    f"library expands it into an array object).  Use the "
+                    f"ε:ε Expression form instead: strain = "
+                    f"Expression('ε', (grad({m.group(1)}) + "
+                    f"transpose(grad({m.group(1)}))) / 2) and "
+                    f"2 * mu * inner2(strain, strain_test)."
+                ),
+            })
+    # inner2(grad(<v>), grad(<w>)) — the unstable ∇u:∇v viscous form.
+    # The second grad must be a BARE argument: when an operator follows
+    # (grad(v) + transpose(...)), the form is a mixed/symmetric variant
+    # the LLM reviewer judges — no hard flag (prefix-match guard).
+    for m in re.finditer(
+        r"\binner2\s*\(\s*grad\s*\(\s*([A-Za-z_]\w*)\s*\)\s*,\s*grad\s*\(\s*([A-Za-z_]\w*)\s*\)(?!\s*[+\-*/])",
+        code_nc,
+    ):
+        if _is_vector(m.group(1)) or _is_vector(m.group(2)):
+            errors.append({
+                "check": "gradient_forms",
+                "severity": "error",
+                "message": (
+                    f"inner2(grad({m.group(1)}), grad({m.group(2)})) — the "
+                    f"raw ∇u:∇v viscous form is numerically unstable with "
+                    f"the boundary penalties (FreeFEM solve blows up to "
+                    f"max|u| ~ 1e8; verified 2026-10-15).  Use the 2μ ε:ε "
+                    f"Expression form: strain = Expression('ε', "
+                    f"(grad({m.group(1)}) + transpose(grad({m.group(1)}))) "
+                    f"/ 2) and 2 * mu * inner2(strain, strain_test)."
+                ),
+            })
+    return errors
+
+
+def _check_dirichlet_penalty_overlap(code: str) -> list:
+    """A field's dirichlet label AND a pen PENALTY dsx term on the same
+    label: the emitted on(label, u=0) OVERRIDES the weak-form term
+    (verified in FreeFEM 2026-10-15 — on() wins over a 1e15 penalty).
+    A nonzero enforcement (inlet penalty) on such a label is DEAD — the
+    solution is identically zero there.  Only pen-containing terms are
+    hard-checked (the verified dead-inlet signature); springs (alpha)
+    and loads on other fields' labels are left to the LLM review — the
+    reference examples carry such patterns legitimately."""
+    fields = _declared_fields(code)
+    if not fields:
+        return []
+    errors = []
+    seen = set()
+    for label, integrand, _pos in _dsx_label_args(code):
+        bare = label.strip("'\"")
+        if not re.fullmatch(r"-?\d+", bare):
+            continue  # dsx_labels reports the malformed label itself
+        if not re.search(r"\bpen\b", integrand):
+            continue  # only the Dirichlet-penalty signature is hard-checked
+        lab = int(bare)
+        for fname, (_kind, labels) in fields.items():
+            if lab in labels and (fname, lab) not in seen:
+                seen.add((fname, lab))
+                errors.append({
+                    "check": "dirichlet_penalty_overlap",
+                    "severity": "error",
+                    "message": (
+                        f"label {lab} is in {fname}'s dirichlet_labels AND "
+                        f"carries a pen penalty term in the weak form — the "
+                        f"emitted on({lab}, ...) overrides the penalty, so "
+                        f"a nonzero enforcement there is DEAD (u = 0).  "
+                        f"Remove {lab} from {fname}'s dirichlet_labels "
+                        f"(keep the penalty term), or drop the redundant "
+                        f"dsx term."
+                    ),
+                })
+    return errors
+
+
+def _check_boundaryfunction_selfref(code: str) -> list:
+    """BoundaryFunction components must be NUMERIC strings ('0.', '1.').
+    A component referencing the field's own symbol — the GEN-A idiom
+    BoundaryFunction('u_x', '0.') — emits the FreeFEM initializer
+    [ux, uy] = [ux, 0.], which references ux inside its own
+    declaration and does not compile (verified 2026-10-15: 'Compile
+    error, before token ux').  A single-component Dirichlet must be
+    enforced via pen penalty terms in the weak form instead."""
+    errors = []
+    code_nc = _strip_comments(code)
+    for m in re.finditer(
+        r"\bBoundaryFunction\s*\(", code_nc,
+    ):
+        call = _call_content(code_nc, m)
+        if call is None:
+            continue
+        args = _top_level_split(call)
+        # Only BARE IDENTIFIERS are broken: they reference the field's own
+        # symbol in the emitted initializer.  Numeric strings ('0.'),
+        # FreeFEM expressions ('(label == 6) ? 1. : 0.'), and the FreeFEM
+        # coordinate names x/y/z (which are always defined) compile fine.
+        _ALLOWED_IDENTIFIERS = {"x", "y", "z"}
+        bad = [a.strip() for a in args
+               if re.fullmatch(r"[A-Za-z_]\w*", a.strip().strip("'\""))
+               and a.strip().strip("'\"") not in _ALLOWED_IDENTIFIERS]
+        if bad:
+            errors.append({
+                "check": "boundaryfunction_selfref",
+                "severity": "error",
+                "message": (
+                    f"BoundaryFunction({bad[0]}, ...) — the component "
+                    f"{bad[0]!r} references the field's own symbol; the "
+                    f"emitted initializer (e.g. [ux, uy] = [ux, 0.]) "
+                    f"references ux inside its own declaration and does "
+                    f"not compile in FreeFEM.  BoundaryFunction components "
+                    f"must be numeric strings or FreeFEM expressions, "
+                    f"never a bare field-symbol identifier; enforce a "
+                    f"single-component Dirichlet via pen penalty terms in "
+                    f"the weak form instead."
+                ),
+            })
+    return errors
+
+
+def _check_no_underscores(code: str, mesh_txt: str = "") -> list:
+    """USER RULE (2026-10-15): identifiers that enter the FreeFEM code
+    VERBATIM must NOT contain underscores (FreeFEM identifiers cannot
+    contain them).  Scope: the mesh's border names, the problem name
+    (it names the varf symbols — the library strips spaces/dashes but
+    NOT underscores), and the Domain mesh variable.  Field symbols and
+    Constant latex are excluded: the library strips underscores from
+    them before emission (rep_freefem)."""
+    errors = []
+    code_nc = _strip_comments(code)
+    # mesh border names
+    for name in re.findall(r"\bborder\s+([A-Za-z][A-Za-z0-9_]*)\s*\(", mesh_txt):
+        if "_" in name:
+            errors.append({
+                "check": "no_underscores",
+                "severity": "error",
+                "message": (
+                    f"border name {name!r} contains an underscore — "
+                    f"FreeFEM identifiers cannot contain underscores "
+                    f"(use concatenated lowercase or CamelCase)."
+                ),
+            })
+    # the problem name (names the varf symbols in the .edp)
+    for m in re.finditer(r"\bname\s*=\s*'([^']*)'", code_nc):
+        if "_" in m.group(1):
+            errors.append({
+                "check": "no_underscores",
+                "severity": "error",
+                "message": (
+                    f"the problem name {m.group(1)!r} contains an "
+                    f"underscore — FreeFEM identifiers cannot contain "
+                    f"underscores (use spaces, never underscores)."
+                ),
+            })
+    # the Domain mesh variable (written verbatim into every fespace)
+    for m in re.finditer(r"\bDomain\s*\(\s*[^,]+,\s*'([^']*)'", code_nc):
+        if "_" in m.group(1):
+            errors.append({
+                "check": "no_underscores",
+                "severity": "error",
+                "message": (
+                    f"the Domain mesh variable {m.group(1)!r} contains "
+                    f"an underscore — FreeFEM identifiers cannot "
+                    f"contain underscores."
+                ),
+            })
+    return errors
+
+
 # ── registry ──────────────────────────────────────────────────────────
 
+def _check_integral_ratio(code: str) -> list:
+    """Division BY a domain/boundary integral (e.g. dx(a, Th) / dx(1, Th)).
+
+    The DSL rewrites a/b as a * b**(-1) — the LaTeX printer crashes on
+    the rewritten Pow(dx(...), -1) form inside the library's adjoint
+    printing (verified 2026-10-17: TypeError 'dx._latex() got an
+    unexpected keyword argument exp', the whole Python phase dies, no
+    .edp).  USER DECISION 2026-10-17: the crash is FreeFEM/library's
+    fault — we accept it and hard-block the pattern unconditionally
+    (the form is rewritten as ONE integral instead).
+    """
+    errors = []
+    for m in re.finditer(r"/\s*(?:dx|dy|dsx|dx2|dy2)\s*\(", code):
+        errors.append({
+            "check": "integral_ratio",
+            "severity": "error",
+            "message": (
+                "division by a domain/boundary integral "
+                f"(... / {m.group(0).strip()} ...) — the LaTeX "
+                "printer crashes on the rewritten Pow(dx, -1) form and "
+                "the run dies before emitting any .edp.  Rewrite as ONE "
+                "integral (a constant denominator folds inside, e.g. "
+                "dx(a, Th) / dx(1, Th) == dx(a / Area(Th), Th))."
+            ),
+        })
+    return errors
+
+
 _CHECKS = [
+    _check_integral_ratio,     # dx(a)/dx(b) crashes the LaTeX printer
     _check_import,             # item 1
     _check_syntax,
     _check_call_args,          # deterministic per-call argument validation
     _check_structure,
     _check_name,               # item 2
     _check_domain,             # items 4 + 7
-    _check_fields,             # item 5
-    _check_test_functions,     # item 6
+    # item 5 (FIELDS) and item 6 (TEST FUNCTIONS) are deliberately NOT
+    # hard-checked: whether the physical fields / test functions are
+    # declared correctly — and whether the ADJOINT pair stays undeclared
+    # (the DSL auto-derives it) — is the LLM review's job.  A
+    # deterministic declaration check cannot reliably tell the adjoint
+    # apart from a physical field and kept contradicting the review.
     _check_constants,          # item 8
     _check_extracted_constants,  # item 8
     _check_pen,                # item 8 (giant penalty)
@@ -2107,6 +2210,14 @@ _CHECKS = [
     _check_mesh_defined,       # item 13
     _check_mesh_region3,       # item 13 (pre-cut holes -> region 3)
     _check_no_comments,        # item 14
+    # fluid-suite DSL findings (2026-10-15 retrofits)
+    _check_dsx_labels,         # dsx: ONE label per term, never '1,3,5' / lists
+    _check_field_subscript,    # u[0] is not subscriptable — inner(u, ex())
+    _check_gradient_forms,     # vector grads: ε:ε form, never raw ∇u:∇v
+    _check_dirichlet_penalty_overlap,  # on() overrides same-label dsx terms
+    _check_boundaryfunction_selfref,   # non-numeric components -> broken init
+    # user rules (2026-10-15)
+    _check_no_underscores,     # FreeFEM-bound identifiers never carry '_'
 ]
 
 
@@ -2190,14 +2301,55 @@ repairs them).
 4. DOMAIN — shape hard-checked.  Review: multi-domain
    problems declare one Domain per spec region with the right mesh
    variables.
-5. FIELDS — declaration/fe_space/domain/dirichlet hard-checked.
-   Review: the UNIT argument matches the spec's unit (AutoFreeFEM
+5. FIELDS — the deterministic check validates ONLY the declaration
+   STRUCTURE: exactly one of (name, fe_space, domain) /
+   (name, fe_space, domain, unit=UNIT) /
+   (name, fe_space, domain, VALUE, LABEL, unit=UNIT) /
+   (name, fe_space, domain, BoundaryFunction(x, y), LABEL, unit=UNIT),
+   the unit ALWAYS the unit= keyword.  BoundaryFunction components
+   must be numeric strings ('0.', '1.') or FreeFEM expressions — a
+   component that references the field's own symbol as a BARE
+   identifier (e.g. ``BoundaryFunction('u_x', '0.')``) emits the
+   FreeFEM initializer ``[ux, uy] = [ux, 0.]``, which references ux
+   inside its own declaration and does NOT compile.
+   A SINGLE-component Dirichlet condition is therefore transcribed
+   with pen PENALTY terms in the weak form, NOT with
+   BoundaryFunction.  A scalar VALUE pins ALL components and is an
+   ERROR for a single-component condition — never report the
+   BoundaryFunction form as an invalid keyword structure.  The
+   dirichlet_labels of a field must NOT contain a label that also
+   carries a weak-form boundary term (dsx on the same label): the
+   emitted on(label, u=0) OVERRIDES the weak-form term — a nonzero
+   enforcement (penalty inlet) on such a label is DEAD (the solution
+   is identically zero there).  Review (content): every PHYSICAL state
+   field of the spec is declared with the spec's name/latex,
+   fe_space (P1/P2 per the spec), domain (the spec's domain name or
+   its mesh variable), Dirichlet value and Dirichlet labels (a
+   single label passed BARE, e.g. 3, never [3]); a PHYSICAL field
+   declaration MUST be structure b or c — it ALWAYS carries its
+   unit via unit=UNIT matching the spec's unit (AutoFreeFEM
    CAPITALIZED syntax — Newton, Watt, Pascal, meter, kelvin;
-   dimensionless '-'), and the latex names match the spec; the
-   ADJOINT field (u_tilde) is auto-derived by the DSL — declaring it
-   in the code is an issue.
-6. TEST FUNCTIONS — hard-checked (fe_space matching the tested field,
-   no extras).  (Nothing more to review.)
+   dimensionless '-'); a physical field declared as structure a
+   (without unit=) is an ERROR.  The declaration kind follows the
+   field's PHYSICS — ScalarField for scalar quantities
+   (temperature, ...), VectorField for vector quantities
+   (displacement, ...) — INDEPENDENT of whether the problem is
+   single- or multi-physics; the latex names match the spec.  The
+   ADJOINT field is auto-derived by the DSL for linear problems —
+   the code must NOT declare it; the adjoint's Dirichlet conditions
+   live in the adjoint weak form.
+6. TEST FUNCTIONS — the deterministic check validates ONLY the
+   declaration STRUCTURE (name, fe_space, domain).  Review
+   (content): every PHYSICAL field's test function is declared with
+   the same domain and NOTHING else; a TEST FUNCTION declaration
+   MUST be structure a — a test function carrying a unit or
+   Dirichlet values (structure b or c) is an ERROR.  FE_SPACE
+   CONSISTENCY (the precision of the pair): the test function's
+   fe_space MUST EQUAL its tested physical field's fe_space — a P2
+   field is tested by a P2 test function, a P1 field by a P1 test
+   function; a field/test fe_space MISMATCH is an ERROR.  The
+   ADJOINT's test function is auto-derived together with the
+   adjoint field and must NOT be declared either.
 7. MULTI-DOMAIN — declarations hard-checked.  Review: the interface
    CONTINUITY conditions (value / normal-flux) are implemented between
    the domains per the spec's interfaces.
@@ -2206,7 +2358,11 @@ repairs them).
    code could not run otherwise; descriptions and units match the
    spec; a pen penalty exists ONLY where the spec's weak forms carry
    it (the FreeFEM workaround for multi-valued Dirichlet) — its value
-   is 1e15, never tgv, never added by the code on its own.
+   sits in [1e7, 1e15], never tgv, never added by the code on its
+   own, and is ALWAYS written in scientific notation (1.0e7, 1.0e15 —
+   never 10000000.0).  1e7 dominates the divergence penalty (1e4) and
+   the viscous operator with ~1e-3 inlet error — the old fixed 1e15
+   is NOT required.
 9. CHARACTERISTIC FUNCTION — hard-checked (full latex decoration,
    strong=1, weak given).  Review: the weak value matches the spec's
    weak_value ('1/100' solid mechanics, '1/10' pure thermal).
@@ -2215,23 +2371,57 @@ repairs them).
     (equivalent notation counts, textual identity does not); no
     placeholders, no dropped terms; the objective J matches the
     spec's objective_name/description.
-11. LAGRANGIAN — structure hard-checked (lists/objective/check_units).
-    Review: the weak forms implement the spec's Lagrangian (objective,
-    state, adjoint, shape derivative) with the spec's SIGNS and
-    concrete boundary labels; Dirichlet conditions come from the
-    FIELD declarations; pen penalty terms appear ONLY where the
-    spec's weak forms carry them.
+11. LAGRANGIAN — structure hard-checked (args are lists, third
+    argument is the objective, check_units=True).  Review: the state
+    and test lists contain EXACTLY the declared physical state fields
+    and their test functions — never the adjoint pair, which the DSL
+    auto-derives; the weak forms implement the spec's Lagrangian
+    (objective, state, adjoint, shape derivative) with the spec's
+    SIGNS and concrete boundary labels; Dirichlet conditions come
+    from the FIELD declarations; pen penalty terms appear ONLY where
+    the spec's weak forms carry them.  DSL weak-form rules (verified
+    2026-10-15, hard-checked where possible): fields are NOT
+    subscriptable — u[0]/v[1] must be inner(u, ex())/inner(u, ey());
+    each dsx term carries ONE boundary label (bare int or digit
+    string — '1,3,5' or a list crashes codegen); VECTOR fields never
+    take raw gradients in inner/inner2 — inner(grad u, grad v)
+    crashes codegen and the inner2(grad u, grad v) (= μ ∇u:∇v) form
+    is numerically unstable with the boundary penalties (FreeFEM
+    solve blows up to max|u| ~ 1e8) — the viscous term MUST be the
+    2μ ε:ε Expression form (strain = (grad u + transpose(grad u)) / 2
+    as an Expression, then 2 * mu * inner2(strain, strain_test));
+    scalar-field gradients inner(grad T, grad testT) are unaffected.
 12. SETUP_OPTIMIZATION — hard-checked (name/mesh='mesh.txt'/iterations/
     phi/labels equal the spec EXACTLY; all parameters present; no
     illegal kwargs; hmin<hmax).  Parameter MAGNITUDES are NOT
     reviewed — the spec's designed values are used as-is.
     show_weak_material must be False (enforced deterministically).
+    FLOW PROBLEMS (Stokes with Darcy damping α_s ~ 1e4): the
+    shape-velocity field from the gradient identification has scale
+    ~α_s·h/diffusion (the Darcy bulk term's shape perturbation) — the
+    per-step advect displacement v0·|V| must stay ≲ 0.05 (about the
+    interface thickness), so diffusion ≥ 0.1 and v0 small enough that
+    v0·(α_s·h/diffusion) ≲ 0.05; a first iteration whose advect
+    leaves phi ALL-POSITIVE (mmg/trunc 'mshptg' crash, FreeFEM exit
+    6) means v0 is too large for the velocity scale — reduce v0 or
+    raise diffusion.  hmin/hmax are FROZEN — never tune them for
+    this.
 13. MESH — existence and the region-3 mark hard-checked (label-10
     hole borders require ``int[int] re = [0, 3]; Th = change(Th,
     reft=re);`` right after the mesh definition).  Review against the
     spec's mesh: the resolution n resolves the geometric features
     (several elements per feature), the labels match the spec's edges
     (names/roles), and the code only uses labels the mesh has.
+    BUILDMESH CHAIN ORIENTATION — when mesh.txt builds the domain with
+    ``buildmesh(...)``, the borders joined by the plus-chain MUST be
+    listed in COUNTER-CLOCKWISE order and connected head-to-tail:
+    each border's end point (its t-range end) must EQUAL the next
+    border's start point (its t-range start), and the last border's
+    end point must equal the first border's start point (the chain
+    closes).  A chain with a reversed border, a gap between two
+    borders, or a non-closing loop is an ERROR — the repair must
+    reorder or reverse the borders (never the labels) to restore the
+    counter-clockwise closed chain.
 14. COMMENTS — hard-checked.  (Nothing to review.)
 Return ONE JSON:
 {{"ok": true, "issues": []}}
@@ -2345,11 +2535,36 @@ spec, never re-design it:
   fixedLabels = FROZEN, boundaryLabels = NORMAL-LOCKED, a boundary in
   NEITHER list = FREE — two empty lists mean every non-10 boundary is
   FREE; never expand a FREE boundary into an explicit list.
+- Field declarations have exactly four valid structures:
+  (name, fe_space, domain) / (name, fe_space, domain, unit=UNIT) /
+  (name, fe_space, domain, VALUE, LABEL, unit=UNIT) /
+  (name, fe_space, domain, BoundaryFunction(x, y), LABEL, unit=UNIT).
+  BoundaryFunction components must be numeric strings ('0.', '1.')
+  or FreeFEM expressions: a component referencing the field's own
+  symbol as a BARE identifier (e.g. ``BoundaryFunction('u_x',
+  '0.')``) emits the FreeFEM initializer ``[ux, uy] = [ux, 0.]``
+  that references ux inside its own declaration and does NOT
+  compile.  A SINGLE-component Dirichlet is transcribed with pen
+  PENALTY terms in the weak form, NOT with BoundaryFunction.  A
+  scalar VALUE pins ALL components — never use one for a
+  single-component condition, and never invent keywords like
+  boundary_functions= / dirichlet= / bcs= (the DSL has none).
 - Dirichlet conditions come from the FIELD declarations; pen penalty
   terms appear ONLY where the spec's weak forms carry them (the
   FreeFEM workaround for multi-valued Dirichlet) — fix the code to
   match the spec, never add or remove a penalty on your own; the
-  penalty value is 1e15, never tgv.
+  penalty value sits in [1e7, 1e15], never tgv, and is ALWAYS
+  written in scientific notation (1.0e7, 1.0e15 — never 10000000.0).
+- DSL weak-form rules (verified 2026-10-15): fields are NOT
+  subscriptable — replace u[0]/v[1] with inner(u, ex())/inner(u,
+  ey()); each dsx term carries ONE boundary label — replace '1,3,5'
+  or [1,3,5] with one dsx term per label; VECTOR fields never take
+  raw gradients in inner/inner2 — replace inner(grad u, grad v) and
+  inner2(grad u, grad v) with the 2μ ε:ε Expression form (strain =
+  Expression('ε', (grad(u) + transpose(grad(u))) / 2), then 2 * mu *
+  inner2(strain, strain_test)); a label in a field's dirichlet_labels
+  that also appears in a dsx term is overridden by on() — remove it
+  from the labels when the dsx term is the real boundary condition.
 - The code must contain NO comments.
 - NEVER repeat a mistake already made in a previous round — the repair
   history in the user message lists the earlier errors and what each

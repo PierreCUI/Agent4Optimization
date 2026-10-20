@@ -1,0 +1,47 @@
+Flow through a Casting Runner System under Gravity
+
+This is the runner system problem of metal casting: the molten metal
+is poured into the mould through a sprue on top, and it must be guided
+through the runner channels to the outlet gates, gravity pulling the
+metal downward all the way, and the task is to lay out the runner
+system inside the mould so that the metal fills it with the least
+dissipated energy. The mould is a long prism whose cross-section is a
+rectangle, so the problem is treated in that cross-section.
+
+The problem is a topology optimization on a rectangle 4 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is fluid. The physics is steady, linear Stokes
+flow with one single physical field, the velocity u, a vector with a
+horizontal and a vertical component, measured in metres per second; the
+pressure is eliminated by enforcing incompressibility with a large
+penalty on the velocity divergence, and the solid regions are modelled
+as an impermeable porous medium through a Darcy damping term that
+resists the flow, so the flow naturally carves its channel through the
+fluid regions. The fluid has the dynamic viscosity 1 N s/m^2 and the
+incompressibility penalty is 10000 N s/m^2; the solid applies a Darcy
+resistance of 10000 N s/m^4 while the fluid applies none. The optimization starts from a prescribed initial design: a checkerboard pattern phi(x,y) = min(min(min((x-0.5)^2+(y-0.25)^2-0.04, (x-1.5)^2+(y-0.25)^2-0.04, (x-2.5)^2+(y-0.25)^2-0.04), min((x-3.5)^2+(y-0.25)^2-0.04, (x-0.5)^2+(y-0.75)^2-0.04, (x-1.5)^2+(y-0.75)^2-0.04)), min((x-2.5)^2+(y-0.75)^2-0.04, (x-3.5)^2+(y-0.75)^2-0.04, 10.0)), negative where the material is solid and positive where it is fluid, with about half the domain initially solid.
+
+The top edge is split into segments: the central segment, between the
+horizontal positions 1.5 and 2.5, is the sprue inlet, where the fluid
+enters with a uniform prescribed velocity of 1 m/s pointing downward
+into the domain, both velocity components fixed, while the remaining
+parts of the top edge on both sides of the sprue are no-slip walls,
+both velocity components zero. The bottom edge is split into segments:
+two outlet gates, the first between the positions 0.5 and 1.2 and the
+second between the positions 2.8 and 3.5, are outlets, where the flow
+leaves freely with zero traction, while the remaining parts of the
+bottom edge are no-slip walls, both velocity components zero. The left
+edge and the right edge are no-slip walls, both velocity components
+zero. Besides the inflow, the fluid is pulled downward by its own
+weight, a uniform body force of 9810 N/m^3 acting throughout the
+domain, representing gravity. The sprue inlet, the outlet gates and all
+the wall segments are non-design boundaries: their positions are
+prescribed, they are frozen, and the optimizer cannot add or remove
+material on them; the material layout inside the domain is free. The
+optimization goal is to minimize the total energy dissipated by the
+flow through the runner system — the viscous dissipation of the fluid
+plus the Darcy damping of the solid regions — while using as little
+material as possible, a balance between flow performance and material
+cost.

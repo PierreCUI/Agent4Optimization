@@ -18,7 +18,8 @@ from Generation.select_examples import load_selected_examples, select_examples
 from info import Info
 from Initialization import collect_input_files, run_spec_generation, safety_check
 from Initialization.example_initialization import run_example_initialization
-from Reflection.reflector import run_reflection
+from Initialization.spec_checks import format_errors
+from Reflection.reflector_serial import run_reflection
 
 # ======================================================================
 # pipeline stages
@@ -48,9 +49,12 @@ def _stage_copy_inputs(info: Info) -> None:
 def _stage_parse(agent, info: Info) -> bool:
     """Run the one-loop spec generation (both JSONs together).
 
-    Returns False when the problem or the mesh spec ended up empty (the
-    loop exceeded its repair budget — no spec means code generation has
-    nothing to work on, so stop instead of generating on an empty spec).
+    Returns False when the loop did NOT pass — the repair budget was
+    exhausted or the review failed — so the case aborts instead of
+    shipping a spec with known defects downstream (the remaining issues
+    are written to spec_issues.txt for human review).  Also returns
+    False when a spec ended up empty (nothing for code generation to
+    work on).
     """
     print("  [Parse] spec generation (initial + mesh together) ...", end=" ", flush=True)
     t0 = time.time()
@@ -58,6 +62,14 @@ def _stage_parse(agent, info: Info) -> bool:
         agent, info.input_files, info.problem_name, output_dir=info.results_dir,
         history_log=info.results_dir / "history.txt",
     )
+    if not specs.get("_passed"):
+        print("FAILED: spec generation did not pass "
+              "(repair budget exhausted or review failed) — "
+              "aborting the case for human review.")
+        issues = specs.get("_issues") or []
+        if issues:
+            info.save_text("spec_issues.txt", format_errors(issues))
+        return False
     info.problem_spec = specs.get("initial") or {}
     info.mesh_spec = specs.get("mesh") or {}
     if not (info.problem_spec or {}).get("designed"):
@@ -177,7 +189,9 @@ def _stage_static_check(agent, info: Info) -> None:
 
 def _stage_run(info: Info) -> None:
     """
-    Run the generated code through AutoFreeFEM + FreeFEM.
+    Run the generated code through the AutoFreeFEM + FreeFEM SWEEP —
+    the runs happen in results/<case>/temp/diffv0_beta/<penalty>/
+    diff_<D>_v0_<V>/, never in the case directory itself.
 
     run_execution persists run_result.json to the results dir itself —
     the reflection loop reads it back from disk (single writer).
@@ -187,7 +201,7 @@ def _stage_run(info: Info) -> None:
         print("  [Run] main.py not found — skipping.")
         return
 
-    print("  [Run] executing …")
+    print("  [Run] executing sweep …")
     t0 = time.time()
     result = run_execution(
         main_py,
@@ -197,14 +211,48 @@ def _stage_run(info: Info) -> None:
     )
     dt = time.time() - t0
 
-    py_rc = result["autofreefem"]["python"]["return_code"]
-    edp_files = result["autofreefem"]["edp_files"]
+    sweep = result.get("sweep") or {}
+    best = sweep.get("best_cell")
     print(
-        f"  [Run] Python exit={py_rc}, {len(edp_files)} .edp, {len(result['freefem'])} FreeFEM runs ({dt:.0f}s)"
+        f"  [Run] sweep: {len(sweep.get('cells') or {})} cells, "
+        f"best={best} obj={sweep.get('best_objective')} ({dt:.0f}s)"
     )
-    for ff in result["freefem"]:
-        if ff["return_code"] != "0":
-            print(f"    FreeFEM {ff['edp_file']}: exit={ff['return_code']}")
+    for ff in result.get("freefem") or []:
+        if ff.get("return_code") != "0":
+            print(f"    best-cell FreeFEM {ff.get('edp_file')}: exit={ff['return_code']}")
+
+
+def _stage_normalize_design(info: Info) -> None:
+    """Stage 5.5 — user rule (2026-10-15): the DESIGNED tunables are
+    overwritten with canonical values after the repair loop and BEFORE
+    execution; extracted values are never touched.
+
+    - material penalty -> 1
+    - hmin -> d/200, hmax -> d/20  (d = the shorter side of the mesh's
+      containing rectangle)
+    - v0 -> 1e-6, diffusion -> 0.1
+    - phi -> a checkerboard scaled from the diffusion/elasticity baselines
+    """
+    print("  [Normalize] designed parameters ...", end=" ", flush=True)
+    t0 = time.time()
+    from Generation.normalize_design_params import normalize_code
+
+    mesh_txt = ""
+    mesh_file = info.results_dir / "mesh.txt"
+    if mesh_file.exists():
+        mesh_txt = mesh_file.read_text(encoding="utf-8", errors="replace")
+    code, changes = normalize_code(
+        info.generated_code, info.problem_spec, mesh_txt)
+    if changes:
+        info.generated_code = code
+        info.save_text("main.py", info.generated_code)
+        shown = "; ".join(changes[:4])
+        if len(changes) > 4:
+            shown += f"; ... ({len(changes)} total)"
+        print(f"-> {shown} ({time.time() - t0:.1f}s)", flush=True)
+    else:
+        print(f"-> nothing designed to normalize ({time.time() - t0:.1f}s)",
+              flush=True)
 
 
 # ======================================================================
@@ -286,6 +334,9 @@ def main(agent, problem_name: str) -> None:
 
     # ── Stage 5: Static Check & Auto-Fix + Parameter Review ─────
     _stage_static_check(agent, info)
+
+    # ── Stage 5.5: normalize DESIGNED tunables (user rule) ──────
+    _stage_normalize_design(info)
 
     # ── Stage 6: Execution ──────────────────────────────────────
     _stage_run(info)

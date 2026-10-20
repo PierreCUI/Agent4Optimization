@@ -1,0 +1,39 @@
+Deep Beam on Two Supports
+
+This is the simply supported deep beam problem of bridge deck girders
+and mezzanine floor beams: a long girder spans between two supports
+near its ends, a distributed load bears on its whole top, and all the
+bending it takes must be carried down to the two supports. The girder
+is a long prism whose cross-section is a rectangle, so the problem is
+treated as plane strain in that cross-section.
+
+The problem is a topology optimization on a rectangle 2 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is void. The physics is steady, linear elasticity
+with one single physical field, the displacement u, a vector with a
+horizontal and a vertical component, measured in metres. The solid is a
+linear elastic material with Young's modulus 200 N/m^2 and Poisson's
+ratio 0.3; regions without material are treated as a weak elastic solid
+100 times softer than the real material. The optimization starts from a
+prescribed initial design: a checkerboard pattern of solid and void
+cells covering the whole rectangle, roughly half solid.
+
+There is no body force. The bottom edge carries the two supports: two
+short segments near the bottom corners, each 0.2 m long, are the
+bearing seats. The left seat holds both the vertical and the horizontal
+displacement at zero, a pin support; the right seat holds only the
+vertical displacement at zero and lets the beam slide horizontally over
+it, a roller support; the remaining part of the bottom edge between the
+seats is free. The top edge carries the deck load: a uniform traction
+of 10 N/m^2 pressing downward over the whole edge, perpendicular to it.
+The left edge and the right edge are free. The two support seats and
+the loaded top edge are non-design boundaries: their positions are
+prescribed, they are frozen, and the optimizer cannot add or remove
+material on them; the free middle of the bottom edge and the two
+lateral edges are design boundaries, where material may be attached or
+removed freely. The optimization goal is to minimize the elastic strain
+energy stored in the beam under the deck load — its compliance — while
+using as little material as possible, a balance between stiffness and
+material cost.

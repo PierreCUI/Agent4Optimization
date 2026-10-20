@@ -1,28 +1,44 @@
 """Coarse error classifier + deterministic fix-eligibility gates.
 
-Error taxonomy (the reflection loop's five categories):
+Error taxonomy (the serial reflection loop's THREE categories):
   1. syntax_error       — imports, call signatures/arguments, spelling
                           and capitalisation, fixed contents
                           (check_units / show_weak_material /
                           iterations), the extracted/designed rules,
-                          and any other Python/FreeFEM-reported syntax
-                          problem.
+                          the mesh.txt buildmesh chain (borders not
+                          counter-clockwise / not head-to-tail / not
+                          closing) AND the FreeFEM mesh-generation
+                          failures it causes (Bamg 899, degenerate
+                          triangles, "mesh too fine" assertions,
+                          buildmesh/readmesh errors), any other
+                          Python/FreeFEM-reported syntax problem, and
+                          the NO-UNDERSCORE rule (USER RULE
+                          2026-10-15): identifiers entering the FreeFEM
+                          code — the problem name, Domain mesh
+                          variables, border names — must not contain
+                          underscores.
   2. formula_error      — every FORMULA: intermediate formulas, the J
                           formula, the Lagrangian formulas, and the
                           nonlinear formulas.
-  3. design_error       — design VALUES: physical-parameter numbers,
-                          Afac (ell), CharacteristicFunction values,
-                          phi, the three-way boundary labels, each
-                          boundary's physical properties (including
-                          the ScalarField/VectorField Dirichlet
-                          conditions and the pen penalty implementation
-                          — pen's EXISTENCE is design, its VALUE is the
-                          fixed convention 1e15), and the mesh border
-                          definitions.
-  4. fe_parameter_error — finite-element parameters: hmin/hmax/
-                          diffusion/v0, the mesh resolution, and each
-                          field's precision (P1/P2).
-  5. other_error        — the fallback.
+  3. design_error       — design VALUES AND finite-element parameters
+                          (merged, USER RULE 2026-10-15):
+                          physical-parameter numbers, Afac (ell),
+                          CharacteristicFunction values, phi, the
+                          three-way boundary labels, each boundary's
+                          physical properties (including the
+                          ScalarField/VectorField Dirichlet conditions
+                          and the pen penalty implementation — pen's
+                          EXISTENCE is design, its VALUE is the fixed
+                          convention 1e15), the mesh border definitions
+                          (geometry and labels — the buildmesh chain's
+                          orientation / head-to-tail connectivity is
+                          syntax_error, above), hmin/hmax/diffusion/v0,
+                          the mesh resolution, and each field's
+                          precision (P1/P2).
+
+There is NO other/fallback category (USER RULE 2026-10-15): each
+detector reports ONLY its own scope — a result that fails for a reason
+OUTSIDE the scope must PASS that detector.
 
 The model judges the category from the ERROR BEHAVIOUR (crash,
 non-convergence, oscillation, wrong result, degenerate result) plus ALL
@@ -70,12 +86,12 @@ def _canonical_label(text: str) -> str:
     if "designerror" in t:
         return "design_error"
     if "feparametererror" in t or "feparameter" in t:
-        return "fe_parameter_error"
-    if "othererror" in t:
-        return "other_error"
+        # USER RULE (2026-10-15): fe_parameter_error is MERGED into
+        # design_error — the serial loop has only THREE categories.
+        return "design_error"
     # NO prose heuristics — no keyword-to-category wiring: a reply
-    # without a canonical label word is "unknown" and the callers fall
-    # back to other_error uniformly.
+    # without a canonical label word is "unknown" (there is NO
+    # other/fallback category any more — the caller maps it).
     return "unknown"
 
 
@@ -119,16 +135,16 @@ def coarse_classify(
         "syntax_error",
         "formula_error",
         "design_error",
-        "fe_parameter_error",
-        "other_error",
     ]
 
     if label not in valid:
+        # USER RULE (2026-10-15): NO other/fallback category — an
+        # unlabelled reply goes to the merged design_error.
         warnings.warn(
             f"coarse_classify: unknown label '{label}' (raw: {raw[:60]!r}). "
-            f"Falling back to 'other_error'."
+            f"Falling back to 'design_error'."
         )
-        label = "other_error"
+        label = "design_error"
 
     return label
 

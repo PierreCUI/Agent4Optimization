@@ -1,0 +1,50 @@
+Induction-Heated Billet under a Press
+
+This is the induction heating problem of hot forging and rolling: an
+electromagnetic coil induces eddy currents inside a metal billet and
+heats it volumetrically from within before the press or the rollers
+shape it, the surface is cooled by water, and the press force bears
+down on the billet. The billet is a long prism whose cross-section is a
+rectangle, so the problem is treated as plane strain in that
+cross-section.
+
+The problem is a topology optimization on a rectangle 4 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is void. The physics is steady: linear heat
+conduction for the temperature T, measured in kelvin, and linear
+elasticity for the displacement u, a vector with a horizontal and a
+vertical component, measured in metres; the two are coupled one-way —
+the temperature drives a thermal expansion strain of 3.6e-5 per kelvin
+times the temperature, subtracted from the elastic strain, so a heated
+solid region expands and pushes against its supports. The solid
+material has Young's modulus 3.2e7 N/m^2, Poisson's ratio 0.23, density
+2500 kg/m^3, thermal conductivity 1.25 W/(m K) and thermal expansion
+coefficient 3.6e-5 per kelvin; regions without material are treated as
+a weak phantom that is 1000 times softer, 1000 times less conductive
+and 1000 times less expansive than the solid. The optimization starts
+from a prescribed initial design: a checkerboard pattern of solid and
+void cells covering the rectangle, roughly half solid, with a thin
+solid strip along the top edge.
+
+Heat is generated uniformly inside every solid region, with a
+volumetric heat source of 200 W/m^3 everywhere in the material, the
+eddy-current heating of induction. The top edge loses heat by
+convection to the cooling water at temperature 20, with a heat transfer
+coefficient h of 2000 W/(m^2 K), the intensive water cooling of the
+surface; the same top edge carries a uniform traction of 5000 N/m^2
+pressing downward, the press force. The bottom edge is the anvil face:
+it is insulated, so that no heat crosses it, and it is held in place by
+strong penalty springs that pull its horizontal and vertical
+displacements back to zero. The left edge and the right edge are
+insulated and free. There is no body force. The cooled top face and the
+anvil face are non-design boundaries: their positions are prescribed,
+they are frozen, and the optimizer cannot add or remove material on
+them; the two insulated lateral edges are design boundaries, where
+material may be attached or removed freely. The optimization goal is to
+minimize the elastic strain energy stored in the billet under the press
+force and the thermal expansion of the heated interior — its
+compliance — while using as little material as possible, a balance
+between stiffness and material cost, and a strong penalty keeps the
+anvil face from sliding horizontally.

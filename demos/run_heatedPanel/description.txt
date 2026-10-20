@@ -1,0 +1,34 @@
+Heat Spreading in a Flux-Heated Panel
+
+This is the flux-heated panel problem of solar photovoltaics and power
+module baseplates: the panel's top surface absorbs a uniform heat flux
+(sunlight or die contact), and the panel must conduct all that heat to
+the cooled bottom edge, where the heat sink is mounted. There is no
+internal heat generation — the load enters purely through the loaded
+boundary. This is the classical point-to-boundary spreading problem
+with a prescribed boundary flux.
+
+The problem is a topology optimization on a square plate of side 1 m.
+The task is to find the best material layout inside the plate: solid
+regions may be added or removed, and the design is described by a
+level-set function, negative where the material is solid and positive
+where it is void. The physics is steady, linear heat conduction with
+one single physical field, the temperature T in kelvin. The solid
+material has a thermal conductivity k of 1 W/(m K); regions without
+material are treated as a weak heat conductor that conducts 10 times
+less than the solid. The optimization starts from a prescribed initial
+design: a checkerboard pattern of solid and void cells covering the
+whole plate, roughly half solid.
+
+There is no internal heat generation: the top edge receives a
+prescribed inward heat flux of 10 W/m^2 over its whole length, so heat
+enters the panel through it; the bottom edge is held at the fixed
+temperature 0, the cold mount; the left edge and the right edge are
+insulated, so that no heat crosses them. The flux-loaded top edge and
+the cold bottom edge are non-design boundaries: their positions are
+prescribed, they are frozen, and the optimizer cannot add or remove
+material on them; the two insulated lateral edges are design
+boundaries, where material may be attached or removed freely. The
+optimization goal is to minimize the total thermal energy dissipated
+by heat conduction in the plate while using as little material as
+possible — a balance between conduction performance and material cost.

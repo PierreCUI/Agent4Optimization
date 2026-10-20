@@ -1,0 +1,34 @@
+Cold Plate with Two Cooling Patches on Opposite Edges
+
+This is the two-sink cooling problem of double-sided board assembly:
+components spread over a PCB generate heat uniformly, and two cold
+patches on opposite edges — two heat sink mounting pads or thermal via
+fields — are the only escape paths. The design must choose which sink
+each region feeds. This is the classical two-sink heat-spreading
+configuration of electronics packaging.
+
+The problem is a topology optimization on a square plate of side 1 m.
+The task is to find the best material layout inside the plate: solid
+regions may be added or removed, and the design is described by a
+level-set function, negative where the material is solid and positive
+where it is void. The physics is steady, linear heat conduction with
+one single physical field, the temperature T in kelvin. The solid
+material has a thermal conductivity k of 1 W/(m K); regions without
+material are treated as a weak heat conductor that conducts 10 times
+less than the solid. The optimization starts from a prescribed initial
+design: a checkerboard pattern of solid and void cells covering the
+whole plate, roughly half solid.
+
+Heat is generated uniformly inside the plate, with a volumetric heat
+source of 10 W/m^3 everywhere in the domain. There are two cold
+patches, both held at the fixed temperature 0: one on the central
+portion of the left edge, between the heights 0.4 m and 0.6 m, and one
+on the central portion of the right edge, also between the heights
+0.4 m and 0.6 m; every remaining part of the boundary is insulated, so
+that no heat crosses it. Both cold patches are non-design boundaries:
+they are frozen, and the optimizer cannot add or remove material on
+them; all the insulated edges are design boundaries, where material
+may be attached or removed freely. The optimization goal is to
+minimize the total thermal energy dissipated by heat conduction in the
+plate while using as little material as possible — a balance between
+conduction performance and material cost.

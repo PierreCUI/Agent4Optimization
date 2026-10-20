@@ -4,7 +4,7 @@ name = 'linear elasticity'
 
 Th = Domain('D', 'Th')
 
-u = VectorField('u', P2, Th, '0.0', 4, meter)
+u = VectorField('u', P2, Th, '0.0', 4, unit=meter)
 testu = VectorField(r'\delta u', P2, Th)
 
 f = Constant('f', -10.0, 'vertical load component', Newton / meter ** 2)

@@ -1,0 +1,45 @@
+Cooling with a Temperature-Softening Thermal Interface Material
+
+This is the thermal interface material (TIM) partial-contact problem of
+pressure-contact power devices: the die's heat flux enters the package
+through the left contact face, heat leaves through the cold plate on
+the right, and a TIM (a phase-change thermal paste) covers only the
+central segment of the top face — a partial-contact or delamination
+defect. All other surfaces are insulated, so the design must route the
+heat around the defective region to the intact cooling paths. The
+paste is a phase-change material: as the interface heats up, the paste
+softens and wets the mating surfaces better, so the TIM's effective
+conductance improves precisely at the hottest spots.
+
+The problem is a topology optimization on a square plate of side 1 m.
+The task is to find the best material layout inside the plate: solid
+regions may be added or removed, and the design is described by a
+level-set function, negative where the material is solid and positive
+where it is void. The physics is steady, nonlinear heat conduction with
+one single physical field, the temperature T in kelvin. The solid
+material has a thermal conductivity k of 1 W/(m K); regions without
+material are treated as a weak heat conductor that conducts 10 times
+less than the solid. The optimization starts from a prescribed initial
+design: a checkerboard pattern of solid and void cells covering the
+whole plate, roughly half solid.
+
+There is no internal heat generation: the whole left edge receives a
+prescribed inward heat flux of 10 W/m^2, the die contact face where
+heat enters; the right edge is held at the fixed temperature 0, the
+cold plate; the central portion of the top edge, between 0.35 m and
+0.65 m from the left corner, is covered by the TIM, losing heat by
+convection to the surrounding air at temperature 0, and the TIM's heat
+transfer coefficient is not constant: it improves as the interface
+heats, being 1 plus 0.2 times the square of the local temperature in
+kelvin, in W/(m^2 K), the softening of the phase-change paste — this
+temperature dependence makes the state problem nonlinear; every
+remaining part of the boundary — the bottom edge and the two uncovered
+portions of the top edge — is insulated, so that no heat crosses it.
+The flux-loaded left edge and the cold right edge are non-design
+boundaries: they are frozen, and the optimizer cannot add or remove
+material on them; the TIM segment and all the insulated edges are
+design boundaries, where material may be attached or removed freely.
+The optimization goal is to minimize the total thermal energy
+dissipated by heat conduction in the plate while using as little
+material as possible — a balance between conduction performance and
+material cost.

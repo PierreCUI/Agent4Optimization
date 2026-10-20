@@ -23,6 +23,7 @@ All modes return {"main": ..., "mesh": ..., "rationale": ...} (or
 {"_error": ...} on parse failure).
 """
 
+import ast
 import json
 import math
 import re
@@ -43,6 +44,43 @@ _FE_PARAM_KEYS = ("hmin", "hmax", "diffusion", "v0")
 # "no real change" tolerance for the enforcers' value comparisons
 # (relative, with an absolute floor in the chi weak-value check)
 _VALUE_CHANGE_EPS = 1e-15
+
+
+def _match_field_call(code_nc: str, name: str, latex: str):
+    """The POSITIONAL argument texts of the ScalarField/VectorField
+    declaration matching *name* (the bound variable) or *latex* (the
+    first argument), else None.
+
+    Local reimplementation of the helper formerly imported from
+    Generation.check_static (removed there with the declaration
+    hard-checks).  Only build_design_permission uses it.
+    """
+    if not (name or latex):
+        return None
+    try:
+        tree = ast.parse(code_nc)
+    except SyntaxError:
+        return None
+    candidates = {str(latex)} if latex else set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        call = node.value
+        if not isinstance(call, ast.Call):
+            continue
+        if getattr(call.func, "id", None) not in ("ScalarField", "VectorField"):
+            continue
+        args = call.args
+        if not args:
+            continue
+        target = node.targets[0]
+        if name and isinstance(target, ast.Name) and target.id == name:
+            return [ast.unparse(a) for a in args]
+        first = args[0]
+        if candidates and isinstance(first, ast.Constant) \
+                and isinstance(first.value, str) and first.value in candidates:
+            return [ast.unparse(a) for a in args]
+    return None
 
 
 def apply_param_updates(code: str, updates: dict) -> str:
@@ -174,7 +212,6 @@ def build_design_permission(spec: dict, main_py: str, mesh_frozen: bool) -> dict
     # (extracted ones are ground truth).  The current declaration is the
     # enforcement baseline.
     from Generation.check_static import (  # lazy
-        _match_field_call,
         _quoted,
         _strip_comments,
     )
@@ -556,7 +593,6 @@ def design_enforce(main_py: str, resp_main: str, resp_mesh: str,
     # value/labels — the write happens into the enforced base code.
     if permission.get("dirichlet"):
         from Generation.check_static import (  # lazy
-            _match_field_call,
             _quoted,
             _strip_comments,
         )

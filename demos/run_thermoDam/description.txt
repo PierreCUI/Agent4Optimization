@@ -1,0 +1,55 @@
+Gravity Dam under Water Pressure, Seasonal Temperature and Self-Weight
+
+This is the gravity dam problem of hydropower and flood control,
+extended with the seasonal temperature field: a massive wall of
+concrete holds back a reservoir by its own weight, the water presses on
+the upstream face while the dam's weight pins it onto the rock
+foundation, and at the same time a temperature difference stands across
+the dam between the cold reservoir water and the sun-warmed air of the
+downstream face, driving thermal stresses through the section. The dam
+is a long prism whose cross-section is a rectangle, so the problem is
+treated as plane strain in that cross-section.
+
+The problem is a topology optimization on a rectangle 4 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is void. The physics is steady: linear heat
+conduction for the temperature T, measured in kelvin, and linear
+elasticity for the displacement u, a vector with a horizontal and a
+vertical component, measured in metres; the two are coupled one-way —
+the temperature drives a thermal expansion strain of 3.6e-5 per kelvin
+times the temperature, subtracted from the elastic strain, so a heated
+solid region expands and pushes against its supports. The solid
+material has Young's modulus 3.2e7 N/m^2, Poisson's ratio 0.23, density
+2500 kg/m^3, thermal conductivity 1.25 W/(m K) and thermal expansion
+coefficient 3.6e-5 per kelvin; regions without material are treated as
+a weak phantom that is 1000 times softer, 1000 times less conductive
+and 1000 times less expansive than the solid. The optimization starts
+from a prescribed initial design: a checkerboard pattern of solid and
+void cells covering the rectangle, roughly half solid, with a thin
+solid strip along the top edge.
+
+The left edge is the upstream face: the reservoir presses on it with a
+water pressure that grows linearly with depth, zero at the top edge and
+5000 N/m^2 at the bottom, pressing perpendicular to the face; the same
+face is held at the fixed temperature 5, the cold reservoir water. The
+bottom edge is the rock foundation: it is held in place by strong
+penalty springs that pull its horizontal and vertical displacements back
+to zero, and it is insulated, so that no heat crosses it. The right
+edge, the downstream face, loses heat by convection to the surrounding
+air at temperature 25, with a heat transfer coefficient h of 25 W/(m^2
+K), the sun-warmed downstream air; mechanically it is free. The top
+edge is insulated and free. Besides the water pressure, the solid
+material is pulled downward by its own weight, a uniform body force of
+24500 N/m^3 acting throughout the volume of every solid region; there
+is no body heat. The pressurized upstream face and the foundation are
+non-design boundaries: their positions are prescribed, they are frozen,
+and the optimizer cannot add or remove material on them; the downstream
+face and the top edge are design boundaries, where material may be
+attached or removed freely. The optimization goal is to minimize the
+elastic strain energy stored in the dam under the water pressure, the
+seasonal temperature difference and its own weight — its compliance —
+while using as little material as possible, a balance between stiffness
+and material cost, and a strong penalty keeps the foundation from
+sliding horizontally.

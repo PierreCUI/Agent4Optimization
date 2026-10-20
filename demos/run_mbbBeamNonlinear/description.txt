@@ -1,0 +1,44 @@
+Deep Beam with a Strain-Hardening Girder
+
+This is the simply supported deep beam problem of bridge deck girders
+made of strain-hardening steel: a long girder spans between two
+supports near its ends, a distributed load bears on its whole top, and
+the material itself grows stiffer wherever it deforms most, so the
+hardening response participates in how the bending is carried down to
+the supports. The girder is a long prism whose cross-section is a
+rectangle, so the problem is treated as plane strain in that
+cross-section.
+
+The problem is a topology optimization on a rectangle 2 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is void. The physics is steady, nonlinear
+elasticity with one single physical field, the displacement u, a vector
+with a horizontal and a vertical component, measured in metres. The
+solid is a strain-hardening steel: its Young's modulus is not constant
+but grows as the material deforms, being 200 N/m^2 where the material
+is undeformed and doubling at a strain of one tenth — the modulus
+rises in proportion to the square of the local strain magnitude; this
+dependence makes the state problem nonlinear. Regions without material
+are treated as a weak elastic solid 100 times softer than the solid at
+the same deformation state. The optimization starts from a prescribed
+initial design: a checkerboard pattern of solid and void cells covering
+the whole rectangle, roughly half solid.
+
+The bottom edge carries the two supports: two short segments near the
+bottom corners, each 0.2 m long, are the bearing seats. The left seat
+holds both the vertical and the horizontal displacement at zero, a pin
+support; the right seat holds only the vertical displacement at zero
+and lets the beam slide horizontally over it, a roller support; the
+remaining part of the bottom edge between the seats is free. The top
+edge carries the deck load: a uniform traction of 10 N/m^2 pressing
+downward over the whole edge, perpendicular to it. The left edge and
+the right edge are free. The two support seats and the loaded top edge
+are non-design boundaries: their positions are prescribed, they are
+frozen, and the optimizer cannot add or remove material on them; the
+free middle of the bottom edge and the two lateral edges are design
+boundaries, where material may be attached or removed freely. The
+optimization goal is to minimize the elastic strain energy stored in
+the beam under the deck load — its compliance — while using as little
+material as possible, a balance between stiffness and material cost.

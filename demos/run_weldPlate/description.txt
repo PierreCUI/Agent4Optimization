@@ -1,0 +1,54 @@
+Welded Plate under Local Heating and Tension
+
+This is the welding distortion problem of structural fabrication: a
+plate that works in tension is welded along a seam, the weld torch
+pours a concentrated heat into a small zone of the plate, the plate
+cools to the air, and the local expansion and contraction near the
+weld pull the plate out of shape while it carries its working tension.
+The plate is a long prism whose cross-section is a rectangle, so the
+problem is treated as plane strain in that cross-section.
+
+The problem is a topology optimization on a rectangle 4 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is void. The physics is steady: linear heat
+conduction for the temperature T, measured in kelvin, and linear
+elasticity for the displacement u, a vector with a horizontal and a
+vertical component, measured in metres; the two are coupled one-way —
+the temperature drives a thermal expansion strain of 3.6e-5 per kelvin
+times the temperature, subtracted from the elastic strain, so a heated
+solid region expands and pushes against its supports. The solid
+material has Young's modulus 3.2e7 N/m^2, Poisson's ratio 0.23, density
+2500 kg/m^3, thermal conductivity 1.25 W/(m K) and thermal expansion
+coefficient 3.6e-5 per kelvin; regions without material are treated as
+a weak phantom that is 1000 times softer, 1000 times less conductive
+and 1000 times less expansive than the solid. The optimization starts
+from a prescribed initial design: a checkerboard pattern of solid and
+void cells covering the rectangle, roughly half solid, with a thin
+solid strip along the top edge.
+
+Heat is generated inside every solid region by a localized volumetric
+source concentrated at the centre of the rectangle, at the horizontal
+position 2 m and the height 0.5 m, with the Gaussian profile
+100000*exp(-((x-2)^2+(y-0.5)^2)/0.05^2) W/m^3, the weld torch heating
+the seam. The top edge and the bottom edge lose heat by convection to
+the surrounding air at temperature 20, with a heat transfer coefficient
+h of 10 W/(m^2 K), and both are free of any mechanical load. The right
+edge carries a uniform traction of 5000 N/m^2 pulling the plate
+horizontally outward, its working tension, and it is insulated. The
+left edge is the clamped end: it is held in place by strong penalty
+springs that pull its horizontal and vertical displacements back to
+zero, for the fixture grips the plate there, and it is insulated, so
+that no heat crosses it. Besides the working tension, the solid
+material is pulled downward by its own weight, a uniform body force of
+24500 N/m^3 acting throughout the volume of every solid region. The
+clamped left edge and the tensioned right edge are non-design
+boundaries: their positions are prescribed, they are frozen, and the
+optimizer cannot add or remove material on them; the convecting top and
+bottom edges are design boundaries, where material may be attached or
+removed freely. The optimization goal is to minimize the elastic strain
+energy stored in the plate under the working tension, the local weld
+heating and its own weight — its compliance — while using as little
+material as possible, a balance between stiffness and material cost,
+and a strong penalty keeps the clamped end from sliding horizontally.

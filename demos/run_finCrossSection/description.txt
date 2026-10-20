@@ -1,0 +1,33 @@
+Convection-Cooled Fin Heated by a Boundary Flux
+
+This is the textbook cooling-fin design problem of electronic devices
+such as LED lamps and power supplies: the device die's heat enters the
+fin as a prescribed heat flux through the fin root, and the fin rejects
+it by natural or forced convection from its surface. There is no
+internal heat generation — the load is purely the boundary flux at the
+root.
+
+The problem is a topology optimization on a square plate of side 1 m.
+The task is to find the best material layout inside the plate: solid
+regions may be added or removed, and the design is described by a
+level-set function, negative where the material is solid and positive
+where it is void. The physics is steady, linear heat conduction with
+one single physical field, the temperature T in kelvin. The solid
+material has a thermal conductivity k of 1 W/(m K); regions without
+material are treated as a weak heat conductor that conducts 10 times
+less than the solid. The optimization starts from a prescribed initial
+design: a checkerboard pattern of solid and void cells covering the
+whole plate, roughly half solid.
+
+There is no internal heat generation: the bottom edge is the fin root,
+fed by the device die with a prescribed inward heat flux of 10 W/m^2,
+and the remaining three edges — left, top and right — lose heat by
+convection to the surrounding air at temperature 0, with a heat
+transfer coefficient h of 1 W/(m^2 K); no part of the boundary is held
+at a fixed temperature. The flux-loaded root is a non-design boundary:
+its position is prescribed, it is frozen, and the optimizer cannot add
+or remove material on it; the three convecting faces are design
+boundaries, where material may be attached or removed freely. The
+optimization goal is to minimize the total thermal energy dissipated
+by heat conduction in the plate while using as little material as
+possible — a balance between conduction performance and material cost.

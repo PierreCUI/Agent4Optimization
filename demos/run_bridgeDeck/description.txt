@@ -1,0 +1,51 @@
+Bridge Deck under Traffic, Temperature Gradient and Self-Weight
+
+This is the temperature-gradient problem of bridge decks, the
+classical design load of EN 1991-1-5: the top surface of a concrete
+deck slab absorbs the sun and heats up far above the shaded underside,
+so a strong vertical temperature gradient stands across the slab while
+the traffic load and the slab's own weight bend it between the edge
+girders. The deck is a long prism whose cross-section is a rectangle,
+so the problem is treated as plane strain in that cross-section.
+
+The problem is a topology optimization on a rectangle 4 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is void. The physics is steady: linear heat
+conduction for the temperature T, measured in kelvin, and linear
+elasticity for the displacement u, a vector with a horizontal and a
+vertical component, measured in metres; the two are coupled one-way —
+the temperature drives a thermal expansion strain of 3.6e-5 per kelvin
+times the temperature, subtracted from the elastic strain, so a heated
+solid region expands and pushes against its supports. The solid
+material has Young's modulus 3.2e7 N/m^2, Poisson's ratio 0.23, density
+2500 kg/m^3, thermal conductivity 1.25 W/(m K) and thermal expansion
+coefficient 3.6e-5 per kelvin; regions without material are treated as
+a weak phantom that is 1000 times softer, 1000 times less conductive
+and 1000 times less expansive than the solid. The optimization starts
+from a prescribed initial design: a checkerboard pattern of solid and
+void cells covering the rectangle, roughly half solid, with a thin
+solid strip along the top edge.
+
+The top edge is the sun-lit pavement: it receives a prescribed inward
+heat flux of 800 W/m^2, the absorbed solar radiation, and it carries a
+uniform traction of 5000 N/m^2 pressing downward, the traffic load. The
+bottom edge is the shaded soffit: it is held at the fixed temperature
+20, the cool shaded air beneath, and it is free of any mechanical load.
+The left edge and the right edge are the girder seats: each is held in
+place by strong penalty springs that pull its horizontal and vertical
+displacements back to zero, for the slab sits on the edge girders, and
+each is insulated, so that no heat crosses it. Besides the traffic
+load, the solid material is pulled downward by its own weight, a
+uniform body force of 24500 N/m^3 acting throughout the volume of every
+solid region; there is no body heat. The sun-lit pavement and the two
+girder seats are non-design boundaries: their positions are prescribed,
+they are frozen, and the optimizer cannot add or remove material on
+them; the shaded soffit is a design boundary, where material may be
+attached or removed freely. The optimization goal is to minimize the
+elastic strain energy stored in the deck under the traffic load, the
+vertical temperature gradient and its own weight — its compliance —
+while using as little material as possible, a balance between stiffness
+and material cost, and a strong penalty keeps the girder seats from
+sliding horizontally.

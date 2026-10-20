@@ -5,7 +5,7 @@ name = 'thermo elastic gravity'
 
 Th = Domain('D', 'Th')
 
-T = ScalarField('T', P2, Th, '-30.0', [1, 3], kelvin)
+T = ScalarField('T', P2, Th, '-30.0', [1, 3], unit=kelvin)
 testT = ScalarField(r'\delta T', P2, Th)
 u = VectorField('u', P2, Th, unit=meter)
 testu = VectorField(r'\delta u', P2, Th)

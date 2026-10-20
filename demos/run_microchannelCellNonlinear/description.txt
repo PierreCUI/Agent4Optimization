@@ -1,0 +1,40 @@
+Unit Cell of a Periodic Microchannel Cooler with Temperature-Dependent Coolant Convection
+
+This is the unit cell of a periodic microchannel heat sink or fin
+array: the fin base at the bottom is a cold wall, the channel side on
+the right is washed by the coolant and rejects heat by convection, and
+the top and left edges are symmetry planes of the periodic array.
+Designing one unit cell designs the whole periodic cooler — the
+standard approach in microchannel heat exchanger design. The coolant
+behaves like water: as the wall heats it, its viscosity drops, so the
+heat transfer coefficient improves precisely at the hottest spots.
+
+The problem is a topology optimization on a square plate of side 1 m.
+The task is to find the best material layout inside the plate: solid
+regions may be added or removed, and the design is described by a
+level-set function, negative where the material is solid and positive
+where it is void. The physics is steady, nonlinear heat conduction with
+one single physical field, the temperature T in kelvin. The solid
+material has a thermal conductivity k of 1 W/(m K); regions without
+material are treated as a weak heat conductor that conducts 10 times
+less than the solid. The optimization starts from a prescribed initial
+design: a checkerboard pattern of solid and void cells covering the
+whole plate, roughly half solid.
+
+Heat is generated uniformly inside the cell, with a volumetric heat
+source of 10 W/m^3 everywhere in the domain. The bottom edge is the
+fin base, held at the fixed temperature 0; the right edge is the
+coolant-washed channel side, losing heat by convection to the coolant
+at temperature 0, and the heat transfer coefficient is not constant:
+it grows with the local wall temperature, being 1 plus 0.5 times the
+wall temperature in kelvin, in W/(m^2 K), because the coolant's
+viscosity falls as it warms — this temperature dependence makes the
+state problem nonlinear; the top edge and the left edge are symmetry
+planes, across which no heat crosses. The fin base and the two
+symmetry planes are non-design boundaries: they are frozen, and the
+optimizer cannot add or remove material on them; the convecting
+channel side is a design boundary, where material may be attached or
+removed freely. The optimization goal is to minimize the total thermal
+energy dissipated by heat conduction in the plate while using as little
+material as possible — a balance between conduction performance and
+material cost.

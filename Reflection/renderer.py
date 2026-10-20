@@ -153,15 +153,24 @@ def render_vtu_to_png(
         fig = None
         try:
             fig, ax = plt.subplots(figsize=RENDER_FIGSIZE)
+            vmin, vmax = float(values.min()), float(values.max())
+            # a uniform field (vmin == vmax) degenerates matplotlib's
+            # normalization to the colormap's lowest color — widen the
+            # range so the true value's color is drawn instead
+            if vmin == vmax:
+                vmin, vmax = vmin - 0.5, vmax + 0.5
             if field_name.startswith("point/") and len(values) == len(points):
                 triang = tri.Triangulation(x, y, tri_cells)
-                tpc = ax.tripcolor(triang, values, shading="flat", cmap="viridis")
+                tpc = ax.tripcolor(triang, values, shading="flat",
+                                   cmap="viridis", vmin=vmin, vmax=vmax)
             elif field_name.startswith("cell/") and len(values) == tri_cells.shape[0]:
                 tpc = ax.tripcolor(
                     tri.Triangulation(x, y, tri_cells),
                     facecolors=values,
                     shading="flat",
                     cmap="viridis",
+                    vmin=vmin,
+                    vmax=vmax,
                 )
             else:
                 plt.close(fig)
@@ -211,6 +220,72 @@ def render_and_summarize(vtu_path: Path) -> str:
     if not vtu_path.exists():
         return ""
     return render_vtu_to_png(vtu_path)
+
+
+# ======================================================================
+# ParaView (pvbatch) rendering — the GUI look: Label field with the
+# default Cool-to-Warm preset (blue interior, red boundary lines)
+# ======================================================================
+
+def find_pvbatch() -> str:
+    """Path of the pvbatch executable, or '' when ParaView is absent."""
+    import glob
+    import os
+    import shutil
+
+    cand = os.environ.get("PARAVIEW_BATCH", "")
+    if cand and os.path.exists(cand):
+        return cand
+    # the GUI is a Windows install under C:/Program Files/ParaView <ver>/
+    if os.name == "nt":
+        hits = sorted(glob.glob("C:/Program Files/ParaView*/bin/pvbatch.exe"))
+        if hits:
+            return hits[-1]  # newest version
+    w = shutil.which("pvbatch")
+    return w or ""
+
+
+def render_labels_paraview_batch(jobs: list) -> list:
+    """Render (vtu_path, out_png) pairs with ONE pvbatch invocation —
+    the ParaView GUI look (color by Label, Cool to Warm).  Returns the
+    list of job indices whose output was NOT produced (the caller
+    falls back to the matplotlib renderer for those)."""
+    if not jobs:
+        return []
+    pvbatch = find_pvbatch()
+    if not pvbatch:
+        return list(range(len(jobs)))
+    import json
+    import os
+    import subprocess
+    import tempfile
+
+    script = Path(__file__).with_name("pv_render.py")
+    if not script.exists():
+        return list(range(len(jobs)))
+    with tempfile.NamedTemporaryFile(
+            "w", suffix=".json", delete=False,
+            encoding="utf-8") as fh:
+        json.dump([[str(v), str(o)] for v, o in jobs], fh)
+        jobs_file = fh.name
+    try:
+        proc = subprocess.run(
+            [pvbatch, str(script), jobs_file],
+            capture_output=True, text=True, timeout=3600,
+            errors="replace")
+    except Exception:
+        proc = None
+    finally:
+        try:
+            os.unlink(jobs_file)
+        except OSError:
+            pass
+    failed = [i for i, (_, out) in enumerate(jobs)
+              if not Path(out).exists()]
+    if failed and proc is not None:
+        print(f"[pv] pvbatch rc={proc.returncode}: "
+              f"{proc.stderr.strip()[-400:]}", flush=True)
+    return failed
 
 
 def render_snapshot_label_png(vtu_path: Path, out_path: Path) -> str:
@@ -270,6 +345,11 @@ def render_snapshot_label_png(vtu_path: Path, out_path: Path) -> str:
         facecolors=values,
         shading="flat",
         cmap="viridis",
+        # Label is a discrete indicator (0=void .. 3=solid) — a FIXED
+        # normalization keeps a uniform design (all 0 or all 3) in its
+        # true color instead of collapsing to the colormap's lowest
+        # color (matplotlib's degenerate-norm fallback)
+        norm=plt.Normalize(vmin=0, vmax=3),
     )
     ax.set_aspect("equal")
     ax.set_xticks([])

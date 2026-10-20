@@ -1,0 +1,51 @@
+Pouch Battery Cell between Cooling Plates
+
+This is the cooling problem of electric-vehicle battery modules: a
+pouch cell generates heat uniformly as it charges and discharges, its
+two broad faces are pressed against liquid-cooled cold plates, and the
+whole module stack is held together by a compression preload acting on
+those same faces. The cell is a long prism whose cross-section is a
+rectangle, so the problem is treated as plane strain in that
+cross-section.
+
+The problem is a topology optimization on a rectangle 4 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is void. The physics is steady: linear heat
+conduction for the temperature T, measured in kelvin, and linear
+elasticity for the displacement u, a vector with a horizontal and a
+vertical component, measured in metres; the two are coupled one-way —
+the temperature drives a thermal expansion strain of 3.6e-5 per kelvin
+times the temperature, subtracted from the elastic strain, so a heated
+solid region expands and pushes against its supports. The solid
+material has Young's modulus 3.2e7 N/m^2, Poisson's ratio 0.23, density
+2500 kg/m^3, thermal conductivity 1.25 W/(m K) and thermal expansion
+coefficient 3.6e-5 per kelvin; regions without material are treated as
+a weak phantom that is 1000 times softer, 1000 times less conductive
+and 1000 times less expansive than the solid. The optimization starts
+from a prescribed initial design: a checkerboard pattern of solid and
+void cells covering the rectangle, roughly half solid, with a thin
+solid strip along the top edge.
+
+Heat is generated uniformly inside every solid region, with a
+volumetric heat source of 100 W/m^3 everywhere in the material, the
+electrochemical heat of the cell. The left edge and the right edge are
+the cooling faces: each loses heat by convection to the cold plates at
+temperature 20, with a heat transfer coefficient h of 500 W/(m^2 K),
+and each is at the same time pressed inward by a uniform traction of
+5000 N/m^2, the compression preload of the module stack. The top edge
+is insulated and free. The bottom edge is insulated, so that no heat
+crosses it, and it sits on the support shelf: it is held in place by
+strong penalty springs that pull its horizontal and vertical
+displacements back to zero. There is no body force. The two cooled side
+faces are non-design boundaries: their positions are prescribed, they
+are frozen, and the optimizer cannot add or remove material on them;
+the top edge and the bottom edge are design boundaries, where material
+may be attached or removed freely. The optimization goal is to minimize
+the elastic strain energy stored in the cell under the compression
+preload and the thermal expansion of the heated cell — its compliance,
+measured by the outward bulging of the two compressed faces — while
+using as little material as possible, a balance between stiffness and
+material cost, and a strong penalty keeps the support edge from sliding
+horizontally.

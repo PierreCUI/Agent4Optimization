@@ -1,0 +1,49 @@
+Thermoelectric Leg between a Hot Plate and a Cold Plate
+
+This is the thermoelectric leg problem of waste-heat recovery modules:
+a leg stands between the hot exhaust plate and the water-cooled cold
+plate of a thermoelectric generator, conducts the heat from the hot
+side to the cold side, and is squeezed by the clamping force that
+holds the module together. The leg is a long prism whose cross-section
+is a rectangle, so the problem is treated as plane strain in that
+cross-section.
+
+The problem is a topology optimization on a rectangle 4 m wide and 1 m
+tall. The task is to find the best material layout inside the
+rectangle: solid regions may be added or removed, and the design is
+described by a level-set function, negative where the material is solid
+and positive where it is void. The physics is steady: linear heat
+conduction for the temperature T, measured in kelvin, and linear
+elasticity for the displacement u, a vector with a horizontal and a
+vertical component, measured in metres; the two are coupled one-way —
+the temperature drives a thermal expansion strain of 3.6e-5 per kelvin
+times the temperature, subtracted from the elastic strain, so a heated
+solid region expands and pushes against its supports. The solid
+material has Young's modulus 3.2e7 N/m^2, Poisson's ratio 0.23, density
+2500 kg/m^3, thermal conductivity 1.25 W/(m K) and thermal expansion
+coefficient 3.6e-5 per kelvin; regions without material are treated as
+a weak phantom that is 1000 times softer, 1000 times less conductive
+and 1000 times less expansive than the solid. The optimization starts
+from a prescribed initial design: a checkerboard pattern of solid and
+void cells covering the rectangle, roughly half solid, with a thin
+solid strip along the top edge.
+
+The top edge is the hot junction face: it is held at the fixed
+temperature 100, the hot exhaust plate, and it carries a uniform
+traction of 5000 N/m^2 pressing downward, the clamping force of the
+module assembly. The bottom edge is the cold junction face: it is held
+at the fixed temperature 0, the water-cooled plate, and it is held in
+place by strong penalty springs that pull its horizontal and vertical
+displacements back to zero, for it seats on the rigid cold plate. The
+left edge and the right edge are insulated, so that no heat crosses
+them, and they are free of any mechanical load. There is no body heat
+and no body force. The hot top face and the cold bottom face are
+non-design boundaries: their positions are prescribed, they are frozen,
+and the optimizer cannot add or remove material on them; the two
+insulated lateral edges are design boundaries, where material may be
+attached or removed freely. The optimization goal is to minimize the
+elastic strain energy stored in the leg under the clamping pressure and
+the thermal expansion of the hot side against the cold side — its
+compliance — while using as little material as possible, a balance
+between stiffness and material cost, and a strong penalty keeps the
+cold face from sliding horizontally.

@@ -247,25 +247,35 @@ def _parse_mesh(mesh_txt: str):
     segments = []
     for line in (mesh_txt or "").splitlines():
         s = line.strip()
-        m = re.match(r"real\s+(\w+)\s*=\s*([0-9.eE+\-*/() ]+);", s)
-        if m:
-            name, val = m.group(1), m.group(2)
-            if name == "L":
-                try:
-                    L = float(sp.sympify(val))
-                except Exception:
-                    L = None
-            elif name == "H":
-                try:
-                    H = float(sp.sympify(val))
-                except Exception:
-                    H = None
-            else:
-                consts[name] = val
-            continue
+        # single AND multi declarations: `real L = 2.0;` and
+        # `real L = 2.0, H = 1.0;` (split on commas first)
+        if s.startswith("real "):
+            body = s[len("real "):].rstrip(";")
+            matched = False
+            for part in body.split(","):
+                m = re.match(r"(\w+)\s*=\s*([0-9.eE+\-*/() ]+?)\s*$", part.strip())
+                if not m:
+                    continue
+                matched = True
+                name, val = m.group(1), m.group(2)
+                if name == "L":
+                    try:
+                        L = float(sp.sympify(val))
+                    except Exception:
+                        L = None
+                elif name == "H":
+                    try:
+                        H = float(sp.sympify(val))
+                    except Exception:
+                        H = None
+                else:
+                    consts[name] = val
+            if matched:
+                continue
         m = re.match(
             r"border\s+\w+\s*\(\s*t\s*=\s*([^,]+)\s*,\s*([^)]+)\s*\)\s*\{"
-            r"x\s*=\s*([^;]+);\s*y\s*=\s*([^;]+);\s*label\s*=\s*(\d+)\s*;\s*\}",
+            r"x\s*=\s*([^;]+);\s*y\s*=\s*([^;]+);\s*label\s*=\s*"
+            r"(?:\([^)]*\)\s*\?\s*)?(\d+)\s*(?::\s*\d+\s*)?;\s*\}",
             s,
         )
         if m and L is not None and H is not None:

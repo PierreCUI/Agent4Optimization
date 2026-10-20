@@ -472,11 +472,14 @@ def _re_execute(results_dir: Path, history_label: str = "") -> dict:
     )
     dt = time.time() - t0
 
-    py_rc = result["autofreefem"]["python"]["return_code"]
-    edp_files = result["autofreefem"]["edp_files"]
-    ff_runs = len(result["freefem"])
+    py_rc = (result.get("autofreefem") or {}).get("python", {}).get("return_code")
+    edp_files = (result.get("autofreefem") or {}).get("edp_files") or []
+    ff_runs = len(result.get("freefem") or [])
+    sweep = result.get("sweep") or {}
     print(
-        f"Python rc={py_rc}, {len(edp_files)} .edp, {ff_runs} FreeFEM runs ({dt:.0f}s)", flush=True
+        f"sweep: {len(sweep.get('cells') or {})} cells, best={sweep.get('best_cell')} "
+        f"obj={sweep.get('best_objective')}; best-cell Python rc={py_rc}, "
+        f"{len(edp_files)} .edp, {ff_runs} FreeFEM runs ({dt:.0f}s)", flush=True
     )
 
     return result
@@ -1154,15 +1157,16 @@ def _run_one_probe(
         return record
 
     # Probe run (short budget — the formal run happens after synthesis).
+    # A probe is ONE cell, not the sweep: run_single.
     # The attempt's results/, tex/, tmp/ are removed in the finally below
     # as soon as the evidence is gathered — the attempt folder itself
     # stays as a record (temp/ survives the process).
-    from Execution.runner import run_problem
+    from Execution.runner import run_single
 
     try:
         try:
             history_log = results_dir / "history.txt"
-            result = run_problem(
+            result = run_single(
                 cand_dir / "main.py",
                 cand_dir,
                 auto_render=False,
