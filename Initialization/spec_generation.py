@@ -724,6 +724,8 @@ def _terminate(round_no, message, issue_list, specs, history, carried_warnings):
     specs["_passed"] = False
     specs["_issues"] = issue_list
     specs["_review_warnings"] = carried_warnings
+    specs["_history"] = history
+    specs["_attempts"] = max(0, round_no - 1)
     return specs
 
 
@@ -953,7 +955,8 @@ Return the same content as one valid JSON object.
 """
 
 
-def _review(agent, files, specs, prev_issues=None, changes=None):
+def _review(agent, files, specs, prev_issues=None, changes=None,
+            review_system=None):
     """The merged LLM review — returns ``{"verified": bool, "errors":
     [issue dicts], "warnings": [issue dicts]}``, or None when the review
     FAILS.  Each issue dict carries its STRUCTURED ``item`` path plus
@@ -990,7 +993,8 @@ def _review(agent, files, specs, prev_issues=None, changes=None):
     raw = ""
     shape_bad = False
     try:
-        raw = _invoke(agent, _REVIEW_SYSTEM, _REVIEW_USER, review_payload)
+        raw = _invoke(agent, review_system or _REVIEW_SYSTEM,
+                      _REVIEW_USER, review_payload)
         result = json.loads(parser_json(raw))
         if not (isinstance(result, dict) and "verified" in result):
             result = None
@@ -1009,7 +1013,8 @@ def _review(agent, files, specs, prev_issues=None, changes=None):
                 set_label(
                     agent, "Initialization/run_spec_generation (review retry)"
                 )
-                raw = _invoke(agent, _REVIEW_SYSTEM, _REVIEW_USER, review_payload)
+                raw = _invoke(agent, review_system or _REVIEW_SYSTEM,
+                      _REVIEW_USER, review_payload)
             elif raw and raw.strip():
                 set_label(
                     agent,
@@ -1023,7 +1028,8 @@ def _review(agent, files, specs, prev_issues=None, changes=None):
                 set_label(
                     agent, "Initialization/run_spec_generation (review retry)"
                 )
-                raw = _invoke(agent, _REVIEW_SYSTEM, _REVIEW_USER, review_payload)
+                raw = _invoke(agent, review_system or _REVIEW_SYSTEM,
+                      _REVIEW_USER, review_payload)
             result = json.loads(parser_json(raw))
             if not (isinstance(result, dict) and "verified" in result):
                 result = None
@@ -1166,7 +1172,9 @@ def _freeze_provided_mesh(specs: dict, mesh_code: str, repaired: bool,
 
 
 def run_spec_generation(agent, input_files, problem_name=None, max_fixes=None,
-                        output_dir=None, history_log=None):
+                        output_dir=None, history_log=None, seed_specs=None,
+                        repair_system=None, history_text_fn=None,
+                        generate_system=None, review_system=None):
     """Generate BOTH spec JSONs via the generate -> review -> repair loop.
 
     Returns ``{"initial": {"extracted","designed"}, "mesh": {"extracted",
@@ -1197,6 +1205,21 @@ def run_spec_generation(agent, input_files, problem_name=None, max_fixes=None,
     specs = None
     issues = []
     history = []
+    # EXPERIMENT SEED: start the loop from a provided (possibly broken)
+    # spec state instead of a fresh LLM generation — the first round
+    # runs the deterministic checks and the review on the seed as-is,
+    # then repairs it like any other candidate.
+    seeded_pending = False
+    if seed_specs:
+        specs = _normalize_two_specs(seed_specs)
+        seeded_pending = True
+        if history_log is not None:
+            record_history(
+                history_log,
+                "run_spec_generation (experiment seed)",
+                label="seeded starting state",
+                output_text=json.dumps(specs, indent=2, ensure_ascii=False),
+            )
 
     # PROVIDED mesh.txt — immutable input: ONE syntax check + at most
     # ONE syntax repair, then frozen into every round's output.  No
@@ -1264,9 +1287,15 @@ def run_spec_generation(agent, input_files, problem_name=None, max_fixes=None,
             # fresh generation (or re-generation after an unparseable answer)
             set_label(agent, f"{round_label} (generate)")
             raw = _invoke(
-                agent, _GENERATE_SYSTEM, _GENERATE_USER,
+                agent, generate_system or _GENERATE_SYSTEM, _GENERATE_USER,
                 {"problem_name": problem_name or "unknown", "files_block": files},
             )
+            data = _parse_two_specs(raw)
+        elif seeded_pending:
+            # experiment seed: the provided state IS this round's
+            # candidate — the checks and review run on it directly
+            seeded_pending = False
+            data = specs
         else:
             issues_text = format_errors(issues) if issues else ""
             regression_text = (
@@ -1291,18 +1320,19 @@ def run_spec_generation(agent, input_files, problem_name=None, max_fixes=None,
             ) if noop_count else ""
             set_label(agent, f"{round_label} (repair)")
             raw = _invoke(
-                agent, _REPAIR_SYSTEM, _REPAIR_USER,
+                agent, repair_system or _REPAIR_SYSTEM, _REPAIR_USER,
                 {
                     "files_block": files,
                     "specs_json": json.dumps(specs, indent=2, ensure_ascii=False),
                     "issues_text": issues_text,
-                    "history_text": _history_text(history),
+                    "history_text": (_history_text if history_text_fn is None
+                                     else history_text_fn)(history),
                     "regression_text": regression_text,
                     "normalize_text": normalize_text,
                     "noop_text": noop_text,
                 },
             )
-        data = _parse_two_specs(raw)
+            data = _parse_two_specs(raw)
         if data is None:
             issues = [{"check": "json_parse", "level": "syntax",
                        "severity": "error", "message": "LLM output failed to parse"}]
@@ -1332,11 +1362,15 @@ def run_spec_generation(agent, input_files, problem_name=None, max_fixes=None,
             # mesh) and re-derive them from the FROZEN code so they can
             # never produce unfixable cross-file errors
             mex = specs["mesh"]["extracted"]
-            for k in ("labels_found", "edges", "n"):
+            # n is NOT cleared: _freeze_provided_mesh just derived it
+            # from the FROZEN code, and the normalizers never backfill
+            # n (clearing it here would lose the frozen value and make
+            # the mesh_n check unfixable for every provided-mesh case)
+            for k in ("labels_found", "edges"):
                 mex.pop(k, None)
             specs["mesh"]["extracted"] = normalize_extracted_mesh(mex)
             mds = specs["mesh"]["designed"]
-            for k in ("labels_used", "edges", "n"):
+            for k in ("labels_used", "edges"):
                 mds.pop(k, None)
             specs["mesh"]["designed"] = normalize_designed_mesh(
                 mds, specs["mesh"]["extracted"])
@@ -1411,6 +1445,7 @@ def run_spec_generation(agent, input_files, problem_name=None, max_fixes=None,
             agent, files, specs,
             prev_issues=[str(i.get("message")) for i in prev_issues],
             changes=changes,
+            review_system=review_system,
         )
         if review is None:
             # P6: a failed review TERMINATES the case — never fail open
@@ -1437,6 +1472,7 @@ def run_spec_generation(agent, input_files, problem_name=None, max_fixes=None,
                 agent, files, specs,
                 prev_issues=[str(i.get("message")) for i in prev_issues],
                 changes=changes,
+                review_system=review_system,
             )
             if review is None:
                 return _terminate(
@@ -1500,6 +1536,8 @@ def run_spec_generation(agent, input_files, problem_name=None, max_fixes=None,
             print(f"  [spec loop] PASSED after {attempts} repair(s)", flush=True)
             specs["_passed"] = True
             specs["_review_warnings"] = carried_warnings
+            specs["_history"] = history
+            specs["_attempts"] = attempts
             return specs
         print(
             f"  [spec loop {attempts}/{max_fixes}] {len(issues)} issue(s) — repairing",
@@ -1548,4 +1586,6 @@ def run_spec_generation(agent, input_files, problem_name=None, max_fixes=None,
     specs["_passed"] = False
     specs["_issues"] = issues
     specs["_review_warnings"] = carried_warnings
+    specs["_history"] = history
+    specs["_attempts"] = attempts
     return specs

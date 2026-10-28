@@ -2455,7 +2455,7 @@ Return the review JSON.
 
 
 def _review(agent, code, problem_spec, mesh_spec, problem_description,
-            mesh_txt, examples) -> dict:
+            mesh_txt, examples, review_system=None) -> dict:
     """The merged LLM review — fail-open: a broken reviewer answer
     blocks nothing (the deterministic checks still gate the loop)."""
     examples_text = ""
@@ -2467,7 +2467,7 @@ def _review(agent, code, problem_spec, mesh_spec, problem_description,
         indent=2, ensure_ascii=False,
     )
     agent.set_prompt_list([
-        {"role": "system", "content": _REVIEW_SYSTEM},
+        {"role": "system", "content": review_system or _REVIEW_SYSTEM},
         {"role": "user", "content": _REVIEW_USER},
     ])
     payload = {
@@ -2598,7 +2598,8 @@ Return the corrected code JSON.
 """
 
 
-def _repair(agent, code: str, errors: list, history_text: str) -> str | None:
+def _repair(agent, code: str, errors: list, history_text: str,
+            repair_system: str = None) -> str | None:
     """LLM targeted repair; None when the answer is unusable (the round
     is consumed and the current code carries into the next round)."""
     issues_text = "\n".join(
@@ -2606,7 +2607,7 @@ def _repair(agent, code: str, errors: list, history_text: str) -> str | None:
         for e in errors
     )
     agent.set_prompt_list([
-        {"role": "system", "content": _REPAIR_SYSTEM},
+        {"role": "system", "content": repair_system or _REPAIR_SYSTEM},
         {"role": "user", "content": _REPAIR_USER},
     ])
     raw = agent.invoke(
@@ -2721,6 +2722,9 @@ def run_static_repair(
     examples: list = None,
     max_fixes: int = None,
     history_log=None,
+    repair_system: str = None,
+    history_text_fn=None,
+    review_system: str = None,
 ) -> dict:
     """Check -> review -> targeted repair loop for the generated main.py.
 
@@ -2758,7 +2762,7 @@ def run_static_repair(
         set_label(agent, f"{round_label} (review)")
         review = _review(
             agent, code, problem_spec, mesh_spec, problem_description,
-            mesh_txt, examples,
+            mesh_txt, examples, review_system=review_system,
         )
         issues = (review.get("issues") or []) if isinstance(review, dict) else []
         # keep only dict entries that actually say something (an empty
@@ -2802,7 +2806,10 @@ def run_static_repair(
             )
         prev = code
         set_label(agent, f"{round_label} (repair)")
-        fixed = _repair(agent, code, errors, _history_text(history))
+        hist_text = (_history_text if history_text_fn is None
+                     else history_text_fn)(history)
+        fixed = _repair(agent, code, errors, hist_text,
+                        repair_system=repair_system)
         if fixed is None:
             # a garbage repair answer is NOT retried — it consumes the
             # round (at most max_fixes rounds total) and the next round

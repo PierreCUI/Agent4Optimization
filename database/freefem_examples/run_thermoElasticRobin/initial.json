@@ -834,7 +834,7 @@
       "hmax_rationale": "about twice the initial element size (mesh is 0.02), fine enough for the 4x1 beam.",
       "diffusion": 0.001,
       "diffusion_source": "designed",
-      "diffusion_rationale": "small level-set diffusion, standard for a domain of size 4.",
+      "diffusion_rationale": "small level-set diffusion coefficient, standard for a domain of size 4.",
       "v0": 0.01,
       "v0_source": "designed",
       "v0_rationale": "moderate velocity regularisation at the problem's scale.",

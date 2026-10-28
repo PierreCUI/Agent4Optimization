@@ -543,6 +543,7 @@ def generate_code(
     examples: Optional[list] = None,
     outer_iterations: int = 100,
     inner_iterations: int = 10,
+    coder_system: str = None,
 ) -> dict:
     """
     Generate first-draft AutoFreeFEM code from ProblemSpec + mesh data.
@@ -572,7 +573,7 @@ def generate_code(
         "_error": ...}``.
     """
     prompt_list = [
-        {"role": "system", "content": _CODER_SYSTEM},
+        {"role": "system", "content": coder_system or _CODER_SYSTEM},
         {"role": "user", "content": _CODER_USER},
     ]
 

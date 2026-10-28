@@ -769,7 +769,7 @@
       "hmax_rationale": "Comparable to the 0.04 background mesh, so the 0.3-thick trunk stays several elements wide.",
       "diffusion": 0.01,
       "diffusion_source": "designed",
-      "diffusion_rationale": "Small level-set diffusion regularises the interface over the 0.05 element scale.",
+      "diffusion_rationale": "Small level-set diffusion coefficient regularises the interface over the 0.05 element scale.",
       "v0": 1.0,
       "v0_source": "designed",
       "v0_rationale": "Unit velocity scale, small compared with the 4-unit length of the beam.",

@@ -179,7 +179,7 @@ segment and its sink-covering part on THIS problem's sink segment.
   anti-symmetric); the same holds for y about y = 0.5.  For a symmetric
   problem use the cos form, centred on the mirror axis.
 - CAUTION: the checkerboard has NO continuous solid path — it relies on
-  the level-set diffusion to connect cells.  Do NOT use it when a fixed
+  the level-set diffusion coefficient to connect cells.  Do NOT use it when a fixed
   (frozen) load or sink segment must be covered by solid at iteration 0:
   a checkerboard may leave the frozen segment in void and then block all
   conduction permanently.
