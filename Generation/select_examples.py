@@ -1,17 +1,22 @@
 """
-LLM-based example selection for code generation.
+LLM-based example selection — the first phase of Initialization.
 
-Candidates are the FULL initial.json / mesh.json specs of the database
+The TARGET is the problem's raw input files (all of them); the
+candidates are the FULL initial.json / mesh.json specs of the database
 examples — no summaries.  ONE scoring round: each candidate gets a
 0-100 relevance score (batched by MAX_INPUT_TOKENS when the full specs
 do not fit in one call); every candidate at or above
 configs.EXAMPLE_SCORE_THRESHOLD is kept, best first, until the NEXT
-example's full .py would exceed the token budget — an example is never
-truncated or partially sent.
+example's full main.py + mesh.txt would exceed the token budget — an
+example is never truncated or partially sent.  The spec generation
+(the rest of Initialization) then consumes the selected examples'
+specs, and Generation consumes their main.py + mesh.txt.
 
 When a database folder lacks its JSONs, they are generated on the spot
 via Initialization's spec loop (a safeguard — Initialization normally
-produces them; this only protects against a missing file).
+produces them; this only protects against a missing file).  That
+on-the-spot generation runs WITHOUT examples — database content is the
+reference set itself, so no example is selected for it.
 """
 
 import json
@@ -26,10 +31,12 @@ if _ROOT not in sys.path:
 
 from configs import (  # noqa: E402
     EXAMPLE_SCORE_THRESHOLD,
+    MAX_FILE_CHARS,
     MAX_INPUT_TOKENS,
     TOKEN_BUDGET_RATIO,
 )
 from history import set_label  # noqa: E402
+from Initialization.spec_checks import files_block  # noqa: E402
 from utils import parser_json  # noqa: E402
 
 # ======================================================================
@@ -47,17 +54,31 @@ def _first_py(ex_dir: Path):
     return next((p for p in ex_dir.iterdir() if p.suffix == ".py"), None)
 
 
+def _pack_tokens(ex_dir: Path) -> int:
+    """Token estimate of what Generation sends for one example:
+    its main.py plus its mesh.txt (either may be absent)."""
+    total = 0
+    py_file = _first_py(ex_dir)
+    if py_file:
+        total += _estimate_tokens(py_file.read_text(encoding="utf-8", errors="replace"))
+    mesh_file = ex_dir / "mesh.txt"
+    if mesh_file.exists():
+        total += _estimate_tokens(mesh_file.read_text(encoding="utf-8", errors="replace"))
+    return total
+
+
 # ======================================================================
 # LLM scoring (single round)
 # ======================================================================
 
 _SCORER_SYSTEM = """\
-    You are an example scorer for a code-generation system.  You are given a
-    TARGET problem (its initial.json and mesh.json specs) and a list of
-    candidate examples (each with its full initial.json and mesh.json
-    specs).
+    You are an example scorer for a topology-optimization pipeline.  You
+    are given a TARGET problem (ALL of its raw input files) and a list
+    of candidate reference examples (each with its full initial.json
+    and mesh.json specs).
 
-    Your task: assign each candidate a relevance score from 0 to 100, where:
+    Your task: assign each candidate a relevance score from 0 to 100,
+    where:
       100 = perfectly relevant (same physics, same dimension, same field types)
       0   = completely irrelevant
 
@@ -72,8 +93,8 @@ _SCORER_SYSTEM = """\
 """
 
 _SCORER_USER = """\
-    Target problem (initial.json + mesh.json):
-    {target_json}
+    Target problem (all input files):
+    {target_files}
 
     Candidate examples (initial.json + mesh.json each):
     {candidates_json}
@@ -147,10 +168,10 @@ def _load_candidate_specs(agent, examples_dir: Path) -> list:
     return candidates
 
 
-def _build_batches(target_json: str, candidates: list) -> list:
+def _build_batches(target_files: str, candidates: list) -> list:
     """Split *candidates* into batches that each fit within
-    MAX_INPUT_TOKENS (the target JSON rides along in every batch)."""
-    target_tokens = _estimate_tokens(target_json)
+    MAX_INPUT_TOKENS (the target files ride along in every batch)."""
+    target_tokens = _estimate_tokens(target_files)
     batches = []
     current_batch = []
     current_tokens = target_tokens + 200
@@ -168,7 +189,7 @@ def _build_batches(target_json: str, candidates: list) -> list:
     return batches
 
 
-def _score_batch(agent, target_json: str, batch: list) -> dict:
+def _score_batch(agent, target_files: str, batch: list) -> dict:
     """One scoring call on a batch — returns {name: score}; empty dict
     on any failure (that batch then simply contributes no candidates)."""
     candidates_json = json.dumps(batch, ensure_ascii=False)
@@ -178,7 +199,7 @@ def _score_batch(agent, target_json: str, batch: list) -> dict:
     ])
     raw = agent.invoke(
         {
-            "target_json": target_json,
+            "target_files": target_files,
             "candidates_json": candidates_json,
         }
     )
@@ -215,17 +236,20 @@ def _score_batch(agent, target_json: str, batch: list) -> dict:
 
 
 def select_examples(
-    agent, problem_spec: dict, mesh_spec: dict = None,
+    agent, input_files: dict,
     examples_dir: Path = None, trace: list = None,
 ) -> list:
     """
-    Single-round LLM example selection.
+    Single-round LLM example selection — the first phase of
+    Initialization.
 
-    Every candidate (full initial.json + mesh.json) is scored 0-100 in
-    ONE scoring round (batched by MAX_INPUT_TOKENS when needed);
-    candidates at or above configs.EXAMPLE_SCORE_THRESHOLD are kept,
-    best first, until the NEXT example's full .py would exceed
-    TOKEN_BUDGET_RATIO x MAX_INPUT_TOKENS — never truncating an example.
+    The TARGET is the problem's raw input files (all of them, rendered
+    with the shared ``files_block`` convention); every candidate (full
+    initial.json + mesh.json) is scored 0-100 in ONE scoring round
+    (batched by MAX_INPUT_TOKENS when needed); candidates at or above
+    configs.EXAMPLE_SCORE_THRESHOLD are kept, best first, until the
+    NEXT example's main.py + mesh.txt would exceed TOKEN_BUDGET_RATIO x
+    MAX_INPUT_TOKENS — never truncating an example.
 
     If *trace* is provided (a list), the selection state is appended as
     a dict ``{"round": N, "action": "...", "count": int, "names": [...]}``.
@@ -233,24 +257,21 @@ def select_examples(
     if examples_dir is None:
         examples_dir = Path(__file__).resolve().parent.parent / "database" / "freefem_examples"
 
-    target_json = json.dumps(
-        {"initial": problem_spec, "mesh": mesh_spec or {}},
-        ensure_ascii=False,
-    )
+    target_files = files_block(input_files, MAX_FILE_CHARS)
 
     candidates = _load_candidate_specs(agent, examples_dir)
     if not candidates:
         warnings.warn("select_examples: no candidate specs found")
         return []
 
-    batches = _build_batches(target_json, candidates)
+    batches = _build_batches(target_files, candidates)
     scores = {}
     for bi, batch in enumerate(batches):
         set_label(
             agent,
             f"Generation/select_examples scoring batch {bi + 1}/{len(batches)}",
         )
-        scores.update(_score_batch(agent, target_json, batch))
+        scores.update(_score_batch(agent, target_files, batch))
 
     qualified = sorted(
         (n for n in scores if scores[n] >= EXAMPLE_SCORE_THRESHOLD),
@@ -270,52 +291,55 @@ def select_examples(
             }
         )
 
-    # Pack the best first, by the FULL .py size of each example, until
-    # the next one would not fit — never truncate an example.
+    # Pack the best first, by the FULL main.py + mesh.txt size of each
+    # example (what Generation sends), until the next one would not fit
+    # — never truncate an example.
     token_budget = int(MAX_INPUT_TOKENS * TOKEN_BUDGET_RATIO)
     picked = []
     total = 0
     for name in qualified:
         ex_dir = examples_dir / name
-        py_file = _first_py(ex_dir) if ex_dir.is_dir() else None
-        c_tokens = (
-            _estimate_tokens(py_file.read_text(encoding="utf-8", errors="replace"))
-            if py_file
-            else 0
-        )
+        c_tokens = _pack_tokens(ex_dir) if ex_dir.is_dir() else 0
         if total + c_tokens > token_budget:
             break
         picked.append(name)
         total += c_tokens
 
-    # Unless the database is EMPTY, never return an empty selection:
-    # force-pick the highest-scoring example (even below threshold) —
-    # the coder always gets at least one reference.
-    if not picked and candidates:
-        if scores:
-            best = max(scores, key=scores.get)
-            warnings.warn(
-                f"select_examples: nothing reached threshold "
-                f"{EXAMPLE_SCORE_THRESHOLD} — force-selecting the "
-                f"highest-scoring example '{best}' ({scores[best]})."
-            )
-            picked = [best]
-        else:
-            picked = [candidates[0]["name"]]
-            warnings.warn(
-                f"select_examples: scoring returned no scores — "
-                f"force-selecting '{picked[0]}'."
-            )
-        if trace is not None:
-            trace.append(
-                {
-                    "round": 1,
-                    "action": "Force-selected (empty selection is never "
-                              "returned while the database has examples)",
-                    "count": len(picked),
-                    "names": list(picked),
-                }
-            )
+    # USER RULE (2026-10-31): the threshold is a HARD gate — only
+    # examples scoring at or above EXAMPLE_SCORE_THRESHOLD are selected;
+    # an empty selection STAYS empty (Initialization then runs without
+    # reference examples).  The old below-threshold force-pick is
+    # COMMENTED OUT, kept as groundwork for future work:
+    # if not picked and candidates:
+    #     if scores:
+    #         best = max(scores, key=scores.get)
+    #         warnings.warn(
+    #             f"select_examples: nothing reached threshold "
+    #             f"{EXAMPLE_SCORE_THRESHOLD} — force-selecting the "
+    #             f"highest-scoring example '{best}' ({scores[best]})."
+    #         )
+    #         picked = [best]
+    #     else:
+    #         picked = [candidates[0]["name"]]
+    #         warnings.warn(
+    #             f"select_examples: scoring returned no scores — "
+    #             f"force-selecting '{picked[0]}'."
+    #         )
+    #     if trace is not None:
+    #         trace.append(
+    #             {
+    #                 "round": 1,
+    #                 "action": "Force-selected (empty selection is never "
+    #                           "returned while the database has examples)",
+    #                 "count": len(picked),
+    #                 "names": list(picked),
+    #             }
+    #         )
+    if not picked:
+        warnings.warn(
+            f"select_examples: no candidate reached the threshold "
+            f"{EXAMPLE_SCORE_THRESHOLD} — the selection is empty."
+        )
 
     if trace is not None:
         trace.append(
@@ -333,12 +357,37 @@ def select_examples(
 
 
 # ======================================================================
-# load full example code for selected names
+# loaders for the selected names
 # ======================================================================
 
 
+def load_selected_specs(selected_names: list, examples_dir: Path = None) -> list:
+    """Return full ``{"name": ..., "initial": ..., "mesh": ...}`` spec
+    dicts for *selected_names* — what Initialization consumes."""
+    if examples_dir is None:
+        examples_dir = Path(__file__).resolve().parent.parent / "database" / "freefem_examples"
+
+    results = []
+    for name in selected_names:
+        folder = examples_dir / name
+        if not folder.is_dir():
+            continue
+        init_p, mesh_p = folder / "initial.json", folder / "mesh.json"
+        if not (init_p.exists() and mesh_p.exists()):
+            continue
+        try:
+            initial = json.loads(init_p.read_text(encoding="utf-8"))
+            mesh = json.loads(mesh_p.read_text(encoding="utf-8"))
+        except Exception as e:
+            warnings.warn(f"select_examples: {name} specs unusable: {e}")
+            continue
+        results.append({"name": name, "initial": initial, "mesh": mesh})
+    return results
+
+
 def load_selected_examples(selected_names: list, examples_dir: Path = None) -> list:
-    """Return full ``{"name": ..., "py": ...}`` dicts for *selected_names*."""
+    """Return full ``{"name": ..., "py": ..., "mesh": ...}`` dicts for
+    *selected_names* — what Generation consumes (main.py + mesh.txt)."""
     if examples_dir is None:
         examples_dir = Path(__file__).resolve().parent.parent / "database" / "freefem_examples"
 
@@ -348,15 +397,18 @@ def load_selected_examples(selected_names: list, examples_dir: Path = None) -> l
         if not folder.is_dir():
             continue
         py_file = _first_py(folder)
-        if py_file:
-            results.append(
-                {"name": name, "py": py_file.read_text(encoding="utf-8", errors="replace")}
-            )
+        if not py_file:
+            continue
+        entry = {"name": name, "py": py_file.read_text(encoding="utf-8", errors="replace")}
+        mesh_file = folder / "mesh.txt"
+        if mesh_file.exists():
+            entry["mesh"] = mesh_file.read_text(encoding="utf-8", errors="replace")
+        results.append(entry)
     return results
 
 
 # ======================================================================
-# Local test — run on all demos in results/
+# Local test — run on the demos/ input files
 # ======================================================================
 if __name__ == "__main__":
     try:
@@ -365,48 +417,34 @@ if __name__ == "__main__":
         pass
 
     from API import DeepSeekCodeAgentV4Flash
+    from Initialization import collect_input_files
 
     agent = DeepSeekCodeAgentV4Flash()
-    results_dir = Path("results")
+    demos_dir = Path("demos")
 
-    spec_files = sorted(results_dir.glob("*/initial.json"))
-    if not spec_files:
-        print("No results/*/initial.json found. Run `python main.py` first.")
+    case_dirs = sorted(
+        d for d in demos_dir.iterdir() if d.is_dir() and collect_input_files(d)
+    ) if demos_dir.exists() else []
+    if not case_dirs:
+        print("No demos with input files found.")
         sys.exit(1)
 
     print(f"{'=' * 70}")
-    print(f"Example Selector — {len(spec_files)} demos")
+    print(f"Example Selector — {len(case_dirs)} demos")
     print(f"{'=' * 70}")
 
     all_traces = []
 
-    for spec_file in spec_files:
-        name = spec_file.parent.name
+    for case_dir in case_dirs:
+        name = case_dir.name
         print(f"  [{name}]", flush=True)
 
-        with open(spec_file, "r", encoding="utf-8") as f:
-            problem_spec = json.load(f)
-
-        mesh_file = spec_file.parent / "mesh.json"
-        mesh_spec = None
-        if mesh_file.exists():
-            with open(mesh_file, "r", encoding="utf-8") as f:
-                mesh_spec = json.load(f)
-
+        input_files = collect_input_files(case_dir)
         trace = []
-        selected = select_examples(agent, problem_spec, mesh_spec, trace=trace)
+        selected = select_examples(agent, input_files, trace=trace)
         all_traces.append((name, trace, selected))
 
-        # Save to examples.txt
-        out_path = spec_file.parent / "examples.txt"
-        with open(out_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(selected) + "\n")
-
-        ds = problem_spec.get("designed", {})
-        print(
-            f"    type={ds.get('problem_type', '?')}, {ds.get('dimension', '?')}D, "
-            f"nonlinear={ds.get('state_is_nonlinear', False)}, final={len(selected)} examples"
-        )
+        print(f"    final={len(selected)} examples: {selected}")
 
     # ── detailed trace table ──
     print(f"\n{'=' * 100}")

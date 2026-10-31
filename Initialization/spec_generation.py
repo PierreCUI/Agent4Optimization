@@ -352,6 +352,11 @@ Problem: {problem_name}
 Original input files:
 {files_block}
 
+Reference examples (specifications of similar problems from the
+reference library — design references ONLY: the ground truth for this
+problem is the input files above, never the examples):
+{examples_block}
+
 Return the complete two-spec JSON (initial + mesh, each with extracted
 and designed).
 """
@@ -604,6 +609,10 @@ _REPAIR_USER = """\
 Original input files:
 {files_block}
 
+Reference examples (design references ONLY — the ground truth for this
+problem is the input files above, never the examples):
+{examples_block}
+
 Current specs:
 {specs_json}
 
@@ -623,6 +632,29 @@ Return the corrected two-spec JSON.
 # ======================================================================
 # the loop
 # ======================================================================
+
+
+def _examples_block(examples):
+    """Render the selected reference examples' specs (initial.json +
+    mesh.json each) for the generate/repair prompts.  Empty when no
+    example was selected — database content is initialised without
+    examples (it IS the reference set)."""
+    if not examples:
+        return "(no reference examples selected)"
+    parts = []
+    for ex in examples:
+        if not isinstance(ex, dict):
+            continue
+        name = str(ex.get("name") or "?")
+        initial = ex.get("initial")
+        mesh = ex.get("mesh")
+        if isinstance(initial, dict):
+            parts.append(f"=== EXAMPLE: {name} — initial.json ===")
+            parts.append(json.dumps(initial, indent=2, ensure_ascii=False))
+        if isinstance(mesh, dict):
+            parts.append(f"=== EXAMPLE: {name} — mesh.json ===")
+            parts.append(json.dumps(mesh, indent=2, ensure_ascii=False))
+    return "\n\n".join(parts) if parts else "(no reference examples selected)"
 
 
 def _invoke(agent, system, user, payload):
@@ -1174,8 +1206,17 @@ def _freeze_provided_mesh(specs: dict, mesh_code: str, repaired: bool,
 def run_spec_generation(agent, input_files, problem_name=None, max_fixes=None,
                         output_dir=None, history_log=None, seed_specs=None,
                         repair_system=None, history_text_fn=None,
-                        generate_system=None, review_system=None):
+                        generate_system=None, review_system=None,
+                        examples=None):
     """Generate BOTH spec JSONs via the generate -> review -> repair loop.
+
+    *examples* (optional) is the list of selected reference examples —
+    ``{"name": ..., "initial": ..., "mesh": ...}`` dicts from
+    ``select_examples.load_selected_specs``.  Their specs accompany the
+    input files in the generate and repair prompts as DESIGN REFERENCES
+    ONLY (the input files remain the ground truth; the reviewer never
+    sees them).  The default is no examples — database content is
+    initialised without examples, since it IS the reference set itself.
 
     Returns ``{"initial": {"extracted","designed"}, "mesh": {"extracted",
     "designed"}}`` — the FIRST state that passes the deterministic
@@ -1202,6 +1243,7 @@ def run_spec_generation(agent, input_files, problem_name=None, max_fixes=None,
     after EVERY generation and repair round (not only at the end)."""
     max_fixes = MAX_SPEC_FIXES if max_fixes is None else max_fixes
     files = files_block(input_files, MAX_FILE_CHARS)
+    examples_text = _examples_block(examples)
     specs = None
     issues = []
     history = []
@@ -1288,7 +1330,8 @@ def run_spec_generation(agent, input_files, problem_name=None, max_fixes=None,
             set_label(agent, f"{round_label} (generate)")
             raw = _invoke(
                 agent, generate_system or _GENERATE_SYSTEM, _GENERATE_USER,
-                {"problem_name": problem_name or "unknown", "files_block": files},
+                {"problem_name": problem_name or "unknown", "files_block": files,
+                 "examples_block": examples_text},
             )
             data = _parse_two_specs(raw)
         elif seeded_pending:
@@ -1323,6 +1366,7 @@ def run_spec_generation(agent, input_files, problem_name=None, max_fixes=None,
                 agent, repair_system or _REPAIR_SYSTEM, _REPAIR_USER,
                 {
                     "files_block": files,
+                    "examples_block": examples_text,
                     "specs_json": json.dumps(specs, indent=2, ensure_ascii=False),
                     "issues_text": issues_text,
                     "history_text": (_history_text if history_text_fn is None

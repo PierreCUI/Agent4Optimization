@@ -14,7 +14,11 @@ from API import (
 from Execution.runner import run_problem as run_execution
 from Generation import generate_code, run_static_repair
 from Generation.check_static import strip_ff_comments
-from Generation.select_examples import load_selected_examples, select_examples
+from Generation.select_examples import (
+    load_selected_examples,
+    load_selected_specs,
+    select_examples,
+)
 from info import Info
 from Initialization import collect_input_files, run_spec_generation, safety_check
 from Initialization.example_initialization import run_example_initialization
@@ -49,6 +53,10 @@ def _stage_copy_inputs(info: Info) -> None:
 def _stage_parse(agent, info: Info) -> bool:
     """Run the one-loop spec generation (both JSONs together).
 
+    Consumes the selected reference examples' specs (info.example_specs)
+    as design references — database content is never initialised this
+    way, so no-example stays the database default.
+
     Returns False when the loop did NOT pass — the repair budget was
     exhausted or the review failed — so the case aborts instead of
     shipping a spec with known defects downstream (the remaining issues
@@ -61,6 +69,7 @@ def _stage_parse(agent, info: Info) -> bool:
     specs = run_spec_generation(
         agent, info.input_files, info.problem_name, output_dir=info.results_dir,
         history_log=info.results_dir / "history.txt",
+        examples=info.example_specs,
     )
     if not specs.get("_passed"):
         print("FAILED: spec generation did not pass "
@@ -90,13 +99,25 @@ def _stage_parse(agent, info: Info) -> bool:
 
 
 def _stage_select_examples(agent, info: Info) -> None:
-    """Select relevant reference examples via LLM."""
+    """Select relevant reference examples via LLM, from the problem's
+    ALL input files against the database examples' specs.
+
+    USER RULE (2026-10-31): example selection IS the first phase of the
+    Initialization stage (not a separate pre-stage) — it runs before
+    the spec generation so that Initialization can consume the selected
+    examples' JSONs, and Generation their main.py + mesh.txt."""
     print("  [Select] example_selector ...", end=" ", flush=True)
     t0 = time.time()
-    info.selected_names = select_examples(agent, info.problem_spec, info.mesh_spec)
-    if not info.selected_names:
-        info.selected_names = _fallback_examples()
-        print(f"-> fallback {len(info.selected_names)} examples", end=" ", flush=True)
+    info.selected_names = select_examples(agent, info.input_files)
+    # USER RULE (2026-10-31): the threshold is a HARD gate — an empty
+    # selection stays empty (Initialization then runs without reference
+    # examples).  The old all-database fallback is COMMENTED OUT, kept
+    # as groundwork for future work:
+    # if not info.selected_names:
+    #     info.selected_names = _fallback_examples()
+    #     print(f"-> fallback {len(info.selected_names)} examples",
+    #           end=" ", flush=True)
+    info.example_specs = load_selected_specs(info.selected_names)
     info.save_text("examples.txt", "\n".join(info.selected_names))
     print(f"-> {info.selected_names} ({time.time() - t0:.1f}s)", flush=True)
 
@@ -124,7 +145,7 @@ def _stage_generate(agent, info: Info) -> bool:
 
     doc_text = _load_documentation()
 
-    # Load full .py for selected examples
+    # Load full main.py + mesh.txt for the selected examples
     info.examples = load_selected_examples(info.selected_names)
 
     result = generate_code(
@@ -274,8 +295,16 @@ def _stage_reflect(agent, info: Info, cfg) -> None:
 # ======================================================================
 
 
-def main(agent, problem_name: str) -> None:
-    """Run the full pipeline on a single problem."""
+def main(agent, problem_name: str, results_root: Path = None,
+         stop_before_run: bool = False) -> None:
+    """Run the full pipeline on a single problem.
+
+    *results_root* overrides the output tree root (default ``results``)
+    — used by one-off tests so they do not pollute the official results.
+    *stop_before_run* stops the pipeline right after the design-parameter
+    normalization, BEFORE the Execution stage (used by one-off tests
+    that must not launch the solver sweep)."""
+
     # UTF-8 stdout: pipeline prints use arrows/bullets that are outside
     # the cp1252 console encoding (e.g. '→' in the reflection loop) —
     # same guard every per-module __main__ block uses.
@@ -284,7 +313,7 @@ def main(agent, problem_name: str) -> None:
     except Exception:
         pass
 
-    info = Info(problem_name)
+    info = Info(problem_name, results_root=results_root)
     info.input_files = collect_input_files(Path("demos") / problem_name)
     if not info.input_files:
         print("  No input files found — skipping.")
@@ -321,12 +350,15 @@ def main(agent, problem_name: str) -> None:
     if not _stage_safety(agent, info):
         return
 
-    # ── Stage 2: Problem Parsing + Mesh Handling ────────────────
+    # ── Stage 2: Example Selection (first phase of Initialization) ─
+    # The selector scores the problem's ALL input files against the
+    # database examples' specs; the spec generation then consumes the
+    # selected examples' JSONs, and Generation their main.py + mesh.txt.
+    _stage_select_examples(agent, info)
+
+    # ── Stage 3: Problem Parsing + Mesh Handling (Initialization) ─
     if not _stage_parse(agent, info):
         return
-
-    # ── Stage 3: Example Selection ──────────────────────────────
-    _stage_select_examples(agent, info)
 
     # ── Stage 4: Code Generation ────────────────────────────────
     if not _stage_generate(agent, info):
@@ -337,6 +369,12 @@ def main(agent, problem_name: str) -> None:
 
     # ── Stage 5.5: normalize DESIGNED tunables (user rule) ──────
     _stage_normalize_design(info)
+
+    if stop_before_run:
+        elapsed = time.time() - t_start
+        print(f"\n  [main] stop_before_run=True — stopping BEFORE Execution. "
+              f"Stages up to normalization complete ({elapsed:.0f}s).")
+        return
 
     # ── Stage 6: Execution ──────────────────────────────────────
     _stage_run(info)

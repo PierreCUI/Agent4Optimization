@@ -20,7 +20,7 @@ MAX_SPEC_FIXES = 10  # repair attempts per case in the generate -> review -> rep
 # =========================================================================
 
 TOKEN_BUDGET_RATIO = 0.8  # fraction of MAX_INPUT_TOKENS used as token budget
-EXAMPLE_SCORE_THRESHOLD = 60  # min relevance score (0-100) to keep a candidate example
+EXAMPLE_SCORE_THRESHOLD = 50  # min relevance score (0-100) to keep a candidate example
 MAX_STATIC_FIXES = 10  # repair attempts in the check -> review -> repair loop of Stage 5
 MAX_GENERATE_RETRIES = 5  # redo attempts for a failed LLM call in Stage 4/5 (generate / review; a failed repair consumes its round instead)
 
@@ -68,6 +68,10 @@ MAX_SWEEP_CELLS = 64       # USER RULE 2026-10-17: the FIRST execution's
                            # (penalty x diffusion x v0); reflection reruns
                            # are capped by MAX_REFLECTION_GROUP instead
 REFLECTION_WORKERS = 16    # USER RULE: all runs use up to 16 threads
+OVERALL_CHECK_ENABLED = False  # USER RULE 2026-10-31: when False (default),
+                               # Reflection skips the overall image-model
+                               # judgment and post-processes directly after
+                               # a run that produced design snapshots.
 # The promising/unpromising example lists fed to the repairer share the
 # SAME budget convention as the example selector: MAX_INPUT_TOKENS x
 # TOKEN_BUDGET_RATIO tokens (~4 chars/token), whole examples only

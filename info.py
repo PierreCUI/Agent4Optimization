@@ -12,7 +12,7 @@ class Info:
     Each attribute is populated by a different pipeline stage.
     """
 
-    def __init__(self, problem_name: str):
+    def __init__(self, problem_name: str, results_root: Path = None):
         self.problem_name: str = problem_name
 
         # ── collected from disk ──────────────────────────────────────
@@ -25,7 +25,8 @@ class Info:
 
         # ── example selection ────────────────────────────────────────
         self.selected_names: list[str] = []  # example folder names
-        self.examples: list[dict] = []  # [{"name":..., "py":...}]
+        self.example_specs: list[dict] = []  # [{"name":..., "initial":..., "mesh":...}]
+        self.examples: list[dict] = []  # [{"name":..., "py":..., "mesh":...}]
 
         # ── code generation ──────────────────────────────────────────
         self.generated_code: str = ""  # main.py content
@@ -39,7 +40,7 @@ class Info:
         self.reflection_status: str = "not_run"  # pass|give_up|give_up_max
 
         # ── results path ─────────────────────────────────────────────
-        self.results_dir: Path = Path("results") / problem_name
+        self.results_dir: Path = (results_root or Path("results")) / problem_name
 
     # convenience --------------------------------------------------------
 

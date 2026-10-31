@@ -53,7 +53,9 @@ def run_example_initialization(agent=None):
 
         # One-loop generation: BOTH specs together, reviewed together,
         # repaired together until the review passes or the fix budget is
-        # exhausted.
+        # exhausted.  Database content is initialised WITHOUT reference
+        # examples (the default) — these folders ARE the reference set
+        # themselves.
         print("  -> running spec generation...", flush=True)
         specs = run_spec_generation(
             agent, input_files, problem_name=name, output_dir=folder,

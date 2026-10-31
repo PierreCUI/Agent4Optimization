@@ -495,7 +495,8 @@ _CODER_USER = """\
 AutoFreeFEM documentation:
 {doc_text}
 
-Reference examples (most relevant to this problem):
+Reference examples (most relevant to this problem — each with its
+main.py program and its mesh.txt):
 {examples_text}
 
 ProblemSpec (from parse_problem):
@@ -580,14 +581,20 @@ def generate_code(
     spec_json = json.dumps(problem_spec, indent=2, ensure_ascii=False)
     mesh_json = json.dumps(mesh_spec or {}, indent=2, ensure_ascii=False)
 
-    # Build examples text: each example shows name + full .py code
+    # Build examples text: each example shows name + full main.py code
+    # + its mesh.txt (both are reference material for the writer).
     # Defensive .get: example dicts are LLM-adjacent data — malformed
     # entries must not abort generation.
     examples_text = ""
     for ex in examples or []:
         if not isinstance(ex, dict):
             continue
-        examples_text += f"=== EXAMPLE: {ex.get('name', '?')} ===\n{ex.get('py', '')}\n\n"
+        name = ex.get("name", "?")
+        examples_text += f"=== EXAMPLE: {name} — main.py ===\n{ex.get('py', '')}\n"
+        mesh = ex.get("mesh")
+        if mesh:
+            examples_text += f"=== EXAMPLE: {name} — mesh.txt ===\n{mesh}\n"
+        examples_text += "\n"
 
     agent.set_prompt_list(prompt_list)
     payload = {
